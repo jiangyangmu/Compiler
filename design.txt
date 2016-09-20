@@ -1,0 +1,151 @@
+#### grammer ####
+
+declaration
+    int,short,long,char,float,double,...
+    <pointer>
+    <array>
+    <function>
+control-flow:
+    if, while, for, do, break, ...
+compound:
+    {...}
+expression
+    ...
+
+
+# module #
+
+import-spec := 'import' <file>
+
+# comment #
+
+----------------------------- program ------------------------------
+
+program                 := compound-stmt
+
+--------------------------- declaration ----------------------------
+
+
+---------------------------- statement -----------------------------
+
+stmt                    := labeled-stmt
+                        || compound-stmt
+                        || expression-stmt
+                        || selecton-stmt
+                        || iteration-stmt
+                        || jump-stmt
+
+labeled-stmt            := identifier ':' stmt
+                        || 'case' constant-expr ':' stmt
+                        || 'default' ':' stmt
+
+compound-stmt           := '{' ( declaration )* ( stmt )* '}'
+
+expression-stmt         := ( expr )? ';'
+
+selection-stmt          := 'if' '(' expr ')' stmt
+                        || 'if' '(' expr ')' stmt 'else' stmt           ＃ dangling 'else'
+                        || 'switch' '(' expr ')' stmt
+
+iteration-stmt          := 'while' '(' expr ')' stmt
+                        || 'do' stmt 'while' '(' expr ')' ';'
+                        || 'for' '(' ( expr )? ';' ( expr )? ';' ( expr )? ')' stmt
+
+jump-stmt               := 'goto' identifier ';'
+                        || 'continue' ';'
+                        || 'break' ';'
+                        || 'return' ( expr )? ';'
+
+---------------------------- expression ----------------------------
+
+expr                    := assign-expr ( ',' assign-expr )*
+
+assign-expr             := ( unary-expr assign-op )+ cond-expr
+
+cond-expr               := OR-expr ( '?' expr ':' cond-expr )?          # tricky here, why 'expr' and 'cond-expr' ??
+
+OR-expr                 := AND-expr ( '||' logical-AND-expr )*
+
+AND-expr                := bit-OR-expr ( '&&' bit-OR-expr )*
+
+bit-OR-expr             := bit-XOR-expr ( '|' bit-XOR-expr )*
+
+bit-XOR-expr            := bit-AND-expr ( '^' bit-AND-expr )*
+
+bit-AND-expr            := eq-expr ( '&' eq-expr )*
+
+eq-expr                 := rel-expr ( ('=='|'!=') rel-expr )*           # Note: a==b==c is legal, but irreasonable, eval from left to right
+
+rel-expr                := shift-expr ( ('<'|'<='|'>'|'>=') shift-expr )*
+
+shift-expr              := add-expr ( ('<<'|'>>') add-expr )*
+
+add-expr                := mul-expr ( ('+'|'-') mul-expr )*
+
+mul-expr                := cast-expr ( ('*'|'/'|'%') cast-expr )*
+
+cast-expr               := ( '(' type-name ')' )* unary-expr
+
+# prefix-expr
+unary-expr              := postfix-expr
+                        || '++' unary-expr                              # but ++++i is illegal
+                        || '--' unary-expr
+                        || unary-op cast-expr
+                        || 'sizeof' unary-expr
+                        || 'sizeof' '(' type-name ')'
+
+postfix-expr            := primary-expr
+                        || postfix-expr '[' expr ']'
+                        || postfix-expr '(' [argument-expr-list] ')'
+                        || postfix-expr '.' identifier
+                        || postfix-expr '->' identifier
+                        || postfix-expr '++'
+                        || postfix-expr '--'
+
+primary-expr            := identifier || constant || string-literal || '(' expr ')'
+
+argument-expr-list      := assign-expr ( ',' assign-expr )*
+
+# constant folding
+constant-expr           := cond-expr
+
+------------------------------- lex -------------------------------
+
+token       := <id> | <keyword> | <const> | <string> | <operator> | <punc>
+
+<keyword>   := auto double int struct
+               break else long switch
+               case enum register typedef
+               char extern return union
+               const float short unsigned
+               continue for signed void
+               default goto sizeof volatile
+               do if static while
+
+<id>        := [_a-zA-Z][_0-9a-zA-Z]*
+
+<const>     := <int-const> | <char-const> | <float-const> | <enum-const>
+<int-const> :=
+<char-const>:= '<c-char>'
+<float-const>:=
+<enum-const>:=
+
+<string>    := '<c-char>*'
+
+<operator>  := ..............
+<float-const>:=
+<enum-const>:=
+<addr-op>   := '.' | '->'
+<sizeof-op> := 'sizeof'
+<inc-op>    := '++'
+<dec-op>    := '--'
+<bit-op>    := '&' | '|' | '^' | '~' | '<<' | '>>'
+<bool-op>   := '&&' | '||' | '!'
+<assign-op> := '=' | '+=' | '-=' | '*=' | '/=' | '%=' | '<<=' | '>>=' | '&=' | '^=' | '|='
+<arith-op>  := '+' | '-' | '*' | '/' | '%'
+<rel-op>    := '<' | '>' | '<=' | '>=' | '==' | '!='
+<cond-op>   := '?' | ':'
+<comma-op>  := ','
+
+<punc>      := '(' | ')' | '[' | ']' | '{' | '}' | ';' | '...'
+

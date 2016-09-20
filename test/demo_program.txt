@@ -1,0 +1,16 @@
+int main(int argc, char **argv)
+{
+    char cval;
+    int ival;
+    float fval;
+
+    int * iptr;
+
+    int iarr[10];
+
+    int * iparr[10];
+
+    int (*f)();
+
+    return 0;
+}
