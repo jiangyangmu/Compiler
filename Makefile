@@ -1,6 +1,6 @@
-#SRC = $(wildcard *.cpp)
+SRC = $(wildcard *.cpp)
 HDR = $(wildcard *.h)
-SRC = main.cpp
+#SRC = main.cpp
 
 compiler : ${SRC} ${HDR}
 	c++ -std=c++0x -o $@ ${SRC}

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <vector>
 #include <deque>
 #include <string>
 #include <iostream>
@@ -271,7 +272,7 @@ struct Token
     }
 };
 
-const char * ALL_KEYWORD[] = {
+static const char * ALL_KEYWORD[] = {
     "auto","double","int","struct",
     "break","else","long","switch",
     "case","enum","register","typedef",
@@ -282,7 +283,7 @@ const char * ALL_KEYWORD[] = {
     "do","if","static","while"
 };
 
-TokenType ALL_KEYWORD_TYPE[] = {
+static TokenType ALL_KEYWORD_TYPE[] = {
     AUTO, TYPE_DOUBLE, TYPE_INT, TYPE_STRUCT,
     BREAK, ELSE, TYPE_LONG, SWITCH,
     CASE, TYPE_ENUM, REGISTER, TYPEDEF,
@@ -297,7 +298,15 @@ class Lexer
 {
     void _skip_spaces(StringBuf &input)
     {
-        while (isspace(input.peak())) input.pop();
+        while (isspace(input.peak()))
+        {
+            if (input.peak() == '\n')
+            {
+                ++lnum;
+                lstart = input.data();
+            }
+            input.pop();
+        }
     }
 
     bool _read_token(StringBuf &input, Token &t)
@@ -461,6 +470,8 @@ public:
     void tokenize(StringBuf &input)
 	{
 		tokens.clear();
+        lnum = 1;
+        lstart = input.data();
 		while (true)
 		{
 			_skip_spaces(input);
@@ -474,7 +485,9 @@ public:
 			}
 			else
 			{
-				LexError("unrecognized Token");
+                string msg = "Unrecognized Token at line " + to_string(lnum) +
+                    ":" + to_string(input.data() - lstart + 1);
+				LexError(msg.data());
 			}
 		}
 	}
@@ -512,7 +525,9 @@ public:
 
 private:
     vector<StringRef> symbols; // symbol names
-    //vector<StringRef> strings; // string constants
     deque<Token> tokens;
+    int lnum;
+    const char * lstart;
+    //vector<StringRef> strings; // string constants
 };
 

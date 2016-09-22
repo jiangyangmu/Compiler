@@ -25,7 +25,7 @@ public:
 int main(int argc, char *argv[])
 {
 	Lexer lex;
-	string line, source;
+	string line, source, print_source;
 	ifstream in(argv[1]);
 
 	/*int a, a2;
@@ -36,14 +36,19 @@ int main(int argc, char *argv[])
 	a = 1, 2, 3, 4;*/
 
 	source.reserve(4096);
+	print_source.reserve(4096);
+    int lnum = 1;
 	while (in.good())
 	{
 		getline(in, line);
-		source += line;
-		source += '\n';
+        if (lnum < 10) print_source += ' ';
+        print_source += to_string(lnum++);
+        source += ' '; print_source += ' ';
+		source += line; print_source += line;
+		source += '\n'; print_source += '\n';
 	}
 	cout << "-------------- source --------------" << endl
-        << source << endl;
+        << print_source << endl;
 
 	cout << "-------------- lexer --------------" << endl;
     StringBuf sb(source.data(), source.size());
@@ -58,8 +63,8 @@ int main(int argc, char *argv[])
     }
 
 	cout << "-------------- parser --------------" << endl;
-	Parser p;
-	p.parse(lex);
+    Parser p;
+    p.parse(lex);
 
 	//system("pause");
 	return 0;
