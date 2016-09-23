@@ -523,6 +523,19 @@ public:
         else return StringRef();
     }
 
+    void debugPrint()
+    {
+        deque<Token> cp = tokens;
+        while (hasNext())
+        {
+            Token t = peakNext();
+            cout << "Token: " << t;
+            if (t.type == SYMBOL) cout << ':' << symbolName(t.symid);
+            cout << endl;
+            getNext();
+        }
+        tokens = cp;
+    }
 private:
     vector<StringRef> symbols; // symbol names
     deque<Token> tokens;

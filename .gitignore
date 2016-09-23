@@ -33,4 +33,6 @@
 *.filters
 msvc/
 
+tags
+
 compiler

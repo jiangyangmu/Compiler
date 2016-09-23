@@ -52,11 +52,18 @@ bool IsUnaryOperator(TokenType t)
     }
     return is;
 }
+
+/*
 void SyntaxError(const char * msg)
 {
-    cout << "Syntax: msg" << endl;
+    cout << "Syntax: " << msg << endl;
     exit(1);
 }
+*/
+#define SyntaxError(msg) do { \
+    cout << "Syntax: " << msg << " at " << __FILE__ << ':' << to_string(__LINE__) << endl; \
+    exit(1); \
+    } while (0)
 
 Specifier * Specifier::ParseSpecifier(Lexer &lex)
 {
@@ -173,8 +180,8 @@ void Pointer::print()
     {
         switch (ptypes[i])
         {
-            case 0: cout << " point of"; break;
-            case 1: cout << " const point of"; break;
+            case 0: cout << "pointer of "; break;
+            case 1: cout << "const pointer of "; break;
             default: break;
         }
     }
@@ -187,8 +194,11 @@ Function Function::ParseFunction(Lexer &lex)
     {
         SyntaxError("Expect '('");
     }
-    f.specifiers.push_back(Specifier::ParseSpecifier(lex));
-    f.decls.push_back(Declarator::ParseDeclarator(lex));
+    while (lex.peakNext().type != RP)
+    {
+        f.specifiers.push_back(Specifier::ParseSpecifier(lex));
+        f.decls.push_back(Declarator::ParseDeclarator(lex));
+    }
     if (lex.getNext().type != RP)
     {
         SyntaxError("Expect ')'");
@@ -250,6 +260,7 @@ Declarator * Declarator::ParseDeclarator(Lexer &lex)
             if (lex.peakNext().type == STMT_END
              || lex.peakNext().type == RP)
             {
+                d->dtype = DT_ID;
                 d->id = id;
             }
             else
@@ -258,6 +269,7 @@ Declarator * Declarator::ParseDeclarator(Lexer &lex)
                 d->child->child = nullptr;
                 d->child->pointer = nullptr;
                 d->child->id = id;
+                d->child->dtype = DT_ID;
                 if (lex.peakNext().type == LSB)
                 {
                     d->dtype = DT_ARRAY;
@@ -282,20 +294,20 @@ Declarator * Declarator::ParseDeclarator(Lexer &lex)
 void Declarator::print()
 {
     if (child) child->print();
-    if (pointer) pointer->print();
     switch (dtype)
     {
         case DT_ID: cout << "ID " << id << " is "; break;
-        case DT_ARRAY: cout << " array of"; break;
-        case DT_FUNCTION: cout << " function of"; break;
-        case DT_NONE: cout << " unknown"; break;
+        case DT_ARRAY: cout << "array of "; break;
+        case DT_FUNCTION: cout << "function returns "; break;
+        case DT_NONE: cout << "unknown "; break;
     }
+    if (pointer) pointer->print();
 }
 
 void SymbolDecl::print()
 {
-    specifier->print();
     declarator->print();
+    specifier->print();
     cout << endl;
 }
 void SymbolTable::add_symbol(Lexer &lex)
@@ -332,15 +344,15 @@ stack<SymbolTable> gTables;
 
 SymbolTable * AddSymbolTable()
 {
-cout << "SymbolTable: new()" << endl;
-gTables.push(SymbolTable());
-return &gTables.top();
+    cout << "SymbolTable: new()" << endl;
+    gTables.push(SymbolTable());
+    return &gTables.top();
 }
 
 void RemoveSymbolTable()
 {
-cout << "SymbolTable: delete()" << endl;
-gTables.pop();
+    cout << "SymbolTable: delete()" << endl;
+    gTables.pop();
 }
 
 SyntaxNode * TranslationUnit::parse(Lexer &lex)
@@ -380,7 +392,7 @@ SyntaxNode * Statement::parse(Lexer &lex)
         case DEFAULT:
             node = LabelStatement::parse(lex);
             break;
-        case LSB:
+        case BLK_BEGIN:
             node = CompoundStatement::parse(lex);
             break;
         case IF:
@@ -405,19 +417,17 @@ SyntaxNode * Statement::parse(Lexer &lex)
     }
     return node;
 }
-
 SyntaxNode * LabelStatement::parse(Lexer &lex)
 {
     SyntaxError("Unsupported feature: Label Statement");
     return nullptr;
 }
-
 SyntaxNode * CompoundStatement::parse(Lexer &lex)
 {
     CompoundStatement * node = new CompoundStatement();
 
     SymbolTable * table = nullptr;
-    if (lex.getNext().type != LSB)
+    if (lex.getNext().type != BLK_BEGIN)
     {
         SyntaxError("Expecting '{'");
     }
@@ -429,11 +439,11 @@ SyntaxNode * CompoundStatement::parse(Lexer &lex)
             table->add_symbol(lex);
         }
     }
-    while (lex.getNext().type != RSB)
+    while (lex.getNext().type != BLK_END)
     {
         node->stmts.push_back(Statement::parse(lex));
     }
-    if (lex.getNext().type != RSB)
+    if (lex.getNext().type != BLK_END)
     {
         SyntaxError("Expecting '}'");
     }
@@ -444,7 +454,6 @@ SyntaxNode * CompoundStatement::parse(Lexer &lex)
 
     return node;
 }
-
 SyntaxNode * ExpressionStatement::parse(Lexer &lex)
 {
     if (lex.peakNext().type == STMT_END)
@@ -460,7 +469,6 @@ SyntaxNode * ExpressionStatement::parse(Lexer &lex)
         return node;
     }
 }
-
 SyntaxNode * SelectionStatement::parse(Lexer &lex)
 {
     SelectionStatement * stmt = new SelectionStatement();
@@ -503,7 +511,6 @@ SyntaxNode * SelectionStatement::parse(Lexer &lex)
     }
     return stmt;
 }
-
 SyntaxNode * IterationStatement::parse(Lexer &lex)
 {
     IterationStatement * stmt = new IterationStatement();
@@ -563,7 +570,6 @@ SyntaxNode * IterationStatement::parse(Lexer &lex)
     }
     return stmt;
 }
-
 SyntaxNode * JumpStatement::parse(Lexer &lex)
 {
     JumpStatement * stmt = new JumpStatement();

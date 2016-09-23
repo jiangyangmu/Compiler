@@ -53,14 +53,7 @@ int main(int argc, char *argv[])
 	cout << "-------------- lexer --------------" << endl;
     StringBuf sb(source.data(), source.size());
 	lex.tokenize(sb);
-    while (lex.hasNext())
-    {
-        Token t = lex.peakNext();
-        cout << "Token: " << t;
-        if (t.type == SYMBOL) cout << ':' << lex.symbolName(t.symid);
-        cout << endl;
-        lex.getNext();
-    }
+    lex.debugPrint();
 
 	cout << "-------------- parser --------------" << endl;
     Parser p;
