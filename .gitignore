@@ -34,5 +34,6 @@
 msvc/
 
 tags
+.*
 
 compiler

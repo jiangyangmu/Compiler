@@ -1,24 +1,24 @@
 #pragma once
 
-#include <vector>
-#include <deque>
-#include <string>
-#include <iostream>
 #include <cassert>
 #include <cctype>
+#include <deque>
+#include <iostream>
+#include <string>
+#include <vector>
 using namespace std;
 
 #define ELEMENT_COUNT(a) (sizeof(a) / sizeof((a)[0]))
 
 class StringBuf
 {
-public:
+   public:
     explicit StringBuf(const char *data)
     {
         assert(data != nullptr);
 
         size_t count = static_cast<size_t>(strlen(data));
-        char * data2 = new char [count + 1];
+        char *data2 = new char[count + 1];
 
         copy(data, data + count, data2);
         data2[count] = '\0';
@@ -33,7 +33,7 @@ public:
 
         size_t count = static_cast<size_t>(strlen(data));
         count = (count > n) ? n : count;
-        char * data2 = new char [count + 1];
+        char *data2 = new char[count + 1];
 
         copy(data, data + count, data2);
         data2[count] = '\0';
@@ -42,46 +42,33 @@ public:
         end = begin + count;
     }
 
-    ~StringBuf()
-    {
-        delete[] begin;
-    }
-
+    ~StringBuf() { delete[] begin; }
     char peak(size_t offset = 0)
     {
-        if (now + offset < end) return now[offset];
-        else return '\0';
+        if (now + offset < end)
+            return now[offset];
+        else
+            return '\0';
     }
     void pop(size_t count = 1)
     {
-        const char * now2 = now + count;
-        if (now2 < now || now2 > end) now = end;
-        else now = now2;
+        const char *now2 = now + count;
+        if (now2 < now || now2 > end)
+            now = end;
+        else
+            now = now2;
     }
-    bool empty()
-    {
-        return now == end;
-    }
-    size_t size()
-    {
-        return end - now;
-    }
-    const char * data()
-    {
-        return now;
-    }
-
-private:
+    bool empty() { return now == end; }
+    size_t size() { return end - now; }
+    const char *data() { return now; }
+   private:
     const char *begin, *end, *now;
 };
 
 class StringRef
 {
-public:
-    StringRef()
-    {
-        begin = end = nullptr;
-    }
+   public:
+    StringRef() { begin = end = nullptr; }
     explicit StringRef(const char *data)
     {
         assert(data != nullptr);
@@ -98,29 +85,30 @@ public:
         end = data + n;
     }
 
-    friend bool operator == (const StringRef &s1, const char *s2)
+    friend bool operator==(const StringRef &s1, const char *s2)
     {
         assert(s2 != nullptr);
 
         const char *p1 = s1.begin, *p2 = s2;
         while (p1 != s1.end && *p2 != '\0')
         {
-            if (*p1 != *p2) return false;
+            if (*p1 != *p2)
+                return false;
             ++p1, ++p2;
         }
         return p1 == s1.end && *p2 == '\0';
     }
-    friend bool operator == (const char *s1, const StringRef &s2)
+    friend bool operator==(const char *s1, const StringRef &s2)
     {
         return s2 == s1;
     }
-    friend ostream & operator << (ostream &o, const StringRef &s)
+    friend ostream &operator<<(ostream &o, const StringRef &s)
     {
         copy(s.begin, s.end, ostream_iterator<char>(o));
         return o;
     }
 
-private:
+   private:
     const char *begin, *end;
 };
 
@@ -265,6 +253,7 @@ struct Token
             case BIT_SLEFT: o << "<<"; break;
             case BIT_SRIGHT: o << ">>"; break;
 
+            case CONST_INT: o << "int(" << t.ival << ")"; break;
 	        //CONST_INT, CONST_CHAR, CONST_FLOAT, CONST_ENUM, STRING,
             default: o << "unknown"; break;
         }
@@ -309,6 +298,58 @@ class Lexer
         }
     }
 
+    int _parse_int(const char *start, int &ival)
+    {
+        const char *p = start;
+        int iv = 0;
+        if (*p == '0')
+        {
+            ++p;
+            if (*p == 'x' || *p == 'X')
+            {
+                ++p;
+                // hex
+                while (true)
+                {
+                    iv *= 16;
+                    if (*p >= '0' && *p <= '9')
+                        iv += *p - '0';
+                    else if (*p >= 'a' && *p <= 'z')
+                        iv += 10 + (*p - 'a');
+                    else if (*p >= 'A' && *p <= 'Z')
+                        iv += 10 + (*p - 'A');
+                    else
+                        break;
+                    ++p;
+                }
+            }
+            else
+            {
+                // oct
+                while (*p >= '0' && *p <= '7')
+                {
+                    iv *= 8;
+                    iv += *p - '0';
+                    ++p;
+                }
+            }
+        }
+        else if (*p >= '1' && *p <= '9')
+        {
+            // dec
+            do
+            {
+                iv *= 10;
+                iv += *p - '0';
+                ++p;
+            } while (*p >= '0' && *p <= '9');
+        }
+
+        if (p > start)
+            ival = iv;
+        return p - start;
+    }
+
     bool _read_token(StringBuf &input, Token &t)
     {
         t.type = NONE;
@@ -316,41 +357,61 @@ class Lexer
         // handle punc & REFER_TO
         switch (input.peak())
         {
-            case '(': t.type = LP; break;
-            case ')': t.type = RP; break;
-            case '[': t.type = LSB; break;
-            case ']': t.type = RSB; break;
-            case '{': t.type = BLK_BEGIN; break;
-            case '}': t.type = BLK_END; break;
-            case ';': t.type = STMT_END; break;
+            case '(':
+                t.type = LP;
+                break;
+            case ')':
+                t.type = RP;
+                break;
+            case '[':
+                t.type = LSB;
+                break;
+            case ']':
+                t.type = RSB;
+                break;
+            case '{':
+                t.type = BLK_BEGIN;
+                break;
+            case '}':
+                t.type = BLK_END;
+                break;
+            case ';':
+                t.type = STMT_END;
+                break;
             case '.':
-                t.type = (input.peak(1) == '.' && input.peak(2) == '.') ?
-                    VAR_PARAM : REFER_TO;
+                t.type = (input.peak(1) == '.' && input.peak(2) == '.')
+                             ? VAR_PARAM
+                             : REFER_TO;
                 break;
             default:
                 break;
         }
         if (t.type != NONE)
         {
-            if (t.type == VAR_PARAM) input.pop(3);
-            else input.pop();
+            if (t.type == VAR_PARAM)
+                input.pop(3);
+            else
+                input.pop();
             return true;
         }
 
         // TODO: handle constant
+        int len = _parse_int(input.data(), t.ival);
+        if (len > 0)
+        {
+            t.type = CONST_INT;
+            input.pop(len);
+            return true;
+        }
 
         // handle keyword & id & OP_SIZEOF
         const char *l = input.data();
         const char *r = l;
-        if (*r == '_'
-           || (*r >= 'a' && *r <= 'z')
-           || (*r >= 'A' && *r <= 'Z'))
+        if (*r == '_' || (*r >= 'a' && *r <= 'z') || (*r >= 'A' && *r <= 'Z'))
         {
             ++r;
-            while (*r == '_'
-                    || (*r >= 'a' && *r <= 'z')
-                    || (*r >= 'A' && *r <= 'Z')
-                    || (*r >= '0' && *r <= '9'))
+            while (*r == '_' || (*r >= 'a' && *r <= 'z') ||
+                   (*r >= 'A' && *r <= 'Z') || (*r >= '0' && *r <= '9'))
             {
                 ++r;
             }
@@ -381,72 +442,113 @@ class Lexer
         int oplen = 0;
         switch (input.peak())
         {
-            case '?': t.type = OP_QMARK, oplen = 1; break;
-            case ':': t.type = OP_COLON, oplen = 1; break;
-            case ',': t.type = OP_COMMA, oplen = 1; break;
+            case '?':
+                t.type = OP_QMARK, oplen = 1;
+                break;
+            case ':':
+                t.type = OP_COLON, oplen = 1;
+                break;
+            case ',':
+                t.type = OP_COMMA, oplen = 1;
+                break;
             case '=':
-                if (input.peak(1) == '=') t.type = REL_EQ, oplen = 2;
-                else t.type = ASSIGN, oplen = 1;
+                if (input.peak(1) == '=')
+                    t.type = REL_EQ, oplen = 2;
+                else
+                    t.type = ASSIGN, oplen = 1;
                 break;
             case '+':
-                if (input.peak(1) == '=') t.type = ASSIGN_ADD, oplen = 2;
-                else if (input.peak(1) == '+') t.type = OP_INC, oplen = 2;
-                else t.type = OP_ADD, oplen = 1;
+                if (input.peak(1) == '=')
+                    t.type = ASSIGN_ADD, oplen = 2;
+                else if (input.peak(1) == '+')
+                    t.type = OP_INC, oplen = 2;
+                else
+                    t.type = OP_ADD, oplen = 1;
                 break;
             case '-':
-                if (input.peak(1) == '=') t.type = ASSIGN_SUB, oplen = 2;
-                else if (input.peak(1) == '>') t.type = POINT_TO, oplen = 2;
-                else if (input.peak(1) == '-') t.type = OP_DEC, oplen = 2;
-                else t.type = OP_SUB, oplen = 1;
+                if (input.peak(1) == '=')
+                    t.type = ASSIGN_SUB, oplen = 2;
+                else if (input.peak(1) == '>')
+                    t.type = POINT_TO, oplen = 2;
+                else if (input.peak(1) == '-')
+                    t.type = OP_DEC, oplen = 2;
+                else
+                    t.type = OP_SUB, oplen = 1;
                 break;
             case '*':
-                if (input.peak(1) == '=') t.type = ASSIGN_MUL, oplen = 2;
-                else t.type = OP_MUL, oplen = 1;
+                if (input.peak(1) == '=')
+                    t.type = ASSIGN_MUL, oplen = 2;
+                else
+                    t.type = OP_MUL, oplen = 1;
                 break;
             case '/':
-                if (input.peak(1) == '=') t.type = ASSIGN_DIV, oplen = 2;
-                else t.type = OP_DIV, oplen = 1;
+                if (input.peak(1) == '=')
+                    t.type = ASSIGN_DIV, oplen = 2;
+                else
+                    t.type = OP_DIV, oplen = 1;
                 break;
             case '%':
-                if (input.peak(1) == '=') t.type = ASSIGN_MOD, oplen = 2;
-                else t.type = OP_MOD, oplen = 1;
+                if (input.peak(1) == '=')
+                    t.type = ASSIGN_MOD, oplen = 2;
+                else
+                    t.type = OP_MOD, oplen = 1;
                 break;
             case '<':
-                if (input.peak(1) == '=') t.type = REL_LE, oplen = 2;
+                if (input.peak(1) == '=')
+                    t.type = REL_LE, oplen = 2;
                 else if (input.peak(1) == '<')
                 {
-                    if (input.peak(2) == '=') t.type = ASSIGN_SLEFT, oplen = 3;
-                    else t.type = BIT_SLEFT, oplen = 2;
+                    if (input.peak(2) == '=')
+                        t.type = ASSIGN_SLEFT, oplen = 3;
+                    else
+                        t.type = BIT_SLEFT, oplen = 2;
                 }
-                else t.type = REL_LT, oplen = 1;
+                else
+                    t.type = REL_LT, oplen = 1;
                 break;
             case '>':
-                if (input.peak(1) == '=') t.type = REL_GE, oplen = 1;
+                if (input.peak(1) == '=')
+                    t.type = REL_GE, oplen = 1;
                 else if (input.peak(1) == '>')
                 {
-                    if (input.peak(2) == '=') t.type = ASSIGN_SRIGHT, oplen = 3;
-                    else t.type = BIT_SRIGHT, oplen = 2;
+                    if (input.peak(2) == '=')
+                        t.type = ASSIGN_SRIGHT, oplen = 3;
+                    else
+                        t.type = BIT_SRIGHT, oplen = 2;
                 }
-                else t.type = REL_GT, oplen = 1;
+                else
+                    t.type = REL_GT, oplen = 1;
                 break;
             case '&':
-                if (input.peak(1) == '=') t.type = ASSIGN_AND, oplen = 2;
-                else if (input.peak(1) == '&') t.type = BOOL_AND, oplen = 2;
-                else t.type = BIT_AND, oplen = 1;
+                if (input.peak(1) == '=')
+                    t.type = ASSIGN_AND, oplen = 2;
+                else if (input.peak(1) == '&')
+                    t.type = BOOL_AND, oplen = 2;
+                else
+                    t.type = BIT_AND, oplen = 1;
                 break;
             case '|':
-                if (input.peak(1) == '=') t.type = ASSIGN_OR, oplen = 2;
-                else if (input.peak(1) == '|') t.type = BOOL_OR, oplen = 2;
-                else t.type = BIT_OR, oplen = 1;
+                if (input.peak(1) == '=')
+                    t.type = ASSIGN_OR, oplen = 2;
+                else if (input.peak(1) == '|')
+                    t.type = BOOL_OR, oplen = 2;
+                else
+                    t.type = BIT_OR, oplen = 1;
                 break;
             case '^':
-                if (input.peak(1) == '=') t.type = ASSIGN_XOR, oplen = 2;
-                else t.type = BIT_XOR, oplen = 1;
+                if (input.peak(1) == '=')
+                    t.type = ASSIGN_XOR, oplen = 2;
+                else
+                    t.type = BIT_XOR, oplen = 1;
                 break;
-            case '~': t.type = BIT_NOT, oplen = 1; break;
+            case '~':
+                t.type = BIT_NOT, oplen = 1;
+                break;
             case '!':
-                if (input.peak(1) == '=') t.type = REL_NE, oplen = 2;
-                else t.type = BOOL_NOT, oplen = 1;
+                if (input.peak(1) == '=')
+                    t.type = REL_NE, oplen = 2;
+                else
+                    t.type = BOOL_NOT, oplen = 1;
                 break;
             default:
                 break;
@@ -460,44 +562,40 @@ class Lexer
         return false;
     }
 
-	void LexError(const char *msg) const
-	{
-		cout << "Lexer: " << msg << endl;
-		exit(1);
-	}
-
-public:
-    void tokenize(StringBuf &input)
-	{
-		tokens.clear();
-        lnum = 1;
-        lstart = input.data();
-		while (true)
-		{
-			_skip_spaces(input);
-			if (input.empty())
-				break;
-			Token t;
-			if (_read_token(input, t))
-			{
-				//cout << "Token: " << t << endl;
-				tokens.push_back(t);
-			}
-			else
-			{
-                string msg = "Unrecognized Token at line " + to_string(lnum) +
-                    ":" + to_string(input.data() - lstart + 1);
-				LexError(msg.data());
-			}
-		}
-	}
-
-    bool hasNext() const
+    void LexError(const char *msg) const
     {
-        return !tokens.empty();
+        cout << "Lexer: " << msg << endl;
+        exit(1);
     }
 
-	Token getNext()
+   public:
+    void tokenize(StringBuf &input)
+    {
+        tokens.clear();
+        lnum = 1;
+        lstart = input.data();
+        while (true)
+        {
+            _skip_spaces(input);
+            if (input.empty())
+                break;
+            Token t;
+            if (_read_token(input, t))
+            {
+                // cout << "Token: " << t << endl;
+                tokens.push_back(t);
+            }
+            else
+            {
+                string msg = "Unrecognized Token at line " + to_string(lnum) +
+                             ":" + to_string(input.data() - lstart + 1);
+                LexError(msg.data());
+            }
+        }
+    }
+
+    bool hasNext() const { return !tokens.empty(); }
+    Token getNext()
     {
         if (tokens.empty())
         {
@@ -519,8 +617,10 @@ public:
 
     StringRef symbolName(size_t symid)
     {
-        if (symid < symbols.size()) return symbols[symid];
-        else return StringRef();
+        if (symid < symbols.size())
+            return symbols[symid];
+        else
+            return StringRef();
     }
 
     void debugPrint()
@@ -530,17 +630,18 @@ public:
         {
             Token t = peakNext();
             cout << "Token: " << t;
-            if (t.type == SYMBOL) cout << ':' << symbolName(t.symid);
+            if (t.type == SYMBOL)
+                cout << ':' << symbolName(t.symid);
             cout << endl;
             getNext();
         }
         tokens = cp;
     }
-private:
-    vector<StringRef> symbols; // symbol names
+
+   private:
+    vector<StringRef> symbols;  // symbol names
     deque<Token> tokens;
     int lnum;
-    const char * lstart;
-    //vector<StringRef> strings; // string constants
+    const char *lstart;
+    // vector<StringRef> strings; // string constants
 };
-

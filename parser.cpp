@@ -1,5 +1,5 @@
-#include <stack>
 #include <iostream>
+#include <stack>
 using namespace std;
 
 #include "lexer.h"
@@ -10,10 +10,22 @@ bool IsDeclaration(TokenType t)
     bool decl = false;
     switch (t)
     {
-        case TYPEDEF: case EXTERN: case STATIC: case AUTO: case REGISTER:
-        case TYPE_VOID: case TYPE_CHAR: case TYPE_SHORT: case TYPE_INT:
-        case TYPE_LONG: case TYPE_FLOAT: case TYPE_DOUBLE: case SIGNED:
-        case UNSIGNED: case TYPE_STRUCT: case TYPE_ENUM:
+        case TYPEDEF:
+        case EXTERN:
+        case STATIC:
+        case AUTO:
+        case REGISTER:
+        case TYPE_VOID:
+        case TYPE_CHAR:
+        case TYPE_SHORT:
+        case TYPE_INT:
+        case TYPE_LONG:
+        case TYPE_FLOAT:
+        case TYPE_DOUBLE:
+        case SIGNED:
+        case UNSIGNED:
+        case TYPE_STRUCT:
+        case TYPE_ENUM:
             // TODO: other typedef names
             decl = true;
             break;
@@ -27,9 +39,16 @@ bool IsAssignOperator(TokenType t)
     bool is = false;
     switch (t)
     {
-        case ASSIGN: case ASSIGN_ADD: case ASSIGN_SUB: case ASSIGN_MUL:
-        case ASSIGN_DIV: case ASSIGN_MOD:case ASSIGN_SLEFT:
-        case ASSIGN_SRIGHT: case ASSIGN_AND: case ASSIGN_OR:
+        case ASSIGN:
+        case ASSIGN_ADD:
+        case ASSIGN_SUB:
+        case ASSIGN_MUL:
+        case ASSIGN_DIV:
+        case ASSIGN_MOD:
+        case ASSIGN_SLEFT:
+        case ASSIGN_SRIGHT:
+        case ASSIGN_AND:
+        case ASSIGN_OR:
         case ASSIGN_XOR:
             is = true;
             break;
@@ -43,8 +62,12 @@ bool IsUnaryOperator(TokenType t)
     bool is = false;
     switch (t)
     {
-        case BIT_AND: case BIT_NOT:
-        case OP_MUL: case OP_ADD: case OP_SUB: case BOOL_NOT:
+        case BIT_AND:
+        case BIT_NOT:
+        case OP_MUL:
+        case OP_ADD:
+        case OP_SUB:
+        case BOOL_NOT:
             is = true;
             break;
         default:
@@ -60,14 +83,17 @@ void SyntaxError(const char * msg)
     exit(1);
 }
 */
-#define SyntaxError(msg) do { \
-    cout << "Syntax: " << msg << " at " << __FILE__ << ':' << to_string(__LINE__) << endl; \
-    exit(1); \
+#define SyntaxError(msg)                                       \
+    do                                                         \
+    {                                                          \
+        cout << "Syntax: " << msg << " at " << __FILE__ << ':' \
+             << to_string(__LINE__) << endl;                   \
+        exit(1);                                               \
     } while (0)
 
-Specifier * Specifier::ParseSpecifier(Lexer &lex)
+Specifier *Specifier::ParseSpecifier(Lexer &lex)
 {
-    Specifier * sp = new Specifier();
+    Specifier *sp = new Specifier();
     sp->isconst = sp->isstatic = sp->issigned = false;
     sp->stype = SPEC_NONE;
 
@@ -77,23 +103,49 @@ Specifier * Specifier::ParseSpecifier(Lexer &lex)
         switch (lex.peakNext().type)
         {
             // storage specifiers
-            case STATIC: sp->isstatic = true; break;
-            case TYPEDEF: case EXTERN: case AUTO: case REGISTER: break;
+            case STATIC:
+                sp->isstatic = true;
+                break;
+            case TYPEDEF:
+            case EXTERN:
+            case AUTO:
+            case REGISTER:
+                break;
             // type qualifiers
-            case CONST: sp->isconst = true; break;
-            case VOLATILE: break;
+            case CONST:
+                sp->isconst = true;
+                break;
+            case VOLATILE:
+                break;
             // type specifiers
-            case TYPE_VOID: sp->stype = SPEC_VOID; break;
-            case TYPE_CHAR: sp->stype = SPEC_CHAR; break;
-            case TYPE_SHORT: sp->stype = SPEC_SHORT; break;
-            case TYPE_INT: sp->stype = SPEC_INT; break;
-            case TYPE_LONG: sp->stype = SPEC_LONG; break;
-            case TYPE_FLOAT: sp->stype = SPEC_FLOAT; break;
-            case TYPE_DOUBLE: sp->stype = SPEC_DOUBLE; break;
+            case TYPE_VOID:
+                sp->stype = SPEC_VOID;
+                break;
+            case TYPE_CHAR:
+                sp->stype = SPEC_CHAR;
+                break;
+            case TYPE_SHORT:
+                sp->stype = SPEC_SHORT;
+                break;
+            case TYPE_INT:
+                sp->stype = SPEC_INT;
+                break;
+            case TYPE_LONG:
+                sp->stype = SPEC_LONG;
+                break;
+            case TYPE_FLOAT:
+                sp->stype = SPEC_FLOAT;
+                break;
+            case TYPE_DOUBLE:
+                sp->stype = SPEC_DOUBLE;
+                break;
             // TODO: struct, enum, ...
-            default: finish = true; break;
+            default:
+                finish = true;
+                break;
         }
-        if (!finish) lex.getNext();
+        if (!finish)
+            lex.getNext();
     }
 
     if (sp->stype == SPEC_NONE)
@@ -110,11 +162,20 @@ bool Specifier::MaybeTypeName(TokenType t)
     switch (t)
     {
         // type qualifiers
-        case CONST: case VOLATILE:
+        case CONST:
+        case VOLATILE:
         // type specifiers
-        case TYPE_VOID: case TYPE_CHAR: case TYPE_SHORT: case TYPE_INT:
-        case TYPE_LONG: case TYPE_FLOAT: case TYPE_DOUBLE:
-        case UNSIGNED: case SIGNED: case TYPE_STRUCT: case TYPE_ENUM:
+        case TYPE_VOID:
+        case TYPE_CHAR:
+        case TYPE_SHORT:
+        case TYPE_INT:
+        case TYPE_LONG:
+        case TYPE_FLOAT:
+        case TYPE_DOUBLE:
+        case UNSIGNED:
+        case SIGNED:
+        case TYPE_STRUCT:
+        case TYPE_ENUM:
             is = true;
             break;
         default:
@@ -126,19 +187,38 @@ bool Specifier::MaybeTypeName(TokenType t)
 void Specifier::print()
 {
     cout << '[';
-    if (isconst) cout << "CONST,";
-    if (isstatic) cout << "STATIC,";
-    if (issigned) cout << "SIGNED,";
+    if (isconst)
+        cout << "CONST,";
+    if (isstatic)
+        cout << "STATIC,";
+    if (issigned)
+        cout << "SIGNED,";
     switch (stype)
     {
-        case SPEC_VOID: cout << "void"; break;
-        case SPEC_CHAR: cout << "char"; break;
-        case SPEC_SHORT: cout << "short"; break;
-        case SPEC_INT: cout << "int"; break;
-        case SPEC_LONG: cout << "long"; break;
-        case SPEC_FLOAT: cout << "float"; break;
-        case SPEC_DOUBLE: cout << "double"; break;
-        default: cout << "unknown"; break;
+        case SPEC_VOID:
+            cout << "void";
+            break;
+        case SPEC_CHAR:
+            cout << "char";
+            break;
+        case SPEC_SHORT:
+            cout << "short";
+            break;
+        case SPEC_INT:
+            cout << "int";
+            break;
+        case SPEC_LONG:
+            cout << "long";
+            break;
+        case SPEC_FLOAT:
+            cout << "float";
+            break;
+        case SPEC_DOUBLE:
+            cout << "double";
+            break;
+        default:
+            cout << "unknown";
+            break;
     }
     cout << ']';
 }
@@ -162,7 +242,8 @@ Pointer Pointer::ParsePointer(Lexer &lex)
             {
                 lex.getNext();
             }
-            else break;
+            else
+                break;
         }
         p.ptypes.push_back(ptype);
     }
@@ -175,14 +256,20 @@ Pointer Pointer::ParsePointer(Lexer &lex)
 
 void Pointer::print()
 {
-    if (ptypes.empty()) return;
+    if (ptypes.empty())
+        return;
     for (int i = ptypes.size() - 1; i >= 0; --i)
     {
         switch (ptypes[i])
         {
-            case 0: cout << "pointer of "; break;
-            case 1: cout << "const pointer of "; break;
-            default: break;
+            case 0:
+                cout << "pointer of ";
+                break;
+            case 1:
+                cout << "const pointer of ";
+                break;
+            default:
+                break;
         }
     }
 }
@@ -214,7 +301,16 @@ Array Array::ParseArray(Lexer &lex)
         SyntaxError("Expect '['");
     }
     // TODO: add EvalType
-    //a.length = CondExpression::parse(lex).eval();
+    // a.length = CondExpression::parse(lex).eval();
+    if (lex.peakNext().type != CONST_INT)
+    {
+        SyntaxError("Expect const expression");
+    }
+    else
+    {
+        a.length = lex.getNext().ival;
+    }
+
     if (lex.getNext().type != RSB)
     {
         SyntaxError("Expect ']'");
@@ -222,9 +318,9 @@ Array Array::ParseArray(Lexer &lex)
     return a;
 }
 
-Declarator * Declarator::ParseDeclarator(Lexer &lex)
+Declarator *Declarator::ParseDeclarator(Lexer &lex)
 {
-    Declarator * d = new Declarator();
+    Declarator *d = new Declarator();
     d->child = nullptr;
     d->pointer = nullptr;
     d->array = nullptr;
@@ -257,8 +353,7 @@ Declarator * Declarator::ParseDeclarator(Lexer &lex)
             break;
         case SYMBOL:
             id = lex.getNext().symid;
-            if (lex.peakNext().type == STMT_END
-             || lex.peakNext().type == RP)
+            if (lex.peakNext().type == STMT_END || lex.peakNext().type == RP)
             {
                 d->dtype = DT_ID;
                 d->id = id;
@@ -286,22 +381,34 @@ Declarator * Declarator::ParseDeclarator(Lexer &lex)
                 }
             }
             break;
-        default: SyntaxError("Expect symbol or '('"); break;
+        default:
+            SyntaxError("Expect symbol or '('");
+            break;
     }
     return d;
 }
 
 void Declarator::print()
 {
-    if (child) child->print();
+    if (child)
+        child->print();
     switch (dtype)
     {
-        case DT_ID: cout << "ID " << id << " is "; break;
-        case DT_ARRAY: cout << "array of "; break;
-        case DT_FUNCTION: cout << "function returns "; break;
-        case DT_NONE: cout << "unknown "; break;
+        case DT_ID:
+            cout << "ID " << id << " is ";
+            break;
+        case DT_ARRAY:
+            cout << "array[" << array->length << "] of ";
+            break;
+        case DT_FUNCTION:
+            cout << "function returns ";
+            break;
+        case DT_NONE:
+            cout << "unknown ";
+            break;
     }
-    if (pointer) pointer->print();
+    if (pointer)
+        pointer->print();
 }
 
 void SymbolDecl::print()
@@ -312,7 +419,7 @@ void SymbolDecl::print()
 }
 void SymbolTable::add_symbol(Lexer &lex)
 {
-    Specifier * specifier = Specifier::ParseSpecifier(lex);
+    Specifier *specifier = Specifier::ParseSpecifier(lex);
     while (true)
     {
         SymbolDecl symbol;
@@ -335,14 +442,10 @@ void SymbolTable::add_symbol(Lexer &lex)
         }
     }
 }
-bool SymbolTable::search(StringBuf &name)
-{
-    return false;
-}
-
+bool SymbolTable::search(StringBuf &name) { return false; }
 stack<SymbolTable> gTables;
 
-SymbolTable * AddSymbolTable()
+SymbolTable *AddSymbolTable()
 {
     cout << "SymbolTable: new()" << endl;
     gTables.push(SymbolTable());
@@ -355,7 +458,7 @@ void RemoveSymbolTable()
     gTables.pop();
 }
 
-SyntaxNode * TranslationUnit::parse(Lexer &lex)
+SyntaxNode *TranslationUnit::parse(Lexer &lex)
 {
     if (lex.getNext().type != TYPE_INT)
     {
@@ -376,15 +479,11 @@ SyntaxNode * TranslationUnit::parse(Lexer &lex)
     return CompoundStatement::parse(lex);
 }
 
-SyntaxNode * TypeName::parse(Lexer &lex)
-{
-    return nullptr;
-}
-
+SyntaxNode *TypeName::parse(Lexer &lex) { return nullptr; }
 // no instance, only dispatch
-SyntaxNode * Statement::parse(Lexer &lex)
+SyntaxNode *Statement::parse(Lexer &lex)
 {
-    SyntaxNode * node = nullptr;
+    SyntaxNode *node = nullptr;
     switch (lex.peakNext().type)
     {
         case SYMBOL:
@@ -417,16 +516,16 @@ SyntaxNode * Statement::parse(Lexer &lex)
     }
     return node;
 }
-SyntaxNode * LabelStatement::parse(Lexer &lex)
+SyntaxNode *LabelStatement::parse(Lexer &lex)
 {
     SyntaxError("Unsupported feature: Label Statement");
     return nullptr;
 }
-SyntaxNode * CompoundStatement::parse(Lexer &lex)
+SyntaxNode *CompoundStatement::parse(Lexer &lex)
 {
-    CompoundStatement * node = new CompoundStatement();
+    CompoundStatement *node = new CompoundStatement();
 
-    SymbolTable * table = nullptr;
+    SymbolTable *table = nullptr;
     if (lex.getNext().type != BLK_BEGIN)
     {
         SyntaxError("Expecting '{'");
@@ -454,7 +553,7 @@ SyntaxNode * CompoundStatement::parse(Lexer &lex)
 
     return node;
 }
-SyntaxNode * ExpressionStatement::parse(Lexer &lex)
+SyntaxNode *ExpressionStatement::parse(Lexer &lex)
 {
     if (lex.peakNext().type == STMT_END)
     {
@@ -463,15 +562,15 @@ SyntaxNode * ExpressionStatement::parse(Lexer &lex)
     }
     else
     {
-        SyntaxNode * node = Expression::parse(lex);
+        SyntaxNode *node = Expression::parse(lex);
         if (lex.getNext().type != STMT_END)
             SyntaxError("Expecting ';'");
         return node;
     }
 }
-SyntaxNode * SelectionStatement::parse(Lexer &lex)
+SyntaxNode *SelectionStatement::parse(Lexer &lex)
 {
-    SelectionStatement * stmt = new SelectionStatement();
+    SelectionStatement *stmt = new SelectionStatement();
     stmt->stmt2 = nullptr;
     switch (lex.getNext().type)
     {
@@ -511,9 +610,9 @@ SyntaxNode * SelectionStatement::parse(Lexer &lex)
     }
     return stmt;
 }
-SyntaxNode * IterationStatement::parse(Lexer &lex)
+SyntaxNode *IterationStatement::parse(Lexer &lex)
 {
-    IterationStatement * stmt = new IterationStatement();
+    IterationStatement *stmt = new IterationStatement();
     switch (lex.getNext().type)
     {
         case WHILE:
@@ -570,9 +669,9 @@ SyntaxNode * IterationStatement::parse(Lexer &lex)
     }
     return stmt;
 }
-SyntaxNode * JumpStatement::parse(Lexer &lex)
+SyntaxNode *JumpStatement::parse(Lexer &lex)
 {
-    JumpStatement * stmt = new JumpStatement();
+    JumpStatement *stmt = new JumpStatement();
     stmt->expr = nullptr;
     stmt->id = 0;
     switch (lex.getNext().type)
@@ -602,22 +701,32 @@ SyntaxNode * JumpStatement::parse(Lexer &lex)
     return stmt;
 }
 
-SyntaxNode * Expression::parse(Lexer &lex)
+SyntaxNode *Expression::parse(Lexer &lex)
 {
-    Expression * expr = nullptr;
-    SyntaxNode * e;
+    Expression *expr = nullptr;
+    SyntaxNode *e;
 
     while (true)
     {
         switch (lex.peakNext().type)
         {
             // FIRST(expr) = ++ -- unary-op sizeof id constant string (
-            case OP_INC: case OP_DEC:
-            case BIT_AND: case BIT_NOT: case BOOL_NOT:
-            case OP_MUL: case OP_ADD: case OP_SUB:
-            case SIZEOF: case SYMBOL:
-            case CONST_INT: case CONST_CHAR: case CONST_FLOAT:
-            case CONST_ENUM: case STRING: case LP:
+            case OP_INC:
+            case OP_DEC:
+            case BIT_AND:
+            case BIT_NOT:
+            case BOOL_NOT:
+            case OP_MUL:
+            case OP_ADD:
+            case OP_SUB:
+            case SIZEOF:
+            case SYMBOL:
+            case CONST_INT:
+            case CONST_CHAR:
+            case CONST_FLOAT:
+            case CONST_ENUM:
+            case STRING:
+            case LP:
                 e = AssignExpression::parse(lex);
                 break;
             default:
@@ -626,8 +735,10 @@ SyntaxNode * Expression::parse(Lexer &lex)
         if (expr)
         {
             expr->exprs.push_back(e);
-            if (lex.peakNext().type != OP_COMMA) return expr;
-            else lex.getNext();
+            if (lex.peakNext().type != OP_COMMA)
+                return expr;
+            else
+                lex.getNext();
         }
         else
         {
@@ -643,12 +754,12 @@ SyntaxNode * Expression::parse(Lexer &lex)
         }
     }
 }
-SyntaxNode * AssignExpression::parse(Lexer &lex)
+SyntaxNode *AssignExpression::parse(Lexer &lex)
 {
-    AssignExpression * expr = new AssignExpression();
+    AssignExpression *expr = new AssignExpression();
 
     // condition or unary?
-    SyntaxNode * e;
+    SyntaxNode *e;
 
     // TODO: fix it, unary is not condition-expr
     while (true)
@@ -668,12 +779,12 @@ SyntaxNode * AssignExpression::parse(Lexer &lex)
 
     return expr;
 }
-SyntaxNode * CondExpression::parse(Lexer &lex)
+SyntaxNode *CondExpression::parse(Lexer &lex)
 {
-    SyntaxNode * e = OrExpression::parse(lex);
+    SyntaxNode *e = OrExpression::parse(lex);
     if (lex.peakNext().type == OP_QMARK)
     {
-        CondExpression * expr = new CondExpression();
+        CondExpression *expr = new CondExpression();
         expr->cond = e;
         lex.getNext();
         expr->left = Expression::parse(lex);
@@ -689,12 +800,12 @@ SyntaxNode * CondExpression::parse(Lexer &lex)
         return e;
     }
 }
-SyntaxNode * OrExpression::parse(Lexer &lex)
+SyntaxNode *OrExpression::parse(Lexer &lex)
 {
-    SyntaxNode * e = AndExpression::parse(lex);
+    SyntaxNode *e = AndExpression::parse(lex);
     if (lex.peakNext().type == BOOL_OR)
     {
-        OrExpression * expr = new OrExpression();
+        OrExpression *expr = new OrExpression();
         expr->exprs.push_back(e);
         while (lex.peakNext().type == BOOL_OR)
         {
@@ -708,12 +819,12 @@ SyntaxNode * OrExpression::parse(Lexer &lex)
         return e;
     }
 }
-SyntaxNode * AndExpression::parse(Lexer &lex)
+SyntaxNode *AndExpression::parse(Lexer &lex)
 {
-    SyntaxNode * e = BitOrExpression::parse(lex);
+    SyntaxNode *e = BitOrExpression::parse(lex);
     if (lex.peakNext().type == BOOL_AND)
     {
-        AndExpression * expr = new AndExpression();
+        AndExpression *expr = new AndExpression();
         expr->exprs.push_back(e);
         while (lex.peakNext().type == BOOL_AND)
         {
@@ -727,12 +838,12 @@ SyntaxNode * AndExpression::parse(Lexer &lex)
         return e;
     }
 }
-SyntaxNode * BitOrExpression::parse(Lexer &lex)
+SyntaxNode *BitOrExpression::parse(Lexer &lex)
 {
-    SyntaxNode * e = BitXorExpression::parse(lex);
+    SyntaxNode *e = BitXorExpression::parse(lex);
     if (lex.peakNext().type == BIT_OR)
     {
-        BitOrExpression * expr = new BitOrExpression();
+        BitOrExpression *expr = new BitOrExpression();
         expr->exprs.push_back(e);
         while (lex.peakNext().type == BIT_OR)
         {
@@ -746,12 +857,12 @@ SyntaxNode * BitOrExpression::parse(Lexer &lex)
         return e;
     }
 }
-SyntaxNode * BitXorExpression::parse(Lexer &lex)
+SyntaxNode *BitXorExpression::parse(Lexer &lex)
 {
-    SyntaxNode * e = BitAndExpression::parse(lex);
+    SyntaxNode *e = BitAndExpression::parse(lex);
     if (lex.peakNext().type == BIT_XOR)
     {
-        BitXorExpression * expr = new BitXorExpression();
+        BitXorExpression *expr = new BitXorExpression();
         expr->exprs.push_back(e);
         while (lex.peakNext().type == BIT_XOR)
         {
@@ -765,12 +876,12 @@ SyntaxNode * BitXorExpression::parse(Lexer &lex)
         return e;
     }
 }
-SyntaxNode * BitAndExpression::parse(Lexer &lex)
+SyntaxNode *BitAndExpression::parse(Lexer &lex)
 {
-    SyntaxNode * e = EqExpression::parse(lex);
+    SyntaxNode *e = EqExpression::parse(lex);
     if (lex.peakNext().type == BIT_AND)
     {
-        BitAndExpression * expr = new BitAndExpression();
+        BitAndExpression *expr = new BitAndExpression();
         expr->exprs.push_back(e);
         while (lex.peakNext().type == BIT_AND)
         {
@@ -784,12 +895,12 @@ SyntaxNode * BitAndExpression::parse(Lexer &lex)
         return e;
     }
 }
-SyntaxNode * EqExpression::parse(Lexer &lex)
+SyntaxNode *EqExpression::parse(Lexer &lex)
 {
-    SyntaxNode * e = RelExpression::parse(lex);
+    SyntaxNode *e = RelExpression::parse(lex);
     if (lex.peakNext().type == REL_EQ || lex.peakNext().type == REL_NE)
     {
-        EqExpression * expr = new EqExpression();
+        EqExpression *expr = new EqExpression();
         expr->exprs.push_back(e);
         while (lex.peakNext().type == REL_EQ || lex.peakNext().type == REL_NE)
         {
@@ -803,20 +914,16 @@ SyntaxNode * EqExpression::parse(Lexer &lex)
         return e;
     }
 }
-SyntaxNode * RelExpression::parse(Lexer &lex)
+SyntaxNode *RelExpression::parse(Lexer &lex)
 {
-    SyntaxNode * e = ShiftExpression::parse(lex);
-    if (lex.peakNext().type == REL_LT
-     || lex.peakNext().type == REL_LE
-     || lex.peakNext().type == REL_GT
-     || lex.peakNext().type == REL_GE)
+    SyntaxNode *e = ShiftExpression::parse(lex);
+    if (lex.peakNext().type == REL_LT || lex.peakNext().type == REL_LE ||
+        lex.peakNext().type == REL_GT || lex.peakNext().type == REL_GE)
     {
-        RelExpression * expr = new RelExpression();
+        RelExpression *expr = new RelExpression();
         expr->exprs.push_back(e);
-        while (lex.peakNext().type == REL_LT
-            || lex.peakNext().type == REL_LE
-            || lex.peakNext().type == REL_GT
-            || lex.peakNext().type == REL_GE)
+        while (lex.peakNext().type == REL_LT || lex.peakNext().type == REL_LE ||
+               lex.peakNext().type == REL_GT || lex.peakNext().type == REL_GE)
         {
             expr->ops.push_back(lex.getNext().type);
             expr->exprs.push_back(ShiftExpression::parse(lex));
@@ -828,14 +935,15 @@ SyntaxNode * RelExpression::parse(Lexer &lex)
         return e;
     }
 }
-SyntaxNode * ShiftExpression::parse(Lexer &lex)
+SyntaxNode *ShiftExpression::parse(Lexer &lex)
 {
-    SyntaxNode * e = AddExpression::parse(lex);
+    SyntaxNode *e = AddExpression::parse(lex);
     if (lex.peakNext().type == BIT_SLEFT || lex.peakNext().type == BIT_SRIGHT)
     {
-        ShiftExpression * expr = new ShiftExpression();
+        ShiftExpression *expr = new ShiftExpression();
         expr->exprs.push_back(e);
-        while (lex.peakNext().type == BIT_SLEFT || lex.peakNext().type == BIT_SRIGHT)
+        while (lex.peakNext().type == BIT_SLEFT ||
+               lex.peakNext().type == BIT_SRIGHT)
         {
             expr->ops.push_back(lex.getNext().type);
             expr->exprs.push_back(AddExpression::parse(lex));
@@ -847,12 +955,12 @@ SyntaxNode * ShiftExpression::parse(Lexer &lex)
         return e;
     }
 }
-SyntaxNode * AddExpression::parse(Lexer &lex)
+SyntaxNode *AddExpression::parse(Lexer &lex)
 {
-    SyntaxNode * e = MulExpression::parse(lex);
+    SyntaxNode *e = MulExpression::parse(lex);
     if (lex.peakNext().type == OP_ADD || lex.peakNext().type == OP_SUB)
     {
-        AddExpression * expr = new AddExpression();
+        AddExpression *expr = new AddExpression();
         expr->exprs.push_back(e);
         while (lex.peakNext().type == OP_ADD || lex.peakNext().type == OP_SUB)
         {
@@ -866,18 +974,16 @@ SyntaxNode * AddExpression::parse(Lexer &lex)
         return e;
     }
 }
-SyntaxNode * MulExpression::parse(Lexer &lex)
+SyntaxNode *MulExpression::parse(Lexer &lex)
 {
-    SyntaxNode * e = CastExpression::parse(lex);
-    if (lex.peakNext().type == OP_MUL
-     || lex.peakNext().type == OP_DIV
-     || lex.peakNext().type == OP_MOD)
+    SyntaxNode *e = CastExpression::parse(lex);
+    if (lex.peakNext().type == OP_MUL || lex.peakNext().type == OP_DIV ||
+        lex.peakNext().type == OP_MOD)
     {
-        MulExpression * expr = new MulExpression();
+        MulExpression *expr = new MulExpression();
         expr->exprs.push_back(e);
-        while (lex.peakNext().type == OP_MUL
-            || lex.peakNext().type == OP_DIV
-            || lex.peakNext().type == OP_MOD)
+        while (lex.peakNext().type == OP_MUL || lex.peakNext().type == OP_DIV ||
+               lex.peakNext().type == OP_MOD)
         {
             expr->ops.push_back(lex.getNext().type);
             expr->exprs.push_back(CastExpression::parse(lex));
@@ -889,15 +995,15 @@ SyntaxNode * MulExpression::parse(Lexer &lex)
         return e;
     }
 }
-SyntaxNode * CastExpression::parse(Lexer &lex)
+SyntaxNode *CastExpression::parse(Lexer &lex)
 {
     // cast or unary
-    if (lex.peakNext().type == LP
-     && Specifier::MaybeTypeName(lex.peakNext(1).type))
+    if (lex.peakNext().type == LP &&
+        Specifier::MaybeTypeName(lex.peakNext(1).type))
     {
-        CastExpression * expr = new CastExpression();
-        while (lex.peakNext().type == LP
-            && Specifier::MaybeTypeName(lex.peakNext(1).type))
+        CastExpression *expr = new CastExpression();
+        while (lex.peakNext().type == LP &&
+               Specifier::MaybeTypeName(lex.peakNext(1).type))
         {
             if (lex.getNext().type != LP)
             {
@@ -917,22 +1023,51 @@ SyntaxNode * CastExpression::parse(Lexer &lex)
         return UnaryExpression::parse(lex);
     }
 }
-SyntaxNode * UnaryExpression::parse(Lexer &lex)
+SyntaxNode *UnaryExpression::parse(Lexer &lex)
 {
     if (IsUnaryOperator(lex.peakNext().type))
     {
-        return nullptr;
+        UnaryExpression *expr = new UnaryExpression();
+        switch (lex.peakNext().type)
+        {
+            case OP_INC:
+            case OP_DEC:
+                expr->op = lex.getNext().type;
+                expr->expr = UnaryExpression::parse(lex);
+                break;
+            case SIZEOF:
+                expr->op = lex.getNext().type;
+                if (lex.peakNext().type == LP)
+                {
+                    expr->expr = TypeName::parse(lex);
+                }
+                else
+                {
+                    expr->expr = UnaryExpression::parse(lex);
+                }
+                break;
+            default:
+                expr->op = lex.getNext().type;
+                expr->expr = CastExpression::parse(lex);
+                break;
+        }
+        return expr;
     }
     else
     {
         return PostfixExpression::parse(lex);
     }
 }
-SyntaxNode * PostfixExpression::parse(Lexer &lex)
+SyntaxNode *PostfixExpression::parse(Lexer &lex)
 {
-    return nullptr;
+    PrimaryExpression *expr = new PrimaryExpression();
+    return expr;
 }
-SyntaxNode * PrimaryExpression::parse(Lexer &lex)
+SyntaxNode *PrimaryExpression::parse(Lexer &lex)
 {
+    // switch (lex.peakNext().type)
+    // {
+    // case SYMBOL:
+    // }
     return nullptr;
 }
