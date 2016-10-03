@@ -220,12 +220,13 @@ class SymbolTable
     static SymbolTable * tryParse(Lexer &lex);
     void debugPrint(Lexer &lex)
     {
+        cout << "Symbol Table:" << endl;
         for (Symbol &s : symbols)
         {
             s.declarator->debugPrint(lex);
             s.specifier->debugPrint();
+            cout << endl;
         }
-        cout << endl;
     }
 };
 

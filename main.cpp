@@ -33,6 +33,36 @@ int main(int argc, char *argv[])
 
     cout << "-------------- source --------------" << endl
          << print_source << endl;
+    // remove comment
+    bool incomment = false;
+    const char *end = source.data() + source.size();
+    char *ptr = const_cast<char *>(source.data());
+    while (ptr != end)
+    {
+        if (*ptr == '/')
+        {
+            if (*(ptr + 1) == '/')
+            {
+                *ptr++ = ' ';
+                *ptr++ = ' ';
+                while (ptr != end && *ptr != '\n') *ptr++ = ' ';
+                if (ptr != end) ++ptr;
+            }
+            else if (*(ptr + 1) == '*')
+            {
+                *ptr++ = ' ';
+                *ptr++ = ' ';
+                while (ptr != end && *ptr != '*' && *(ptr + 1) != '/') *ptr++ = ' ';
+                if (ptr != end)
+                {
+                    *ptr++ = ' ';
+                    *ptr++ = ' ';
+                }
+            }
+            else ++ptr;
+        }
+        else ++ptr;
+    }
 
     cout << "-------------- lexer --------------" << endl;
     StringBuf sb(source.data(), source.size());

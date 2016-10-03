@@ -369,23 +369,21 @@ void SymbolTable::RemoveTable()
 }
 SymbolTable * SymbolTable::tryParse(Lexer &lex)
 {
-    SymbolTable * table = nullptr;
+    if (!IsDeclaration(lex.peakNext().type))
+    {
+        return nullptr;
+    }
+
+    SymbolTable * table = new SymbolTable();
+    table->parent = nullptr;
     while (IsDeclaration(lex.peakNext().type))
     {
-        table = new SymbolTable();
-        table->parent = nullptr;
         Specifier * specifier = Specifier::parse(lex);
-        // cout << "  SPEC: ";
-        // specifier->debugPrint();
-        // cout << endl;
         while (true)
         {
             Symbol s;
             s.specifier = specifier;
             s.declarator = Declarator::parse(lex);
-            // cout << "  DECL: ";
-            // s.declarator->debugPrint(lex);
-            // cout << endl;
             table->symbols.push_back(s);
             if (lex.peakNext().type == OP_COMMA)
             {
@@ -401,7 +399,6 @@ SymbolTable * SymbolTable::tryParse(Lexer &lex)
                 SyntaxError("Unexpected token");
             }
         }
-        table->debugPrint(lex);
     }
     return table;
 }
@@ -483,10 +480,11 @@ SyntaxNode *CompoundStatement::parse(Lexer &lex)
     if (node->table != nullptr)
     {
         SymbolTable::AddTable(node->table);
+        node->table->debugPrint(lex);
     }
 
     // parse statements
-    while (lex.getNext().type != BLK_END)
+    while (lex.peakNext().type != BLK_END)
     {
         node->stmts.push_back(Statement::parse(lex));
     }

@@ -1,17 +1,30 @@
 int main()
 {
+    // normal declarations
     char cval;
     int ival;
 
+    // array declarations
+    int iarr[3];
+    int iarr2[3][3];
+    int iarr3[3][3][3];
+
+    // pointer declarations
     int * iptr;
     int ** ipptr;
     int *** ippptr;
 
+    // function pointer declarations
     int (*pf)();
     int * (*pfip)();
     int ** (*pfipp)();
     int (**ppf)();
 
+    // complex declarations
     int (* (* (*pfpfaafp) (int)) [3][3])(int,int);
     int (* (* (* apfpfaafp[3] ) (int)) [3][3])(int,int);
+
+    {
+        int inner_ival;
+    }
 }

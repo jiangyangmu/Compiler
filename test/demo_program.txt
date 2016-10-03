@@ -1,16 +1,13 @@
 int main()
 {
-    char cval;
-    int ival;
-    float fval;
+    int a, b, c;
+    int d;
 
-    int * iptr;
+    a = 3;
+    b = 5;
+    c = 7;
 
-    int iarr[10];
-
-    int * iparr[10];
-
-    int (*f)();
+    d = a + b * c;
 
     return 0;
 }
