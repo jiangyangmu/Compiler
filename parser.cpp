@@ -103,13 +103,6 @@ bool IsTypeName(TokenType t)
     return is;
 }
 
-/*
-void SyntaxError(const char * msg)
-{
-    cout << "Syntax: " << msg << endl;
-    exit(1);
-}
-*/
 void CheckTokens(Lexer &lex)
 {
     string s;
@@ -134,6 +127,13 @@ void CheckTokens(Lexer &lex)
              << to_string(__LINE__) << endl;                   \
         CheckTokens(lex);                                      \
         exit(1);                                               \
+    } while (0)
+
+#define DebugParseTree(name)                                     \
+    do                                                           \
+    {                                                            \
+        cout << #name " at Token " << lex.peakNext() << ", line " \
+             << lex.peakNext().line << endl;                     \
     } while (0)
 
 TFunction * TFunction::tryParse(Lexer &lex)
@@ -428,10 +428,20 @@ SyntaxNode *TypeName::parse(Lexer &lex) { return nullptr; }
 // no instance, only dispatch
 SyntaxNode *Statement::parse(Lexer &lex)
 {
+    DebugParseTree(Statement);
     SyntaxNode *node = nullptr;
     switch (lex.peakNext().type)
     {
         case SYMBOL:
+            if (lex.peakNext(1).type == OP_COLON)
+            {
+                node = LabelStatement::parse(lex);
+            }
+            else
+            {
+                node = ExpressionStatement::parse(lex);
+            }
+            break;
         case CASE:
         case DEFAULT:
             node = LabelStatement::parse(lex);
@@ -463,11 +473,13 @@ SyntaxNode *Statement::parse(Lexer &lex)
 }
 SyntaxNode *LabelStatement::parse(Lexer &lex)
 {
+    DebugParseTree(LabelStatement);
     SyntaxError("Unsupported feature: Label Statement");
     return nullptr;
 }
 SyntaxNode *CompoundStatement::parse(Lexer &lex)
 {
+    DebugParseTree(CompoundStatement);
     CompoundStatement *node = new CompoundStatement();
 
     if (lex.getNext().type != BLK_BEGIN)
@@ -503,6 +515,7 @@ SyntaxNode *CompoundStatement::parse(Lexer &lex)
 }
 SyntaxNode *ExpressionStatement::parse(Lexer &lex)
 {
+    DebugParseTree(ExpressionStatement);
     if (lex.peakNext().type == STMT_END)
     {
         lex.getNext();
@@ -518,6 +531,7 @@ SyntaxNode *ExpressionStatement::parse(Lexer &lex)
 }
 SyntaxNode *SelectionStatement::parse(Lexer &lex)
 {
+    DebugParseTree(SelectionStatement);
     SelectionStatement *stmt = new SelectionStatement();
     stmt->stmt2 = nullptr;
     switch (lex.getNext().type)
@@ -560,6 +574,7 @@ SyntaxNode *SelectionStatement::parse(Lexer &lex)
 }
 SyntaxNode *IterationStatement::parse(Lexer &lex)
 {
+    DebugParseTree(IterationStatement);
     IterationStatement *stmt = new IterationStatement();
     switch (lex.getNext().type)
     {
@@ -619,6 +634,7 @@ SyntaxNode *IterationStatement::parse(Lexer &lex)
 }
 SyntaxNode *JumpStatement::parse(Lexer &lex)
 {
+    DebugParseTree(JumpStatement);
     JumpStatement *stmt = new JumpStatement();
     stmt->expr = nullptr;
     stmt->id = 0;
@@ -651,6 +667,7 @@ SyntaxNode *JumpStatement::parse(Lexer &lex)
 
 SyntaxNode *Expression::parse(Lexer &lex)
 {
+    DebugParseTree(Expression);
     Expression *expr = nullptr;
     SyntaxNode *e;
 
@@ -704,6 +721,7 @@ SyntaxNode *Expression::parse(Lexer &lex)
 }
 SyntaxNode *AssignExpression::parse(Lexer &lex)
 {
+    DebugParseTree(AssignExpression);
     AssignExpression *expr = new AssignExpression();
 
     // condition or unary?
@@ -729,6 +747,7 @@ SyntaxNode *AssignExpression::parse(Lexer &lex)
 }
 SyntaxNode *CondExpression::parse(Lexer &lex)
 {
+    DebugParseTree(CondExpression);
     SyntaxNode *e = OrExpression::parse(lex);
     if (lex.peakNext().type == OP_QMARK)
     {
@@ -750,6 +769,7 @@ SyntaxNode *CondExpression::parse(Lexer &lex)
 }
 SyntaxNode *OrExpression::parse(Lexer &lex)
 {
+    DebugParseTree(OrExpression);
     SyntaxNode *e = AndExpression::parse(lex);
     if (lex.peakNext().type == BOOL_OR)
     {
@@ -769,6 +789,7 @@ SyntaxNode *OrExpression::parse(Lexer &lex)
 }
 SyntaxNode *AndExpression::parse(Lexer &lex)
 {
+    DebugParseTree(AndExpression);
     SyntaxNode *e = BitOrExpression::parse(lex);
     if (lex.peakNext().type == BOOL_AND)
     {
@@ -788,6 +809,7 @@ SyntaxNode *AndExpression::parse(Lexer &lex)
 }
 SyntaxNode *BitOrExpression::parse(Lexer &lex)
 {
+
     SyntaxNode *e = BitXorExpression::parse(lex);
     if (lex.peakNext().type == BIT_OR)
     {
@@ -905,6 +927,7 @@ SyntaxNode *ShiftExpression::parse(Lexer &lex)
 }
 SyntaxNode *AddExpression::parse(Lexer &lex)
 {
+    DebugParseTree(AddExpression);
     SyntaxNode *e = MulExpression::parse(lex);
     if (lex.peakNext().type == OP_ADD || lex.peakNext().type == OP_SUB)
     {
@@ -924,6 +947,7 @@ SyntaxNode *AddExpression::parse(Lexer &lex)
 }
 SyntaxNode *MulExpression::parse(Lexer &lex)
 {
+    DebugParseTree(MulExpression);
     SyntaxNode *e = CastExpression::parse(lex);
     if (lex.peakNext().type == OP_MUL || lex.peakNext().type == OP_DIV ||
         lex.peakNext().type == OP_MOD)
@@ -973,6 +997,7 @@ SyntaxNode *CastExpression::parse(Lexer &lex)
 }
 SyntaxNode *UnaryExpression::parse(Lexer &lex)
 {
+    DebugParseTree(UnaryExpression);
     if (IsUnaryOperator(lex.peakNext().type))
     {
         UnaryExpression *expr = new UnaryExpression();
@@ -1008,14 +1033,23 @@ SyntaxNode *UnaryExpression::parse(Lexer &lex)
 }
 SyntaxNode *PostfixExpression::parse(Lexer &lex)
 {
-    PrimaryExpression *expr = new PrimaryExpression();
-    return expr;
+    DebugParseTree(PostfixExpression);
+    return PrimaryExpression::parse(lex);
 }
 SyntaxNode *PrimaryExpression::parse(Lexer &lex)
 {
-    // switch (lex.peakNext().type)
-    // {
-    // case SYMBOL:
-    // }
-    return nullptr;
+    DebugParseTree(PrimaryExpression);
+    PrimaryExpression * p = nullptr;
+    switch (lex.peakNext().type)
+    {
+        case SYMBOL:
+        case CONST_INT:
+            p = new PrimaryExpression();
+            p->t = lex.getNext();
+            break;
+        default:
+            SyntaxError("Unsupported primary expression");
+            break;
+    }
+    return p;
 }

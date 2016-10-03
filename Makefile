@@ -1,15 +1,15 @@
 SRC = $(wildcard *.cpp)
 HDR = $(wildcard *.h)
-#SRC = main.cpp
+TGR = ${HOME}/bin/jcc
 
 .Phony: all debug
 
-all : compiler
+all : ${TGR}
 
-compiler : ${SRC} ${HDR}
+${TGR}: ${SRC} ${HDR}
 	c++ -std=c++0x -o $@ ${SRC}
 
 debug : ${SRC} ${HDR}
-	c++ -std=c++0x -g -o compiler ${SRC}
+	c++ -std=c++0x -g -o ${TGR} ${SRC}
 
 #c++ -std=c++0x -o $@ $^

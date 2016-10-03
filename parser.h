@@ -439,6 +439,7 @@ class PostfixExpression : public SyntaxNode
 // TODO: finish this!
 class PrimaryExpression : public SyntaxNode
 {
+    Token t;
    public:
     static SyntaxNode *parse(Lexer &lex);
 };
