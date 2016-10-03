@@ -75,88 +75,7 @@ bool IsUnaryOperator(TokenType t)
     }
     return is;
 }
-
-/*
-void SyntaxError(const char * msg)
-{
-    cout << "Syntax: " << msg << endl;
-    exit(1);
-}
-*/
-#define SyntaxError(msg)                                       \
-    do                                                         \
-    {                                                          \
-        cout << "Syntax: " << msg << " at " << __FILE__ << ':' \
-             << to_string(__LINE__) << endl;                   \
-        exit(1);                                               \
-    } while (0)
-
-Specifier *Specifier::ParseSpecifier(Lexer &lex)
-{
-    Specifier *sp = new Specifier();
-    sp->isconst = sp->isstatic = sp->issigned = false;
-    sp->stype = SPEC_NONE;
-
-    bool finish = false;
-    while (!finish)
-    {
-        switch (lex.peakNext().type)
-        {
-            // storage specifiers
-            case STATIC:
-                sp->isstatic = true;
-                break;
-            case TYPEDEF:
-            case EXTERN:
-            case AUTO:
-            case REGISTER:
-                break;
-            // type qualifiers
-            case CONST:
-                sp->isconst = true;
-                break;
-            case VOLATILE:
-                break;
-            // type specifiers
-            case TYPE_VOID:
-                sp->stype = SPEC_VOID;
-                break;
-            case TYPE_CHAR:
-                sp->stype = SPEC_CHAR;
-                break;
-            case TYPE_SHORT:
-                sp->stype = SPEC_SHORT;
-                break;
-            case TYPE_INT:
-                sp->stype = SPEC_INT;
-                break;
-            case TYPE_LONG:
-                sp->stype = SPEC_LONG;
-                break;
-            case TYPE_FLOAT:
-                sp->stype = SPEC_FLOAT;
-                break;
-            case TYPE_DOUBLE:
-                sp->stype = SPEC_DOUBLE;
-                break;
-            // TODO: struct, enum, ...
-            default:
-                finish = true;
-                break;
-        }
-        if (!finish)
-            lex.getNext();
-    }
-
-    if (sp->stype == SPEC_NONE)
-    {
-        SyntaxError("Expect type specifier");
-    }
-    // TODO: other constraits
-    return sp;
-}
-
-bool Specifier::MaybeTypeName(TokenType t)
+bool IsTypeName(TokenType t)
 {
     bool is = false;
     switch (t)
@@ -184,278 +103,307 @@ bool Specifier::MaybeTypeName(TokenType t)
     return is;
 }
 
-void Specifier::print()
+/*
+void SyntaxError(const char * msg)
 {
-    cout << '[';
-    if (isconst)
-        cout << "CONST,";
-    if (isstatic)
-        cout << "STATIC,";
-    if (issigned)
-        cout << "SIGNED,";
-    switch (stype)
-    {
-        case SPEC_VOID:
-            cout << "void";
-            break;
-        case SPEC_CHAR:
-            cout << "char";
-            break;
-        case SPEC_SHORT:
-            cout << "short";
-            break;
-        case SPEC_INT:
-            cout << "int";
-            break;
-        case SPEC_LONG:
-            cout << "long";
-            break;
-        case SPEC_FLOAT:
-            cout << "float";
-            break;
-        case SPEC_DOUBLE:
-            cout << "double";
-            break;
-        default:
-            cout << "unknown";
-            break;
-    }
-    cout << ']';
+    cout << "Syntax: " << msg << endl;
+    exit(1);
 }
-
-Pointer Pointer::ParsePointer(Lexer &lex)
+*/
+void CheckTokens(Lexer &lex)
 {
-    Pointer p;
-    int ptype;
-    while (lex.peakNext().type == OP_MUL)
+    string s;
+    while (cin >> s && lex.hasNext())
     {
-        lex.getNext();
-        ptype = 0;
-        while (true)
+        if (s == "n")
         {
-            if (lex.peakNext().type == CONST)
-            {
-                ptype |= PTR_CONST;
-                lex.getNext();
-            }
-            else if (lex.peakNext().type == VOLATILE)
-            {
-                lex.getNext();
-            }
-            else
-                break;
-        }
-        p.ptypes.push_back(ptype);
-    }
-    if (p.ptypes.empty())
-    {
-        SyntaxError("Expect pointer");
-    }
-    return p;
-}
-
-void Pointer::print()
-{
-    if (ptypes.empty())
-        return;
-    for (int i = ptypes.size() - 1; i >= 0; --i)
-    {
-        switch (ptypes[i])
-        {
-            case 0:
-                cout << "pointer of ";
-                break;
-            case 1:
-                cout << "const pointer of ";
-                break;
-            default:
-                break;
-        }
-    }
-}
-
-Function Function::ParseFunction(Lexer &lex)
-{
-    Function f;
-    if (lex.getNext().type != LP)
-    {
-        SyntaxError("Expect '('");
-    }
-    while (lex.peakNext().type != RP)
-    {
-        f.specifiers.push_back(Specifier::ParseSpecifier(lex));
-        f.decls.push_back(Declarator::ParseDeclarator(lex));
-    }
-    if (lex.getNext().type != RP)
-    {
-        SyntaxError("Expect ')'");
-    }
-    return f;
-}
-
-Array Array::ParseArray(Lexer &lex)
-{
-    Array a;
-    if (lex.getNext().type != LSB)
-    {
-        SyntaxError("Expect '['");
-    }
-    // TODO: add EvalType
-    // a.length = CondExpression::parse(lex).eval();
-    if (lex.peakNext().type != CONST_INT)
-    {
-        SyntaxError("Expect const expression");
-    }
-    else
-    {
-        a.length = lex.getNext().ival;
-    }
-
-    if (lex.getNext().type != RSB)
-    {
-        SyntaxError("Expect ']'");
-    }
-    return a;
-}
-
-Declarator *Declarator::ParseDeclarator(Lexer &lex)
-{
-    Declarator *d = new Declarator();
-    d->child = nullptr;
-    d->pointer = nullptr;
-    d->array = nullptr;
-    if (lex.peakNext().type == OP_MUL)
-    {
-        d->pointer = new Pointer(Pointer::ParsePointer(lex));
-    }
-
-    int id;
-    switch (lex.peakNext().type)
-    {
-        case LP:
+            cout << "Token " << lex.peakNext()
+                 << " at line " << lex.peakNext().line << endl;
             lex.getNext();
-            d->child = ParseDeclarator(lex);
-            if (lex.getNext().type != RP)
-            {
-                SyntaxError("Expect ')'");
-            }
-            // handle d type
-            if (lex.peakNext().type == LSB)
-            {
-                d->dtype = DT_ARRAY;
-                d->array = new Array(Array::ParseArray(lex));
-            }
-            else if (lex.peakNext().type == LP)
-            {
-                d->dtype = DT_FUNCTION;
-                d->function = new Function(Function::ParseFunction(lex));
-            }
-            break;
-        case SYMBOL:
-            id = lex.getNext().symid;
-            if (lex.peakNext().type == STMT_END || lex.peakNext().type == RP)
-            {
-                d->dtype = DT_ID;
-                d->id = id;
-            }
-            else
-            {
-                d->child = new Declarator();
-                d->child->child = nullptr;
-                d->child->pointer = nullptr;
-                d->child->id = id;
-                d->child->dtype = DT_ID;
-                if (lex.peakNext().type == LSB)
-                {
-                    d->dtype = DT_ARRAY;
-                    d->array = new Array(Array::ParseArray(lex));
-                }
-                else if (lex.peakNext().type == LP)
-                {
-                    d->dtype = DT_FUNCTION;
-                    d->function = new Function(Function::ParseFunction(lex));
-                }
-                else
-                {
-                    SyntaxError("Expect '[' or '('");
-                }
-            }
-            break;
-        default:
-            SyntaxError("Expect symbol or '('");
-            break;
-    }
-    return d;
-}
-
-void Declarator::print()
-{
-    if (child)
-        child->print();
-    switch (dtype)
-    {
-        case DT_ID:
-            cout << "ID " << id << " is ";
-            break;
-        case DT_ARRAY:
-            cout << "array[" << array->length << "] of ";
-            break;
-        case DT_FUNCTION:
-            cout << "function returns ";
-            break;
-        case DT_NONE:
-            cout << "unknown ";
-            break;
-    }
-    if (pointer)
-        pointer->print();
-}
-
-void SymbolDecl::print()
-{
-    declarator->print();
-    specifier->print();
-    cout << endl;
-}
-void SymbolTable::add_symbol(Lexer &lex)
-{
-    Specifier *specifier = Specifier::ParseSpecifier(lex);
-    while (true)
-    {
-        SymbolDecl symbol;
-        symbol.specifier = specifier;
-        symbol.declarator = Declarator::ParseDeclarator(lex);
-        symbol.print();
-        symbols.push_back(symbol);
-        if (lex.peakNext().type == OP_COMMA)
-        {
-            lex.getNext();
-        }
-        else if (lex.peakNext().type == STMT_END)
-        {
-            lex.getNext();
-            break;
         }
         else
         {
-            SyntaxError("Unexpected token");
+            break;
         }
     }
 }
-bool SymbolTable::search(StringBuf &name) { return false; }
-stack<SymbolTable> gTables;
+#define SyntaxError(msg)                                       \
+    do                                                         \
+    {                                                          \
+        cout << "Syntax: " << msg << " at " << __FILE__ << ':' \
+             << to_string(__LINE__) << endl;                   \
+        CheckTokens(lex);                                      \
+        exit(1);                                               \
+    } while (0)
 
-SymbolTable *AddSymbolTable()
+TFunction * TFunction::tryParse(Lexer &lex)
 {
-    cout << "SymbolTable: new()" << endl;
-    gTables.push(SymbolTable());
-    return &gTables.top();
+    TFunction * f = nullptr;
+    if (lex.peakNext().type == LP)
+    {
+        lex.getNext();
+        f = new TFunction();
+        while (lex.peakNext().type != RP)
+        {
+            Symbol s;
+            s.specifier = Specifier::tryParse(lex);
+            if (s.specifier != nullptr)
+            {
+                s.declarator = Declarator::tryParse(lex);
+                f->params.push_back(s);
+                if (lex.peakNext().type == OP_COMMA)
+                {
+                    lex.getNext();
+                }
+            }
+        }
+        if (lex.getNext().type != RP)
+        {
+            SyntaxError("Expect ')'");
+        }
+    }
+    return f;
 }
-
-void RemoveSymbolTable()
+TFunction * TFunction::parse(Lexer &lex)
 {
-    cout << "SymbolTable: delete()" << endl;
-    gTables.pop();
+    TFunction * f = tryParse(lex);
+    if (f == nullptr)
+    {
+        SyntaxError("Expect function parameters");
+    }
+    return f;
+}
+TArray * TArray::tryParse(Lexer &lex)
+{
+    TArray * array = nullptr;
+    if (lex.peakNext().type == LSB)
+    {
+        lex.getNext();
+        array = new TArray();
+        // TODO: finish this
+        //array->length = ConstExpression::eval(CondExpression::parse(lex));
+        lex.getNext();
+        if (lex.getNext().type != RSB)
+        {
+            SyntaxError("Expect ']'");
+        }
+        array->etype = TArray::tryParse(lex);
+    }
+    return array;
+}
+TArray * TArray::parse(Lexer &lex)
+{
+    TArray * array = tryParse(lex);
+    if (array == nullptr)
+    {
+        SyntaxError("Expect array");
+    }
+    return array;
+}
+TPointer * TPointer::tryParse(Lexer &lex)
+{
+    if (lex.peakNext().type != OP_MUL)
+    {
+        return nullptr;
+    }
+
+    stack<PointerType> ptrs;
+    while (lex.peakNext().type == OP_MUL)
+    {
+        lex.getNext();
+        if (lex.peakNext().type == CONST)
+        {
+            lex.getNext();
+            ptrs.push(PTR_CONST);
+        }
+        else
+        {
+            ptrs.push(PTR_NORMAL);
+        }
+    }
+
+    TPointer * p = new TPointer();
+    p->type = ptrs.top();
+    p->etype = nullptr;
+    ptrs.pop();
+    TPointer * curr = p;
+    while (!ptrs.empty())
+    {
+        TPointer * next = new TPointer();
+        next->type = ptrs.top();
+        ptrs.pop();
+        curr->etype = next;
+        curr = next;
+    }
+    return p;
+}
+Specifier * Specifier::parse(Lexer &lex)
+{
+    Specifier * s = new Specifier();
+    s->type = nullptr;
+    s->storage = TS_AUTO;
+
+    bool finish = false;
+    while (!finish)
+    {
+        switch (lex.peakNext().type)
+        {
+            case CONST: s->isconst = true; break;
+            // case TYPE_VOID: s->type = new TVoid(); break;
+            case TYPE_CHAR: s->type = new TChar(); break;
+            // case TYPE_SHORT: s->type = new TShort(); break;
+            case TYPE_INT: s->type = new TInt(); break;
+            // case TYPE_LONG: s->type = new TLong(); break;
+            // case TYPE_FLOAT: s->type = new TFloat(); break;
+            // case TYPE_DOUBLE: s->type = new TDouble(); break;
+            case SIGNED: s->isunsigned = false; break;
+            case UNSIGNED: s->isunsigned = true; break;
+            default:
+                // TODO: support struct, enum, typedef-name
+                // TODO: support type storage
+                finish = true;
+                break;
+        }
+        if (!finish) lex.getNext();
+    }
+    if (s->type == nullptr)
+    {
+        SyntaxError("Invalid specifier, missed type");
+    }
+
+    return s;
+}
+Specifier * Specifier::tryParse(Lexer &lex)
+{
+    Specifier * s = nullptr;
+    if (IsTypeName(lex.peakNext().type))
+    {
+        s = parse(lex);
+    }
+    return s;
+}
+Declarator * Declarator::tryParse(Lexer &lex)
+{
+    if (lex.peakNext().type != OP_MUL && lex.peakNext().type != LP &&
+        lex.peakNext().type != SYMBOL)
+    {
+        return nullptr;
+    }
+
+    Declarator * d = new Declarator();
+
+    d->array = nullptr;
+    d->child = nullptr;
+    d->pointer = TPointer::tryParse(lex);
+
+    if (lex.peakNext().type == LP)
+    {
+        lex.getNext();
+        d->child = Declarator::parse(lex);
+        if (lex.getNext().type != RP)
+        {
+            SyntaxError("Expect ')'");
+        }
+        if (lex.peakNext().type == LSB)
+        {
+            d->type = DT_ARRAY;
+            d->array = TArray::parse(lex);
+        }
+        else if (lex.peakNext().type == LP)
+        {
+            d->type = DT_FUNCTION;
+            d->function = TFunction::parse(lex);
+        }
+    }
+    else if (lex.peakNext().type == SYMBOL)
+    {
+        Token t = lex.getNext();
+        Declarator * d_symbol = d;
+        // id
+        if (lex.peakNext().type == LSB)
+        {
+            d->type = DT_ARRAY;
+            d->array = TArray::parse(lex);
+            d_symbol = new Declarator();
+            d->child = d_symbol;
+        }
+        else if (lex.peakNext().type == LP)
+        {
+            d->type = DT_FUNCTION;
+            d->function = TFunction::parse(lex);
+            d_symbol = new Declarator();
+            d->child = d_symbol;
+        }
+        d_symbol->child = nullptr;
+        d_symbol->type = DT_SYMBOL;
+        d_symbol->id = t.symid;
+    }
+    else
+    {
+        SyntaxError("Expect symbol or '('");
+    }
+
+    return d;
+}
+Declarator * Declarator::parse(Lexer &lex)
+{
+    Declarator * d = tryParse(lex);
+    if (d == nullptr)
+    {
+        SyntaxError("Expect declarator");
+    }
+    return d;
+}
+SymbolTable * gGlobalTable = nullptr;
+SymbolTable * gCurrentTable = nullptr;
+void SymbolTable::AddTable(SymbolTable * table)
+{
+    // assert( gCurrentTable != NULL )
+    table->parent = gCurrentTable;
+    gCurrentTable = table;
+}
+void SymbolTable::RemoveTable()
+{
+    gCurrentTable = gCurrentTable->parent;
+    // assert( gCurrentTable != NULL )
+}
+SymbolTable * SymbolTable::tryParse(Lexer &lex)
+{
+    SymbolTable * table = nullptr;
+    while (IsDeclaration(lex.peakNext().type))
+    {
+        table = new SymbolTable();
+        table->parent = nullptr;
+        Specifier * specifier = Specifier::parse(lex);
+        // cout << "  SPEC: ";
+        // specifier->debugPrint();
+        // cout << endl;
+        while (true)
+        {
+            Symbol s;
+            s.specifier = specifier;
+            s.declarator = Declarator::parse(lex);
+            // cout << "  DECL: ";
+            // s.declarator->debugPrint(lex);
+            // cout << endl;
+            table->symbols.push_back(s);
+            if (lex.peakNext().type == OP_COMMA)
+            {
+                lex.getNext();
+            }
+            else if (lex.peakNext().type == STMT_END)
+            {
+                lex.getNext();
+                break;
+            }
+            else
+            {
+                SyntaxError("Unexpected token");
+            }
+        }
+        table->debugPrint(lex);
+    }
+    return table;
 }
 
 SyntaxNode *TranslationUnit::parse(Lexer &lex)
@@ -525,19 +473,19 @@ SyntaxNode *CompoundStatement::parse(Lexer &lex)
 {
     CompoundStatement *node = new CompoundStatement();
 
-    SymbolTable *table = nullptr;
     if (lex.getNext().type != BLK_BEGIN)
     {
         SyntaxError("Expecting '{'");
     }
-    if (IsDeclaration(lex.peakNext().type))
+
+    // add declarations in current scope
+    node->table = SymbolTable::tryParse(lex);
+    if (node->table != nullptr)
     {
-        table = AddSymbolTable();
-        while (IsDeclaration(lex.peakNext().type))
-        {
-            table->add_symbol(lex);
-        }
+        SymbolTable::AddTable(node->table);
     }
+
+    // parse statements
     while (lex.getNext().type != BLK_END)
     {
         node->stmts.push_back(Statement::parse(lex));
@@ -546,9 +494,11 @@ SyntaxNode *CompoundStatement::parse(Lexer &lex)
     {
         SyntaxError("Expecting '}'");
     }
-    if (table)
+
+    // remove declarations in current scope
+    if (node->table != nullptr)
     {
-        RemoveSymbolTable();
+        SymbolTable::RemoveTable();
     }
 
     return node;
@@ -999,11 +949,11 @@ SyntaxNode *CastExpression::parse(Lexer &lex)
 {
     // cast or unary
     if (lex.peakNext().type == LP &&
-        Specifier::MaybeTypeName(lex.peakNext(1).type))
+        IsTypeName(lex.peakNext(1).type))
     {
         CastExpression *expr = new CastExpression();
         while (lex.peakNext().type == LP &&
-               Specifier::MaybeTypeName(lex.peakNext(1).type))
+               IsTypeName(lex.peakNext(1).type))
         {
             if (lex.getNext().type != LP)
             {

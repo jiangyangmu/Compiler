@@ -167,6 +167,8 @@ struct Token
         float fval;
         double dval;
 	};
+    // debug
+    int line;
 
     friend ostream & operator << (ostream &o, const Token &t)
     {
@@ -580,6 +582,7 @@ class Lexer
             if (input.empty())
                 break;
             Token t;
+            t.line = lnum;
             if (_read_token(input, t))
             {
                 // cout << "Token: " << t << endl;

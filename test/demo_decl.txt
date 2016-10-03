@@ -1,0 +1,17 @@
+int main()
+{
+    char cval;
+    int ival;
+
+    int * iptr;
+    int ** ipptr;
+    int *** ippptr;
+
+    int (*pf)();
+    int * (*pfip)();
+    int ** (*pfipp)();
+    int (**ppf)();
+
+    int (* (* (*pfpfaafp) (int)) [3][3])(int,int);
+    int (* (* (* apfpfaafp[3] ) (int)) [3][3])(int,int);
+}

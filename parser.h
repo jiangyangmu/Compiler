@@ -6,6 +6,10 @@ using namespace std;
 
 #include "lexer.h"
 
+
+// XXX: all tryParse() functions return 'nullptr' on failure!!!
+// XXX: all parse() functions raise SyntaxError on failure!!!
+
 // helplers
 bool IsDeclaration(TokenType t);
 bool IsAssignOperator(TokenType t);
@@ -30,121 +34,55 @@ class CastExpression;
 class UnaryExpression;
 class PostfixExpression;
 class PrimaryExpression;
+class Symbol;
 
-// --------- Declarator Parser --------
-
-typedef enum SpecType {
-    SPEC_NONE,
-    SPEC_VOID,
-    SPEC_CHAR,
-    SPEC_SHORT,
-    SPEC_INT,
-    SPEC_LONG,
-    SPEC_FLOAT,
-    SPEC_DOUBLE
-} SpecType;
-struct Specifier
-{
-    bool isconst, isstatic, issigned;
-    SpecType stype;
-
-    static Specifier *ParseSpecifier(Lexer &lex);
-    static bool MaybeTypeName(TokenType t);
-    void print();
-};
-typedef enum PointerType {
-    PTR_NORMAL = 0,
-    PTR_CONST = 1  // , PTR_VOLATILE = 2
-} PointerType;
-struct Pointer
-{
-    vector<int> ptypes;
-
-    static Pointer ParsePointer(Lexer &lex);
-
-    void print();
-};
-struct Function
-{
-    vector<Specifier *> specifiers;
-    vector<Declarator *> decls;
-
-    static Function ParseFunction(Lexer &lex);
-};
-struct Array
-{
-    int length;
-
-    static Array ParseArray(Lexer &lex);
-};
-typedef enum DeclType { DT_NONE, DT_ID, DT_ARRAY, DT_FUNCTION } DeclType;
-struct Declarator
-{
-    Declarator *child;
-    Pointer *pointer;
-    DeclType dtype;
-    union {
-        Array *array;
-        Function *function;
-        int id; /* lex.symid */
-    };
-
-    static Declarator *ParseDeclarator(Lexer &lex);
-    void print();
-};
-struct SymbolDecl
-{
-    // L: sepcifier+pointer
-    // M: id|(decl)
-    // R: array | function
-    // D -> P(MR)
-    // M -> (D)
-    // <Pointer, Array|Function|Id>
-    Specifier *specifier;
-    Declarator *declarator;
-
-    // calculated from specifier & declarator
-    int mem_size;
-    StringRef name;
-
-    void print();
-    // operations: every type should have their own operation set
-};
 
 // --------- Type System --------
-// TODO: functions that extract TypeInfo and Object(Symbol) from source code,
-// so it's easy to build SymbolTable.
-// SEE: Declarator Parser above, which will be removed after this finish.
-typedef enum EType { T_BASE, T_INT, T_CHAR, T_FUNC } EType;
+// 1. Representation 2. Declaration 3. Usage
+
+// Part 1: Representation
+// Type Information Data Structure
+enum EType { T_BASE, T_INT, T_CHAR, T_FUNC };
 class TBase
 {
    public:
     virtual StringRef id() const = 0;
     virtual size_t msize() const = 0;  // size in memory, in bytes
+    virtual void debugPrint() = 0;
 };
-class TInt : class TBase
+class TInt : public TBase
 {
    public:
-    StringRef id() const { return "I"; }
+    StringRef id() const { return StringRef("I"); }
     size_t msize() const { return 4; }
+    void debugPrint() { cout << " int"; }
 };
-class TChar : class TBase
+class TChar : public TBase
 {
    public:
-    StringRef id() const { return "C"; }
+    StringRef id() const { return StringRef("C"); }
     size_t msize() const { return 1; }
+    void debugPrint() { cout << " char"; }
 };
-class TFunction : class TBase
+class TFunction : public TBase
 {
-    string signature;
+    //string signature;
+    //TBase * rtype;
+    // Compoundstatement * body;
+    vector<Symbol> params;
    public:
     StringRef id() const
     {
-        return StringRef(signature.data(), signature.size());
+        return StringRef("F");
     }
     size_t msize() const { return 1; }
+    // TODO: consider declaration & definition
+    // TODO: support variant length parameter
+    static TFunction * tryParse(Lexer &lex);
+    static TFunction * parse(Lexer &lex);
+    void debugPrint() { cout << " function returns"; }
 };
-class TArray : class TBase
+class TArray : public TBase
 {
     size_t length;
     string alenstr; // "A" + to_string(length)
@@ -159,23 +97,140 @@ class TArray : class TBase
         // TODO: may overflow
         return etype->msize() * length;
     }
+    static TArray * tryParse(Lexer &lex);
+    static TArray * parse(Lexer &lex);
+    void debugPrint()
+    {
+        cout << " array " << length << " of";
+        if (etype != nullptr) etype->debugPrint();
+    }
 };
-// TODO: struct, enum
+class TPointer : public TBase
+{
+    // TODO: PTR_VOLATILE
+    enum PointerType { PTR_NORMAL, PTR_CONST };
 
-struct Object
+    PointerType type;
+    TBase * etype; // element type
+   public:
+    StringRef id() const
+    {
+        return StringRef("P");
+    }
+    size_t msize() const
+    {
+        return 8;
+    }
+    static TPointer * tryParse(Lexer &lex);
+    void debugPrint()
+    {
+        cout << " pointer of";
+        if (etype != nullptr) etype->debugPrint();
+    }
+};
+// TODO: struct, enum, union
+
+// Part 2: Declaration
+// Specifier: type & storage
+// Declarator: symbol and other properties
+// Declaration: Specifier + Declarator
+// TODO: initialization
+enum TypeStorage { TS_AUTO, TS_TYPEDEF, TS_EXTERN, TS_REGISTER, TS_STATIC };
+struct Specifier
 {
     TBase * type;
+    // type storage
+    TypeStorage storage;
+    // type qualifiers
+    bool isconst; // volatile
+    bool isunsigned;
+    static Specifier * parse(Lexer &lex);
+    static Specifier * tryParse(Lexer &lex);
+    void debugPrint()
+    {
+        if (isconst)
+        {
+            cout << " const";
+        }
+        if (isunsigned)
+        {
+            cout << " unsigned";
+        }
+        type->debugPrint();
+    }
+};
+enum DeclaratorType { DT_NONE, DT_SYMBOL, DT_ARRAY, DT_FUNCTION };
+struct Declarator
+{
+    Declarator * child;
+    TPointer * pointer;
+    DeclaratorType type;
+    union {
+        TArray * array; // array
+        TFunction * function; // function
+        int id; // symbol
+    };
+    static Declarator * parse(Lexer &lex);
+    static Declarator * tryParse(Lexer &lex);
+    void debugPrint(Lexer &lex)
+    {
+        if (child != nullptr)
+        {
+            child->debugPrint(lex);
+        }
+
+        switch (type)
+        {
+            case DT_SYMBOL:
+                cout << "id " << lex.symbolName(id) << " is";
+                break;
+            case DT_ARRAY:
+                array->debugPrint();
+                break;
+            case DT_FUNCTION:
+                function->debugPrint();
+                break;
+            default:
+                break;
+        }
+        if (pointer != nullptr)
+        {
+            pointer->debugPrint();
+        }
+    }
+};
+
+// Symbol Data Structure
+struct Symbol
+{
+    Specifier * specifier;
+    Declarator * declarator;
     StringRef name;
     int reladdr; // relative address
 };
-
 class SymbolTable
 {
-    // array of < type , name , rel-addr >
-    // total stack size
-    vector<Object> objects;
+    vector<Symbol> symbols;
     size_t stack_size;
+    SymbolTable * parent;
+
+   public:
+    static void AddTable(SymbolTable * table);
+    static void RemoveTable();
+    static SymbolTable * tryParse(Lexer &lex);
+    void debugPrint(Lexer &lex)
+    {
+        for (Symbol &s : symbols)
+        {
+            s.declarator->debugPrint(lex);
+            s.specifier->debugPrint();
+        }
+        cout << endl;
+    }
 };
+
+// Part 3: Usage
+// .....
 
 class SyntaxNode {};
 
@@ -206,6 +261,7 @@ class LabelStatement : public SyntaxNode
 class CompoundStatement : public SyntaxNode
 {
     vector<SyntaxNode *> stmts;
+    SymbolTable * table;
 
    public:
     static SyntaxNode *parse(Lexer &lex);
@@ -384,6 +440,11 @@ class PrimaryExpression : public SyntaxNode
 {
    public:
     static SyntaxNode *parse(Lexer &lex);
+};
+class ConstExpression : public SyntaxNode
+{
+   public:
+    static Token eval(CondExpression * expr);
 };
 
 class Parser
