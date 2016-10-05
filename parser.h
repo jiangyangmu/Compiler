@@ -17,6 +17,7 @@ bool IsUnaryOperator(TokenType t);
 void SyntaxError(const char *msg);
 
 struct Declarator;
+class SyntaxNode;
 class Expression;
 class AssignExpression;
 class CondExpression;
@@ -68,15 +69,15 @@ class TFunction : public TBase
 {
     //string signature;
     //TBase * rtype;
-    // Compoundstatement * body;
     vector<Symbol> params;
+    SyntaxNode * body;
    public:
     StringRef id() const
     {
         return StringRef("F");
     }
     size_t msize() const { return 1; }
-    // TODO: consider declaration & definition
+    bool isDefinition() const { return body != nullptr; }
     // TODO: support variant length parameter
     static TFunction * tryParse(Lexer &lex);
     static TFunction * parse(Lexer &lex);
@@ -217,7 +218,7 @@ class SymbolTable
    public:
     static void AddTable(SymbolTable * table);
     static void RemoveTable();
-    static SymbolTable * tryParse(Lexer &lex);
+    static SymbolTable * tryParse(Lexer &lex, SymbolTable *table = nullptr);
     void debugPrint(Lexer &lex)
     {
         cout << "Symbol Table:" << endl;
@@ -234,12 +235,6 @@ class SymbolTable
 // .....
 
 class SyntaxNode {};
-
-class TranslationUnit : public SyntaxNode
-{
-   public:
-    static SyntaxNode *parse(Lexer &lex);
-};
 
 // TODO: implement 'abstract-decl' part
 class TypeName : public SyntaxNode
@@ -451,11 +446,13 @@ class ConstExpression : public SyntaxNode
 
 class Parser
 {
-    SyntaxNode *root;
+    SymbolTable global;
 
    public:
     void parse(Lexer &lex)
     {
-        root = TranslationUnit::parse(lex);
+        SymbolTable::AddTable(&global);
+        SymbolTable::tryParse(lex, &global);
+        global.debugPrint(lex);
     }
 };

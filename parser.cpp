@@ -138,30 +138,41 @@ void CheckTokens(Lexer &lex)
 
 TFunction * TFunction::tryParse(Lexer &lex)
 {
-    TFunction * f = nullptr;
-    if (lex.peakNext().type == LP)
+    //DebugParseTree(TFunction);
+    if (lex.peakNext().type != LP)
     {
-        lex.getNext();
-        f = new TFunction();
-        while (lex.peakNext().type != RP)
+        return nullptr;
+    }
+
+    TFunction * f = new TFunction();
+
+    // parse parameters
+    lex.getNext();
+    while (lex.peakNext().type != RP)
+    {
+        Symbol s;
+        s.specifier = Specifier::tryParse(lex);
+        if (s.specifier != nullptr)
         {
-            Symbol s;
-            s.specifier = Specifier::tryParse(lex);
-            if (s.specifier != nullptr)
+            s.declarator = Declarator::tryParse(lex);
+            f->params.push_back(s);
+            if (lex.peakNext().type == OP_COMMA)
             {
-                s.declarator = Declarator::tryParse(lex);
-                f->params.push_back(s);
-                if (lex.peakNext().type == OP_COMMA)
-                {
-                    lex.getNext();
-                }
+                lex.getNext();
             }
         }
-        if (lex.getNext().type != RP)
-        {
-            SyntaxError("Expect ')'");
-        }
     }
+    if (lex.getNext().type != RP)
+    {
+        SyntaxError("Expect ')'");
+    }
+
+    // parse definition
+    if (lex.peakNext().type == BLK_BEGIN)
+    {
+        f->body = CompoundStatement::parse(lex);
+    }
+
     return f;
 }
 TFunction * TFunction::parse(Lexer &lex)
@@ -354,7 +365,7 @@ Declarator * Declarator::parse(Lexer &lex)
     }
     return d;
 }
-SymbolTable * gGlobalTable = nullptr;
+SymbolTable gGlobalTable;
 SymbolTable * gCurrentTable = nullptr;
 void SymbolTable::AddTable(SymbolTable * table)
 {
@@ -367,16 +378,16 @@ void SymbolTable::RemoveTable()
     gCurrentTable = gCurrentTable->parent;
     // assert( gCurrentTable != NULL )
 }
-SymbolTable * SymbolTable::tryParse(Lexer &lex)
+SymbolTable * SymbolTable::tryParse(Lexer &lex, SymbolTable *table)
 {
     if (!IsDeclaration(lex.peakNext().type))
     {
         return nullptr;
     }
 
-    SymbolTable * table = new SymbolTable();
+    if (table == nullptr) table = new SymbolTable();
     table->parent = nullptr;
-    while (IsDeclaration(lex.peakNext().type))
+    while (lex.hasNext() && IsDeclaration(lex.peakNext().type))
     {
         Specifier * specifier = Specifier::parse(lex);
         while (true)
@@ -385,6 +396,13 @@ SymbolTable * SymbolTable::tryParse(Lexer &lex)
             s.specifier = specifier;
             s.declarator = Declarator::parse(lex);
             table->symbols.push_back(s);
+
+            if (s.declarator->type == DT_FUNCTION
+             && s.declarator->function->isDefinition())
+            {
+                break;
+            }
+
             if (lex.peakNext().type == OP_COMMA)
             {
                 lex.getNext();
@@ -401,27 +419,6 @@ SymbolTable * SymbolTable::tryParse(Lexer &lex)
         }
     }
     return table;
-}
-
-SyntaxNode *TranslationUnit::parse(Lexer &lex)
-{
-    if (lex.getNext().type != TYPE_INT)
-    {
-        SyntaxError("Expect 'int'");
-    }
-    if (lex.getNext().type != SYMBOL)
-    {
-        SyntaxError("Expect 'main'");
-    }
-    if (lex.getNext().type != LP)
-    {
-        SyntaxError("Expect '('");
-    }
-    if (lex.getNext().type != RP)
-    {
-        SyntaxError("Expect ')'");
-    }
-    return CompoundStatement::parse(lex);
 }
 
 SyntaxNode *TypeName::parse(Lexer &lex) { return nullptr; }

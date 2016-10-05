@@ -11,6 +11,12 @@ using namespace std;
 
 int main(int argc, char *argv[])
 {
+    if (argc < 2)
+    {
+        cout << "No input file." << endl;
+        return 1;
+    }
+
     Lexer lex;
     string line, source, print_source;
     ifstream in(argv[1]);
