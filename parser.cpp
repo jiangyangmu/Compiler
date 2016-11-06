@@ -365,7 +365,6 @@ Declarator * Declarator::parse(Lexer &lex)
     }
     return d;
 }
-SymbolTable gGlobalTable;
 SymbolTable * gCurrentTable = nullptr;
 void SymbolTable::AddTable(SymbolTable * table)
 {
