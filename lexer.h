@@ -49,7 +49,10 @@ typedef enum TokenType
 	/* relation operator */
 	REL_EQ, REL_NE, REL_GT, REL_GE, REL_LT, REL_LE,
 	/* bit operator */
-	BIT_AND, BIT_OR, BIT_XOR, BIT_NOT, BIT_SLEFT, BIT_SRIGHT
+	BIT_AND, BIT_OR, BIT_XOR, BIT_NOT, BIT_SLEFT, BIT_SRIGHT,
+
+    /* Debug Print */
+    OP_PrintCode
 } TokenType;
 
 struct Token
@@ -193,6 +196,8 @@ class Lexer
             {
                 ++lnum;
                 lstart = input.data();
+
+                debugAddLine();
             }
             input.pop();
         }
@@ -468,12 +473,34 @@ class Lexer
         exit(1);
     }
 
+    void debugAddLine()
+    {
+        Token t;
+        t.type = OP_PrintCode;
+        tokens.push_back(t);
+    }
+
+    void debugPrintCode()
+    {
+        static int _debug_lnum = 1;
+        string s;
+        size_t i = _debug_index;
+        while (i < _debug_code.size() && _debug_code[i] != '\n')
+            s += _debug_code[i++];
+        ++i;
+        if (_debug_lnum < 10) cout << ' ' << _debug_lnum << ": ";
+        else cout << _debug_lnum << ": ";
+        cout << s << endl;
+        _debug_index = i;
+        ++_debug_lnum;
+    }
    public:
     void tokenize(StringBuf &input)
     {
         tokens.clear();
         lnum = 1;
         lstart = input.data();
+        _debug_code = StringRef(input.data(), input.size());
         while (true)
         {
             _skip_spaces(input);
@@ -493,11 +520,25 @@ class Lexer
                 LexError(msg.data());
             }
         }
+        debugAddLine();
     }
 
-    bool hasNext() const { return !tokens.empty(); }
+    bool hasNext() const
+    {
+        for (size_t i = 0; i < tokens.size(); ++i)
+        {
+            if (tokens[i].type != OP_PrintCode)
+                return true;
+        }
+        return false;
+    }
     Token getNext()
     {
+        while (!tokens.empty() && tokens.front().type == OP_PrintCode)
+        {
+            debugPrintCode();
+            tokens.pop_front();
+        }
         if (tokens.empty())
         {
             LexError("No more tokens");
@@ -509,11 +550,15 @@ class Lexer
 
     Token peakNext(size_t n = 0)
     {
-        if (tokens.size() < n + 1)
+        for (Token &t : tokens)
         {
-            LexError("Not enough tokens");
+            if (t.type == OP_PrintCode) continue;
+            else if (n == 0) return t;
+            else --n;
         }
-        return tokens[n];
+        LexError("Not enough tokens");
+        // not reached
+        return tokens[0];
     }
 
     StringRef symbolName(size_t symid)
@@ -545,4 +590,6 @@ class Lexer
     int lnum;
     const char *lstart;
     // vector<StringRef> strings; // string constants
+    StringRef _debug_code;
+    size_t _debug_index;
 };

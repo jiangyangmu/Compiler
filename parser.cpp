@@ -110,8 +110,8 @@ void CheckTokens(Lexer &lex)
     {
         if (s == "n")
         {
-            cout << "Token " << lex.peakNext()
-                 << " at line " << lex.peakNext().line << endl;
+            cout << "Token " << lex.peakNext() << " at line "
+                 << lex.peakNext().line << endl;
             lex.getNext();
         }
         else
@@ -129,22 +129,23 @@ void CheckTokens(Lexer &lex)
         exit(1);                                               \
     } while (0)
 
-#define DebugParseTree(name)                                     \
-    do                                                           \
-    {                                                            \
+#define DebugParseTree(name)                                      \
+    do                                                            \
+    {                                                             \
         cout << #name " at Token " << lex.peakNext() << ", line " \
-             << lex.peakNext().line << endl;                     \
+             << lex.peakNext().line << endl;                      \
     } while (0)
 
-TFunction * TFunction::tryParse(Lexer &lex)
+TFunction *TFunction::tryParse(Lexer &lex)
 {
-    //DebugParseTree(TFunction);
+    DebugParseTree(TFunction);
+
     if (lex.peakNext().type != LP)
     {
         return nullptr;
     }
 
-    TFunction * f = new TFunction();
+    TFunction *f = new TFunction();
 
     // parse parameters
     lex.getNext();
@@ -175,24 +176,24 @@ TFunction * TFunction::tryParse(Lexer &lex)
 
     return f;
 }
-TFunction * TFunction::parse(Lexer &lex)
+TFunction *TFunction::parse(Lexer &lex)
 {
-    TFunction * f = tryParse(lex);
+    TFunction *f = tryParse(lex);
     if (f == nullptr)
     {
         SyntaxError("Expect function parameters");
     }
     return f;
 }
-TArray * TArray::tryParse(Lexer &lex)
+TArray *TArray::tryParse(Lexer &lex)
 {
-    TArray * array = nullptr;
+    TArray *array = nullptr;
     if (lex.peakNext().type == LSB)
     {
         lex.getNext();
         array = new TArray();
         // TODO: finish this
-        //array->length = ConstExpression::eval(CondExpression::parse(lex));
+        // array->length = ConstExpression::eval(CondExpression::parse(lex));
         lex.getNext();
         if (lex.getNext().type != RSB)
         {
@@ -202,16 +203,16 @@ TArray * TArray::tryParse(Lexer &lex)
     }
     return array;
 }
-TArray * TArray::parse(Lexer &lex)
+TArray *TArray::parse(Lexer &lex)
 {
-    TArray * array = tryParse(lex);
+    TArray *array = tryParse(lex);
     if (array == nullptr)
     {
         SyntaxError("Expect array");
     }
     return array;
 }
-TPointer * TPointer::tryParse(Lexer &lex)
+TPointer *TPointer::tryParse(Lexer &lex)
 {
     if (lex.peakNext().type != OP_MUL)
     {
@@ -233,14 +234,14 @@ TPointer * TPointer::tryParse(Lexer &lex)
         }
     }
 
-    TPointer * p = new TPointer();
+    TPointer *p = new TPointer();
     p->type = ptrs.top();
     p->etype = nullptr;
     ptrs.pop();
-    TPointer * curr = p;
+    TPointer *curr = p;
     while (!ptrs.empty())
     {
-        TPointer * next = new TPointer();
+        TPointer *next = new TPointer();
         next->type = ptrs.top();
         ptrs.pop();
         curr->etype = next;
@@ -248,9 +249,9 @@ TPointer * TPointer::tryParse(Lexer &lex)
     }
     return p;
 }
-Specifier * Specifier::parse(Lexer &lex)
+Specifier *Specifier::parse(Lexer &lex)
 {
-    Specifier * s = new Specifier();
+    Specifier *s = new Specifier();
     s->type = nullptr;
     s->storage = TS_AUTO;
 
@@ -259,23 +260,34 @@ Specifier * Specifier::parse(Lexer &lex)
     {
         switch (lex.peakNext().type)
         {
-            case CONST: s->isconst = true; break;
+            case CONST:
+                s->isconst = true;
+                break;
             // case TYPE_VOID: s->type = new TVoid(); break;
-            case TYPE_CHAR: s->type = new TChar(); break;
+            case TYPE_CHAR:
+                s->type = new TChar();
+                break;
             // case TYPE_SHORT: s->type = new TShort(); break;
-            case TYPE_INT: s->type = new TInt(); break;
+            case TYPE_INT:
+                s->type = new TInt();
+                break;
             // case TYPE_LONG: s->type = new TLong(); break;
             // case TYPE_FLOAT: s->type = new TFloat(); break;
             // case TYPE_DOUBLE: s->type = new TDouble(); break;
-            case SIGNED: s->isunsigned = false; break;
-            case UNSIGNED: s->isunsigned = true; break;
+            case SIGNED:
+                s->isunsigned = false;
+                break;
+            case UNSIGNED:
+                s->isunsigned = true;
+                break;
             default:
                 // TODO: support struct, enum, typedef-name
                 // TODO: support type storage
                 finish = true;
                 break;
         }
-        if (!finish) lex.getNext();
+        if (!finish)
+            lex.getNext();
     }
     if (s->type == nullptr)
     {
@@ -284,16 +296,16 @@ Specifier * Specifier::parse(Lexer &lex)
 
     return s;
 }
-Specifier * Specifier::tryParse(Lexer &lex)
+Specifier *Specifier::tryParse(Lexer &lex)
 {
-    Specifier * s = nullptr;
+    Specifier *s = nullptr;
     if (IsTypeName(lex.peakNext().type))
     {
         s = parse(lex);
     }
     return s;
 }
-Declarator * Declarator::tryParse(Lexer &lex)
+Declarator *Declarator::tryParse(Lexer &lex)
 {
     if (lex.peakNext().type != OP_MUL && lex.peakNext().type != LP &&
         lex.peakNext().type != SYMBOL)
@@ -301,7 +313,7 @@ Declarator * Declarator::tryParse(Lexer &lex)
         return nullptr;
     }
 
-    Declarator * d = new Declarator();
+    Declarator *d = new Declarator();
 
     d->array = nullptr;
     d->child = nullptr;
@@ -329,7 +341,7 @@ Declarator * Declarator::tryParse(Lexer &lex)
     else if (lex.peakNext().type == SYMBOL)
     {
         Token t = lex.getNext();
-        Declarator * d_symbol = d;
+        Declarator *d_symbol = d;
         // id
         if (lex.peakNext().type == LSB)
         {
@@ -356,17 +368,17 @@ Declarator * Declarator::tryParse(Lexer &lex)
 
     return d;
 }
-Declarator * Declarator::parse(Lexer &lex)
+Declarator *Declarator::parse(Lexer &lex)
 {
-    Declarator * d = tryParse(lex);
+    Declarator *d = tryParse(lex);
     if (d == nullptr)
     {
         SyntaxError("Expect declarator");
     }
     return d;
 }
-SymbolTable * gCurrentTable = nullptr;
-void SymbolTable::AddTable(SymbolTable * table)
+SymbolTable *gCurrentTable = nullptr;
+void SymbolTable::AddTable(SymbolTable *table)
 {
     // assert( gCurrentTable != NULL )
     table->parent = gCurrentTable;
@@ -377,18 +389,19 @@ void SymbolTable::RemoveTable()
     gCurrentTable = gCurrentTable->parent;
     // assert( gCurrentTable != NULL )
 }
-SymbolTable * SymbolTable::tryParse(Lexer &lex, SymbolTable *table)
+SymbolTable *SymbolTable::tryParse(Lexer &lex, SymbolTable *table)
 {
     if (!IsDeclaration(lex.peakNext().type))
     {
         return nullptr;
     }
 
-    if (table == nullptr) table = new SymbolTable();
+    if (table == nullptr)
+        table = new SymbolTable();
     table->parent = nullptr;
     while (lex.hasNext() && IsDeclaration(lex.peakNext().type))
     {
-        Specifier * specifier = Specifier::parse(lex);
+        Specifier *specifier = Specifier::parse(lex);
         while (true)
         {
             Symbol s;
@@ -396,8 +409,8 @@ SymbolTable * SymbolTable::tryParse(Lexer &lex, SymbolTable *table)
             s.declarator = Declarator::parse(lex);
             table->symbols.push_back(s);
 
-            if (s.declarator->type == DT_FUNCTION
-             && s.declarator->function->isDefinition())
+            if (s.declarator->type == DT_FUNCTION &&
+                s.declarator->function->isDefinition())
             {
                 break;
             }
@@ -805,7 +818,6 @@ SyntaxNode *AndExpression::parse(Lexer &lex)
 }
 SyntaxNode *BitOrExpression::parse(Lexer &lex)
 {
-
     SyntaxNode *e = BitXorExpression::parse(lex);
     if (lex.peakNext().type == BIT_OR)
     {
@@ -966,12 +978,10 @@ SyntaxNode *MulExpression::parse(Lexer &lex)
 SyntaxNode *CastExpression::parse(Lexer &lex)
 {
     // cast or unary
-    if (lex.peakNext().type == LP &&
-        IsTypeName(lex.peakNext(1).type))
+    if (lex.peakNext().type == LP && IsTypeName(lex.peakNext(1).type))
     {
         CastExpression *expr = new CastExpression();
-        while (lex.peakNext().type == LP &&
-               IsTypeName(lex.peakNext(1).type))
+        while (lex.peakNext().type == LP && IsTypeName(lex.peakNext(1).type))
         {
             if (lex.getNext().type != LP)
             {
@@ -1035,7 +1045,7 @@ SyntaxNode *PostfixExpression::parse(Lexer &lex)
 SyntaxNode *PrimaryExpression::parse(Lexer &lex)
 {
     DebugParseTree(PrimaryExpression);
-    PrimaryExpression * p = nullptr;
+    PrimaryExpression *p = nullptr;
     switch (lex.peakNext().type)
     {
         case SYMBOL:

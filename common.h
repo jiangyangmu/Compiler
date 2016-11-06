@@ -82,6 +82,17 @@ class StringRef
         end = data + n;
     }
 
+    size_t size() const
+    {
+        return end - begin;
+    }
+
+    const char operator[] (size_t offset) const
+    {
+        assert( (begin + offset) < end );
+        return begin[offset];
+    }
+
     friend bool operator==(const StringRef &s1, const char *s2)
     {
         assert(s2 != nullptr);
