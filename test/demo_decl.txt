@@ -1,6 +1,13 @@
 int gival;
-int gfunc();
+int gfunc(int param1, int param2);
 int giarr[3];
+enum EFirstEnum { HAHA, XIXI };
+
+struct SFirstStruct
+{
+    int ival;
+    long lval;
+};
 
 int main()
 {
@@ -23,6 +30,7 @@ int main()
     int * (*pfip)();
     int ** (*pfipp)();
     int (**ppf)();
+    int (***pppf)();
 
     // complex declarations
     int (* (* (*pfpfaafp) (int)) [3][3])(int,int);

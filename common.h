@@ -3,6 +3,8 @@
 #include <algorithm>
 #include <cassert>
 #include <cctype>
+#include <string>
+#include <vector>
 using namespace std;
 
 #define ELEMENT_COUNT(a) (sizeof(a) / sizeof((a)[0]))
@@ -39,7 +41,10 @@ class StringBuf
         end = begin + count;
     }
 
-    ~StringBuf() { delete[] begin; }
+    ~StringBuf()
+    {
+        delete[] begin;
+    }
     char peak(size_t offset = 0)
     {
         if (now + offset < end)
@@ -55,9 +60,19 @@ class StringBuf
         else
             now = now2;
     }
-    bool empty() { return now == end; }
-    size_t size() { return end - now; }
-    const char *data() { return now; }
+    bool empty()
+    {
+        return now == end;
+    }
+    size_t size()
+    {
+        return end - now;
+    }
+    const char *data()
+    {
+        return now;
+    }
+
    private:
     const char *begin, *end, *now;
 };
@@ -65,7 +80,10 @@ class StringBuf
 class StringRef
 {
    public:
-    StringRef() { begin = end = nullptr; }
+    StringRef()
+    {
+        begin = end = nullptr;
+    }
     explicit StringRef(const char *data)
     {
         assert(data != nullptr);
@@ -82,15 +100,40 @@ class StringRef
         end = data + n;
     }
 
+    void clear()
+    {
+        begin = end = nullptr;
+    }
+
     size_t size() const
     {
         return end - begin;
     }
 
-    const char operator[] (size_t offset) const
+    string toString() const
     {
-        assert( (begin + offset) < end );
+        string s;
+        if (end > begin)
+            s.assign(begin, end - begin);
+        return s;
+    }
+
+    const char operator[](size_t offset) const
+    {
+        assert((begin + offset) < end);
         return begin[offset];
+    }
+
+    bool operator==(const StringRef &other) const
+    {
+        const char *p1 = begin, *p2 = other.begin;
+        while (p1 != end && p2 != other.end)
+        {
+            if (*p1 != *p2)
+                break;
+            ++p1, ++p2;
+        }
+        return (p1 == end) && (p2 == other.end);
     }
 
     friend bool operator==(const StringRef &s1, const char *s2)
@@ -120,3 +163,142 @@ class StringRef
     const char *begin, *end;
 };
 
+template <typename T>
+class TreeLike
+{
+    T *parent_;
+    std::vector<T *> children;
+
+   public:
+    virtual ~TreeLike<T>()
+    {
+    }
+    bool isRoot() const
+    {
+        return parent_ == nullptr;
+    }
+    void setParent(T *p)
+    {
+        parent_ = p;
+        if (p)
+            p->children.push_back(dynamic_cast<T *>(this));
+    }
+    T *parent() const
+    {
+        return parent_;
+    }
+    std::vector<T *> const &getChildren() const
+    {
+        return children;
+    }
+};
+
+template <typename T>
+class ListLike
+{
+    T *next_, *prev_;
+
+   public:
+    virtual ~ListLike<T>()
+    {
+    }
+    T *next() const
+    {
+        return next_;
+    }
+    T *prev() const
+    {
+        return prev_;
+    }
+    // return new list head
+    T *mergeAtHead(T *object)
+    {
+        T *head = dynamic_cast<T *>(this);
+        T *tail = object;
+        assert(head != nullptr);
+
+        while (head->prev_)
+            head = head->prev_;
+
+        if (object == nullptr)
+            return head;
+        else
+        {
+            while (tail->next_)
+                tail = tail->next_;
+            head->prev_ = tail;
+            tail->next_ = head;
+            while (object->prev_)
+                object = object->prev_;
+            return object;
+        }
+    }
+};
+
+#ifndef DEBUG_UTILS
+#define DEBUG_UTILS
+
+#define SyntaxError(msg)                                       \
+    do                                                         \
+    {                                                          \
+        cout << "Syntax: " << msg << " at " << __FILE__ << ':' \
+             << to_string(__LINE__) << endl;                   \
+        exit(1);                                               \
+    } while (0)
+
+#define SyntaxErrorEx(msg)                                        \
+    do                                                            \
+    {                                                             \
+        cout << "Syntax: " << msg << " at " << __FILE__ << ':'    \
+             << to_string(__LINE__) << endl;                      \
+        string s;                                                 \
+        while (cin >> s && lex.hasNext())                         \
+        {                                                         \
+            if (s == "n")                                         \
+            {                                                     \
+                cout << "Token " << lex.peakNext() << " at line " \
+                     << lex.peakNext().line << endl;              \
+                lex.getNext();                                    \
+            }                                                     \
+            else                                                  \
+            {                                                     \
+                break;                                            \
+            }                                                     \
+        }                                                         \
+        exit(1);                                                  \
+    } while (0)
+
+#define EXPECT(token_type)                                                    \
+    do                                                                        \
+    {                                                                         \
+        if (!lex.hasNext() || lex.peakNext().type != (token_type))            \
+        {                                                                     \
+            cout << "Syntax: Expect " << Token::DebugTokenType(token_type)    \
+                 << ", Actual "                                               \
+                 << Token::DebugTokenType(lex.hasNext() ? lex.peakNext().type \
+                                                        : NONE)               \
+                 << " at " << __FILE__ << ':' << to_string(__LINE__) << endl; \
+            exit(1);                                                          \
+        }                                                                     \
+        lex.getNext();                                                        \
+    } while (0)
+
+#define EXPECT_GET(token_type)                                                \
+    ((!lex.hasNext() || lex.peakNext().type != (token_type))                  \
+         ? (cout << "Syntax: Expect " << Token::DebugTokenType(token_type)    \
+                 << ", Actual "                                               \
+                 << Token::DebugTokenType(lex.hasNext() ? lex.peakNext().type \
+                                                        : NONE)               \
+                 << " at " << __FILE__ << ':' << to_string(__LINE__) << endl, \
+            exit(1), Token())                                                 \
+         : lex.getNext())
+
+#define LexError(msg)                                       \
+    do                                                      \
+    {                                                       \
+        cout << "Lex: " << msg << " at " << __FILE__ << ':' \
+             << to_string(__LINE__) << endl;                \
+        exit(1);                                            \
+    } while (0)
+
+#endif

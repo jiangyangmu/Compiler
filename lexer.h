@@ -16,7 +16,7 @@ typedef enum TokenType
 	/* punc: ( ) [ ] { } ; ... */
     LP, RP, LSB, RSB, BLK_BEGIN, BLK_END, STMT_END, VAR_PARAM,
 	/* constant */
-	CONST_INT, CONST_CHAR, CONST_FLOAT, CONST_ENUM, STRING,
+	CONST_INT, CONST_CHAR, CONST_FLOAT, STRING, // CONST_ENUM is SYMBOL
 	/* reserved word */
     TYPEDEF, SIZEOF,
 	AUTO, REGISTER, VOLATILE, EXTERN, CONST, STATIC, UNSIGNED, SIGNED,
@@ -49,10 +49,7 @@ typedef enum TokenType
 	/* relation operator */
 	REL_EQ, REL_NE, REL_GT, REL_GE, REL_LT, REL_LE,
 	/* bit operator */
-	BIT_AND, BIT_OR, BIT_XOR, BIT_NOT, BIT_SLEFT, BIT_SRIGHT,
-
-    /* Debug Print */
-    OP_PrintCode
+	BIT_AND, BIT_OR, BIT_XOR, BIT_NOT, BIT_SLEFT, BIT_SRIGHT
 } TokenType;
 
 struct Token
@@ -71,6 +68,98 @@ struct Token
     // debug
     int line;
 
+    static string DebugTokenType(TokenType t)
+    {
+        string s = "";
+        switch (t)
+        {
+            case LP: s = "("; break;
+            case RP: s = ")"; break;
+            case LSB: s = "["; break;
+            case RSB: s = "]"; break;
+            case BLK_BEGIN: s = "{"; break;
+            case BLK_END: s = "}"; break;
+            case STMT_END: s = ";"; break;
+            case VAR_PARAM: s = "..."; break;
+            case SYMBOL: s = "id"; break;
+            case REFER_TO: s = "."; break;
+            case POINT_TO: s = "->"; break;
+            case TYPEDEF: s = "typedef"; break;
+            case SIZEOF: s = "sizeof"; break;
+            case AUTO: s = "auto"; break;
+            case REGISTER: s = "register"; break;
+            case VOLATILE: s = "volatile"; break;
+            case EXTERN: s = "extern"; break;
+            case CONST: s = "const"; break;
+            case STATIC: s = "static"; break;
+            case UNSIGNED: s = "unsigned"; break;
+            case SIGNED: s = "signed"; break;
+            case TYPE_VOID: s = "void"; break;
+            case TYPE_INT: s = "int"; break;
+            case TYPE_LONG: s = "long"; break;
+            case TYPE_SHORT: s = "short"; break;
+            case TYPE_CHAR: s = "char"; break;
+            case TYPE_DOUBLE: s = "double"; break;
+            case TYPE_FLOAT: s = "float"; break;
+            case TYPE_ENUM: s = "enum"; break;
+            case TYPE_STRUCT: s = "struct"; break;
+            case TYPE_UNION: s = "union"; break;
+            case IF: s = "if"; break;
+            case ELSE: s = "else"; break;
+            case DO: s = "do"; break;
+            case WHILE: s = "while"; break;
+            case FOR: s = "for"; break;
+            case SWITCH: s = "switch"; break;
+            case CASE: s = "case"; break;
+            case DEFAULT: s = "default"; break;
+            case BREAK: s = "break"; break;
+            case CONTINUE: s = "continue"; break;
+            case RETURN: s = "return"; break;
+            case GOTO: s = "goto"; break;
+            case OP_SIZEOF: s = "sizeof"; break;
+            case OP_QMARK: s = "?"; break;
+            case OP_COLON: s = ":"; break;
+            case OP_COMMA: s = ","; break;
+            case ASSIGN: s = "="; break;
+            case ASSIGN_ADD: s = "+="; break;
+            case ASSIGN_SUB: s = "-="; break;
+            case ASSIGN_MUL: s = "*="; break;
+            case ASSIGN_DIV: s = "/="; break;
+            case ASSIGN_MOD: s = "%="; break;
+            case ASSIGN_SLEFT: s = "<<="; break;
+            case ASSIGN_SRIGHT: s = ">>="; break;
+            case ASSIGN_AND: s = "&="; break;
+            case ASSIGN_OR: s = "|="; break;
+            case ASSIGN_XOR: s = "^="; break;
+            case OP_INC: s = "++"; break;
+            case OP_DEC: s = "--"; break;
+            case OP_ADD: s = "+"; break;
+            case OP_SUB: s = "-"; break;
+            case OP_MUL: s = "*"; break;
+            case OP_DIV: s = "/"; break;
+            case OP_MOD: s = "%"; break;
+            case BOOL_AND: s = "&&"; break;
+            case BOOL_OR: s = "||"; break;
+            case BOOL_NOT: s = "!"; break;
+            case REL_EQ: s = "=="; break;
+            case REL_NE: s = "!="; break;
+            case REL_GT: s = ">"; break;
+            case REL_GE: s = ">="; break;
+            case REL_LT: s = "<"; break;
+            case REL_LE: s = "<="; break;
+            case BIT_AND: s = "&"; break;
+            case BIT_OR: s = "|"; break;
+            case BIT_XOR: s = "^"; break;
+            case BIT_NOT: s = "~"; break;
+            case BIT_SLEFT: s = "<<"; break;
+            case BIT_SRIGHT: s = ">>"; break;
+
+            case CONST_INT: s = "int"; break;
+	        //CONST_INT, CONST_CHAR, CONST_FLOAT, STRING,
+            default: s = "unknown"; break;
+        }
+        return s;
+    }
     friend ostream & operator << (ostream &o, const Token &t)
     {
         switch (t.type)
@@ -157,7 +246,7 @@ struct Token
             case BIT_SRIGHT: o << ">>"; break;
 
             case CONST_INT: o << "int(" << t.ival << ")"; break;
-	        //CONST_INT, CONST_CHAR, CONST_FLOAT, CONST_ENUM, STRING,
+	        //CONST_INT, CONST_CHAR, CONST_FLOAT, STRING,
             default: o << "unknown"; break;
         }
         return o;
@@ -196,8 +285,6 @@ class Lexer
             {
                 ++lnum;
                 lstart = input.data();
-
-                debugAddLine();
             }
             input.pop();
         }
@@ -467,40 +554,12 @@ class Lexer
         return false;
     }
 
-    void LexError(const char *msg) const
-    {
-        cout << "Lexer: " << msg << endl;
-        exit(1);
-    }
-
-    void debugAddLine()
-    {
-        Token t;
-        t.type = OP_PrintCode;
-        tokens.push_back(t);
-    }
-
-    void debugPrintCode()
-    {
-        static int _debug_lnum = 1;
-        string s;
-        size_t i = _debug_index;
-        while (i < _debug_code.size() && _debug_code[i] != '\n')
-            s += _debug_code[i++];
-        ++i;
-        if (_debug_lnum < 10) cout << ' ' << _debug_lnum << ": ";
-        else cout << _debug_lnum << ": ";
-        cout << s << endl;
-        _debug_index = i;
-        ++_debug_lnum;
-    }
    public:
     void tokenize(StringBuf &input)
     {
         tokens.clear();
         lnum = 1;
         lstart = input.data();
-        _debug_code = StringRef(input.data(), input.size());
         while (true)
         {
             _skip_spaces(input);
@@ -520,25 +579,11 @@ class Lexer
                 LexError(msg.data());
             }
         }
-        debugAddLine();
     }
 
-    bool hasNext() const
-    {
-        for (size_t i = 0; i < tokens.size(); ++i)
-        {
-            if (tokens[i].type != OP_PrintCode)
-                return true;
-        }
-        return false;
-    }
+    bool hasNext() const { return !tokens.empty(); }
     Token getNext()
     {
-        while (!tokens.empty() && tokens.front().type == OP_PrintCode)
-        {
-            debugPrintCode();
-            tokens.pop_front();
-        }
         if (tokens.empty())
         {
             LexError("No more tokens");
@@ -550,15 +595,29 @@ class Lexer
 
     Token peakNext(size_t n = 0)
     {
-        for (Token &t : tokens)
+        if (tokens.size() < n + 1)
         {
-            if (t.type == OP_PrintCode) continue;
-            else if (n == 0) return t;
-            else --n;
+            LexError("Not enough tokens");
         }
-        LexError("Not enough tokens");
-        // not reached
-        return tokens[0];
+        return tokens[n];
+    }
+
+    void expect(TokenType t)
+    {
+        expectGet(t);
+    }
+    Token expectGet(TokenType t)
+    {
+        if (tokens.empty() || tokens[0].type != t)
+        {
+            Token tmp;
+            tmp.type = t;
+            cout << "Syntax: Expect token " << tmp << endl;
+            exit(1);
+        }
+        Token tk = tokens.front();
+        tokens.pop_front();
+        return tk;
     }
 
     StringRef symbolName(size_t symid)
@@ -590,6 +649,5 @@ class Lexer
     int lnum;
     const char *lstart;
     // vector<StringRef> strings; // string constants
-    StringRef _debug_code;
-    size_t _debug_index;
 };
+

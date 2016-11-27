@@ -7,10 +7,10 @@ TGR = ${HOME}/bin/jcc
 all : ${TGR}
 
 ${TGR}: ${SRC} ${HDR}
-	c++ -std=c++0x -o $@ ${SRC}
+	c++ -std=c++11 -o $@ ${SRC}
 
 debug : ${SRC} ${HDR}
-	c++ -std=c++0x -g -o ${TGR} ${SRC}
+	c++ -std=c++11 -g -o ${TGR} ${SRC}
 
 svm : ${HOME}/bin/svm
 

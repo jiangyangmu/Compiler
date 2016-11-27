@@ -1,11 +1,12 @@
 #pragma once
 
 #include <iostream>
+#include <sstream>
 #include <stack>
 using namespace std;
 
 #include "lexer.h"
-
+#include "env.h"
 
 // XXX: all tryParse() functions return 'nullptr' on failure!!!
 // XXX: all parse() functions raise SyntaxError on failure!!!
@@ -14,259 +15,54 @@ using namespace std;
 bool IsDeclaration(TokenType t);
 bool IsAssignOperator(TokenType t);
 bool IsUnaryOperator(TokenType t);
-void SyntaxError(const char *msg);
 
-struct Declarator;
-class SyntaxNode;
-class Expression;
-class AssignExpression;
-class CondExpression;
-class OrExpression;
-class AndExpression;
-class BitOrExpression;
-class BitXorExpression;
-class BitAndExpression;
-class EqExpression;
-class RelExpression;
-class ShiftExpression;
-class AddExpression;
-class MulExpression;
-class CastExpression;
-class UnaryExpression;
-class PostfixExpression;
-class PrimaryExpression;
-class Symbol;
-
-
-// --------- Type System --------
-// 1. Representation 2. Declaration 3. Usage
-
-// Part 1: Representation
-// Type Information Data Structure
-enum EType { T_BASE, T_INT, T_CHAR, T_FUNC };
-class TBase
+class SyntaxNode
 {
    public:
-    virtual StringRef id() const = 0;
-    virtual size_t msize() const = 0;  // size in memory, in bytes
-    virtual void debugPrint() = 0;
+    virtual string debugString() { return ""; }
 };
-class TInt : public TBase
-{
-   public:
-    StringRef id() const { return StringRef("I"); }
-    size_t msize() const { return 4; }
-    void debugPrint() { cout << " int"; }
-};
-class TChar : public TBase
-{
-   public:
-    StringRef id() const { return StringRef("C"); }
-    size_t msize() const { return 1; }
-    void debugPrint() { cout << " char"; }
-};
-class TFunction : public TBase
-{
-    //string signature;
-    //TBase * rtype;
-    vector<Symbol> params;
-    SyntaxNode * body;
-   public:
-    StringRef id() const
-    {
-        return StringRef("F");
-    }
-    size_t msize() const { return 1; }
-    bool isDefinition() const { return body != nullptr; }
-    // TODO: support variant length parameter
-    static TFunction * tryParse(Lexer &lex);
-    static TFunction * parse(Lexer &lex);
-    void debugPrint() { cout << " function returns"; }
-};
-class TArray : public TBase
-{
-    size_t length;
-    string alenstr; // "A" + to_string(length)
-    TBase * etype; // element type
-   public:
-    StringRef id() const
-    {
-        return StringRef(alenstr.data(), alenstr.size());
-    }
-    size_t msize() const
-    {
-        // TODO: may overflow
-        return etype->msize() * length;
-    }
-    static TArray * tryParse(Lexer &lex);
-    static TArray * parse(Lexer &lex);
-    void debugPrint()
-    {
-        cout << " array " << length << " of";
-        if (etype != nullptr) etype->debugPrint();
-    }
-};
-class TPointer : public TBase
-{
-    // TODO: PTR_VOLATILE
-    enum PointerType { PTR_NORMAL, PTR_CONST };
-
-    PointerType type;
-    TBase * etype; // element type
-   public:
-    StringRef id() const
-    {
-        return StringRef("P");
-    }
-    size_t msize() const
-    {
-        return 8;
-    }
-    static TPointer * tryParse(Lexer &lex);
-    void debugPrint()
-    {
-        cout << " pointer of";
-        if (etype != nullptr) etype->debugPrint();
-    }
-};
-// TODO: struct, enum, union
-
-// Part 2: Declaration
-// Specifier: type & storage
-// Declarator: symbol and other properties
-// Declaration: Specifier + Declarator
-// TODO: initialization
-enum TypeStorage { TS_AUTO, TS_TYPEDEF, TS_EXTERN, TS_REGISTER, TS_STATIC };
-struct Specifier
-{
-    TBase * type;
-    // type storage
-    TypeStorage storage;
-    // type qualifiers
-    bool isconst; // volatile
-    bool isunsigned;
-    static Specifier * parse(Lexer &lex);
-    static Specifier * tryParse(Lexer &lex);
-    void debugPrint()
-    {
-        if (isconst)
-        {
-            cout << " const";
-        }
-        if (isunsigned)
-        {
-            cout << " unsigned";
-        }
-        type->debugPrint();
-    }
-};
-enum DeclaratorType { DT_NONE, DT_SYMBOL, DT_ARRAY, DT_FUNCTION };
-struct Declarator
-{
-    Declarator * child;
-    TPointer * pointer;
-    DeclaratorType type;
-    union {
-        TArray * array; // array
-        TFunction * function; // function
-        int id; // symbol
-    };
-    static Declarator * parse(Lexer &lex);
-    static Declarator * tryParse(Lexer &lex);
-    void debugPrint(Lexer &lex)
-    {
-        if (child != nullptr)
-        {
-            child->debugPrint(lex);
-        }
-
-        switch (type)
-        {
-            case DT_SYMBOL:
-                cout << "id " << lex.symbolName(id) << " is";
-                break;
-            case DT_ARRAY:
-                array->debugPrint();
-                break;
-            case DT_FUNCTION:
-                function->debugPrint();
-                break;
-            default:
-                break;
-        }
-        if (pointer != nullptr)
-        {
-            pointer->debugPrint();
-        }
-    }
-};
-
-// Symbol Data Structure
-struct Symbol
-{
-    Specifier * specifier;
-    Declarator * declarator;
-    StringRef name;
-    int reladdr; // relative address
-};
-class SymbolTable
-{
-    vector<Symbol> symbols;
-    size_t stack_size;
-    SymbolTable * parent;
-
-   public:
-    static void AddTable(SymbolTable * table);
-    static void RemoveTable();
-    static SymbolTable * tryParse(Lexer &lex, SymbolTable *table = nullptr);
-    void debugPrint(Lexer &lex)
-    {
-        cout << "Symbol Table:" << endl;
-        for (Symbol &s : symbols)
-        {
-            s.declarator->debugPrint(lex);
-            s.specifier->debugPrint();
-            cout << endl;
-        }
-    }
-};
-
-// Part 3: Usage
-// .....
-
-class SyntaxNode {};
 
 // TODO: implement 'abstract-decl' part
 class TypeName : public SyntaxNode
 {
    public:
-    static SyntaxNode *parse(Lexer &lex);
+    static SyntaxNode *parse(Lexer &lex, Environment *env);
 };
 
 // no instance, only dispatch
 class Statement : public SyntaxNode
 {
    public:
-    static SyntaxNode *parse(Lexer &lex);
+    static SyntaxNode *parse(Lexer &lex, Environment *env);
 };
 class LabelStatement : public SyntaxNode
 {
    public:
-    static SyntaxNode *parse(Lexer &lex);
+    static SyntaxNode *parse(Lexer &lex, Environment *env);
 };
 class CompoundStatement : public SyntaxNode
 {
     vector<SyntaxNode *> stmts;
-    SymbolTable * table;
+    Environment *env;
 
    public:
-    static SyntaxNode *parse(Lexer &lex);
+    static SyntaxNode *parse(Lexer &lex, Environment *env, bool reuse_env = false);
+    virtual string debugString()
+    {
+        string s = "{>\n";
+        for (SyntaxNode *stmt: stmts)
+        {
+            s += stmt->debugString();
+        }
+        s += "<}\n";
+        return s;
+    }
 };
 // no instance, dispatch only
 class ExpressionStatement : public SyntaxNode
 {
    public:
-    static SyntaxNode *parse(Lexer &lex);
+    static SyntaxNode *parse(Lexer &lex, Environment *env);
 };
 class SelectionStatement : public SyntaxNode
 {
@@ -275,13 +71,20 @@ class SelectionStatement : public SyntaxNode
     SyntaxNode *stmt2;
 
    public:
-    static SyntaxNode *parse(Lexer &lex);
+    static SyntaxNode *parse(Lexer &lex, Environment *env);
+    virtual string debugString()
+    {
+        string s = "Selection>\n";
+        s += expr->debugString();
+        s += stmt->debugString();
+        if (stmt2) s += stmt2->debugString();
+        s += "<\n";
+        return s;
+    }
 };
 class IterationStatement : public SyntaxNode
 {
-    typedef enum IterationType { WHILE_LOOP,
-                                 DO_LOOP,
-                                 FOR_LOOP } IterationType;
+    typedef enum IterationType { WHILE_LOOP, DO_LOOP, FOR_LOOP } IterationType;
 
     IterationType type;
     SyntaxNode *expr;
@@ -290,20 +93,54 @@ class IterationStatement : public SyntaxNode
     SyntaxNode *stmt;
 
    public:
-    static SyntaxNode *parse(Lexer &lex);
+    static SyntaxNode *parse(Lexer &lex, Environment *env);
+    virtual string debugString()
+    {
+        string s;
+        switch (type)
+        {
+            case WHILE_LOOP: s += "while"; break;
+            case DO_LOOP: s += "do-while"; break;
+            case FOR_LOOP: s += "for"; break;
+            default: break;
+        }
+        s += ">\n";
+        if (expr) s += expr->debugString();
+        if (expr2) s += expr2->debugString();
+        if (expr3) s += expr3->debugString();
+        s += "<\n";
+        return s;
+    }
 };
 class JumpStatement : public SyntaxNode
 {
-    typedef enum JumpType { JMP_GOTO,
-                            JMP_CONTINUE,
-                            JMP_BREAK,
-                            JMP_RETURN } JumpType;
+    typedef enum JumpType {
+        JMP_GOTO,
+        JMP_CONTINUE,
+        JMP_BREAK,
+        JMP_RETURN
+    } JumpType;
 
     JumpType type;
     SyntaxNode *expr;
     int id;  // for goto Label
    public:
-    static SyntaxNode *parse(Lexer &lex);
+    static SyntaxNode *parse(Lexer &lex, Environment *env);
+    virtual string debugString()
+    {
+        string s;
+        switch (type)
+        {
+            case JMP_BREAK: s += "break"; break;
+            case JMP_CONTINUE: s += "continue"; break;
+            case JMP_GOTO: s += "goto"; break;
+            case JMP_RETURN: s += "return"; break;
+        }
+        s += ">\n";
+        if (expr) s += expr->debugString();
+        s += "<\n";
+        return s;
+    }
 };
 
 class Expression : public SyntaxNode
@@ -311,18 +148,33 @@ class Expression : public SyntaxNode
     vector<SyntaxNode *> exprs;
 
    public:
-    static SyntaxNode *parse(Lexer &lex);
+    static SyntaxNode *parse(Lexer &lex, Environment *env);
+    virtual string debugString()
+    {
+        string s = "expr>\n";
+        for (SyntaxNode *e : exprs) s += e->debugString();
+        s += "<\n";
+        return s;
+    }
 };
 // TODO: fix this class, only works for most cases for now
 class AssignExpression : public SyntaxNode
 {
     // treat unary as condition
-    //vector<UnaryExpression *> targets;
+    // vector<UnaryExpression *> targets;
     vector<SyntaxNode *> targets;
     SyntaxNode *source;
 
    public:
-    static SyntaxNode *parse(Lexer &lex);
+    static SyntaxNode *parse(Lexer &lex, Environment *env);
+    virtual string debugString()
+    {
+        string s = "=>\n";
+        for (SyntaxNode *t : targets) s += t->debugString();
+        if (source) s += source->debugString();
+        s += "<\n";
+        return s;
+    }
 };
 class CondExpression : public SyntaxNode
 {
@@ -331,42 +183,86 @@ class CondExpression : public SyntaxNode
     SyntaxNode *right;
 
    public:
-    static SyntaxNode *parse(Lexer &lex);
+    static SyntaxNode *parse(Lexer &lex, Environment *env);
+    virtual string debugString()
+    {
+        string s = "?:>\n";
+        if (cond) s += cond->debugString();
+        if (left) s += left->debugString();
+        if (right) s += right->debugString();
+        s += "<\n";
+        return s;
+    }
 };
 class OrExpression : public SyntaxNode
 {
     vector<SyntaxNode *> exprs;
 
    public:
-    static SyntaxNode *parse(Lexer &lex);
+    static SyntaxNode *parse(Lexer &lex, Environment *env);
+    virtual string debugString()
+    {
+        string s = "||>\n";
+        for (SyntaxNode *e : exprs) s += e->debugString();
+        s += "<\n";
+        return s;
+    }
 };
 class AndExpression : public SyntaxNode
 {
     vector<SyntaxNode *> exprs;
 
    public:
-    static SyntaxNode *parse(Lexer &lex);
+    static SyntaxNode *parse(Lexer &lex, Environment *env);
+    virtual string debugString()
+    {
+        string s = "&&>\n";
+        for (SyntaxNode *e : exprs) s += e->debugString();
+        s += "<\n";
+        return s;
+    }
 };
 class BitOrExpression : public SyntaxNode
 {
     vector<SyntaxNode *> exprs;
 
    public:
-    static SyntaxNode *parse(Lexer &lex);
+    static SyntaxNode *parse(Lexer &lex, Environment *env);
+    virtual string debugString()
+    {
+        string s = "|>\n";
+        for (SyntaxNode *e : exprs) s += e->debugString();
+        s += "<\n";
+        return s;
+    }
 };
 class BitXorExpression : public SyntaxNode
 {
     vector<SyntaxNode *> exprs;
 
    public:
-    static SyntaxNode *parse(Lexer &lex);
+    static SyntaxNode *parse(Lexer &lex, Environment *env);
+    virtual string debugString()
+    {
+        string s = "^>\n";
+        for (SyntaxNode *e : exprs) s += e->debugString();
+        s += "<\n";
+        return s;
+    }
 };
 class BitAndExpression : public SyntaxNode
 {
     vector<SyntaxNode *> exprs;
 
    public:
-    static SyntaxNode *parse(Lexer &lex);
+    static SyntaxNode *parse(Lexer &lex, Environment *env);
+    virtual string debugString()
+    {
+        string s = "&>\n";
+        for (SyntaxNode *e : exprs) s += e->debugString();
+        s += "<\n";
+        return s;
+    }
 };
 class EqExpression : public SyntaxNode
 {
@@ -374,7 +270,20 @@ class EqExpression : public SyntaxNode
     vector<TokenType> ops;
 
    public:
-    static SyntaxNode *parse(Lexer &lex);
+    static SyntaxNode *parse(Lexer &lex, Environment *env);
+    virtual string debugString()
+    {
+        string s = "equal>\n";
+        s += exprs[0]->debugString();
+        for (size_t i = 1; i < exprs.size(); ++i)
+        {
+            if (ops[i] == REL_EQ) s += "==\n";
+            else s += "!=\n";
+            s += exprs[i]->debugString();
+        }
+        s += "<\n";
+        return s;
+    }
 };
 class RelExpression : public SyntaxNode
 {
@@ -382,7 +291,26 @@ class RelExpression : public SyntaxNode
     vector<TokenType> ops;
 
    public:
-    static SyntaxNode *parse(Lexer &lex);
+    static SyntaxNode *parse(Lexer &lex, Environment *env);
+    virtual string debugString()
+    {
+        string s = "rel>\n";
+        s += exprs[0]->debugString();
+        for (size_t i = 1; i < exprs.size(); ++i)
+        {
+            switch (ops[i])
+            {
+                case REL_GT: s += "\v>\n"; break;
+                case REL_GE: s += "\v>=\n"; break;
+                case REL_LT: s += "\v<\n"; break;
+                case REL_LE: s += "\v<=\n"; break;
+                default: break;
+            }
+            s += exprs[i]->debugString();
+        }
+        s += "<\n";
+        return s;
+    }
 };
 class ShiftExpression : public SyntaxNode
 {
@@ -390,7 +318,24 @@ class ShiftExpression : public SyntaxNode
     vector<TokenType> ops;
 
    public:
-    static SyntaxNode *parse(Lexer &lex);
+    static SyntaxNode *parse(Lexer &lex, Environment *env);
+    virtual string debugString()
+    {
+        string s = "shift>\n";
+        s += exprs[0]->debugString();
+        for (size_t i = 1; i < exprs.size(); ++i)
+        {
+            switch (ops[i])
+            {
+                case BIT_SLEFT: s += "\v<\v<\n"; break;
+                case BIT_SRIGHT: s += "\v>\v>\n"; break;
+                default: break;
+            }
+            s += exprs[i]->debugString();
+        }
+        s += "<\n";
+        return s;
+    }
 };
 class AddExpression : public SyntaxNode
 {
@@ -398,7 +343,24 @@ class AddExpression : public SyntaxNode
     vector<TokenType> ops;
 
    public:
-    static SyntaxNode *parse(Lexer &lex);
+    static SyntaxNode *parse(Lexer &lex, Environment *env);
+    virtual string debugString()
+    {
+        string s = "+->\n";
+        s += exprs[0]->debugString();
+        for (size_t i = 1; i < exprs.size(); ++i)
+        {
+            switch (ops[i])
+            {
+                case OP_ADD: s += "+\n"; break;
+                case OP_SUB: s += "-\n"; break;
+                default: break;
+            }
+            s += exprs[i]->debugString();
+        }
+        s += "<\n";
+        return s;
+    }
 };
 class MulExpression : public SyntaxNode
 {
@@ -406,15 +368,33 @@ class MulExpression : public SyntaxNode
     vector<TokenType> ops;
 
    public:
-    static SyntaxNode *parse(Lexer &lex);
+    static SyntaxNode *parse(Lexer &lex, Environment *env);
+    virtual string debugString()
+    {
+        string s = "*/%>\n";
+        s += exprs[0]->debugString();
+        for (size_t i = 1; i < exprs.size(); ++i)
+        {
+            switch (ops[i])
+            {
+                case OP_MUL: s += "*\n"; break;
+                case OP_DIV: s += "/\n"; break;
+                case OP_MOD: s += "%\n"; break;
+                default: break;
+            }
+            s += exprs[i]->debugString();
+        }
+        s += "<\n";
+        return s;
+    }
 };
 class CastExpression : public SyntaxNode
 {
-    vector<SyntaxNode *> types;
+    vector<TypeBase *> types;
     SyntaxNode *target;
 
    public:
-    static SyntaxNode *parse(Lexer &lex);
+    static SyntaxNode *parse(Lexer &lex, Environment *env);
 };
 // TODO: finish this!
 class UnaryExpression : public SyntaxNode
@@ -423,36 +403,49 @@ class UnaryExpression : public SyntaxNode
     TokenType op;
 
    public:
-    static SyntaxNode *parse(Lexer &lex);
+    static SyntaxNode *parse(Lexer &lex, Environment *env);
 };
 // TODO: finish this!
 class PostfixExpression : public SyntaxNode
 {
    public:
-    static SyntaxNode *parse(Lexer &lex);
+    static SyntaxNode *parse(Lexer &lex, Environment *env);
 };
 // TODO: finish this!
 class PrimaryExpression : public SyntaxNode
 {
     Token t;
+    union {
+        int ival;
+        char *str;
+        Symbol *symbol;
+    };
+
    public:
-    static SyntaxNode *parse(Lexer &lex);
+    static SyntaxNode *parse(Lexer &lex, Environment *env);
+    virtual string debugString()
+    {
+        stringstream ss;
+        string s;
+        ss << t << endl;
+        ss >> s;
+        return s;
+    }
 };
 class ConstExpression : public SyntaxNode
 {
    public:
-    static Token eval(CondExpression * expr);
+    static Token eval(CondExpression *expr);
 };
 
 class Parser
 {
-    SymbolTable global;
+    Environment env;
 
    public:
     void parse(Lexer &lex)
     {
-        SymbolTable::AddTable(&global);
-        SymbolTable::tryParse(lex, &global);
-        global.debugPrint(lex);
+        Environment::ParseGlobalDeclaration(lex, &env);
+        env.debugPrint(lex);
     }
 };
