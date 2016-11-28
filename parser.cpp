@@ -246,14 +246,15 @@ SyntaxNode *CompoundStatement::parse(Lexer &lex, Environment *env, bool reuse_en
 SyntaxNode *ExpressionStatement::parse(Lexer &lex, Environment *env)
 {
     DebugParseTree(ExpressionStatement);
-    SyntaxNode *node = nullptr;
+    ExpressionStatement *stmt = nullptr;
     if (lex.peakNext().type != STMT_END)
-        node = Expression::parse(lex, env);
-    if (lex.getNext().type != STMT_END) {
-        SyntaxError("Expecting ';'");
-        assert( false );
+    {
+        stmt = new ExpressionStatement();
+        stmt->expr = CommaExpression::parse(lex, env);
     }
-    return node;
+    EXPECT(STMT_END);
+
+    return stmt;
 }
 SyntaxNode *SelectionStatement::parse(Lexer &lex, Environment *env)
 {
@@ -267,7 +268,7 @@ SyntaxNode *SelectionStatement::parse(Lexer &lex, Environment *env)
             {
                 SyntaxError("Expect '('");
             }
-            stmt->expr = Expression::parse(lex, env);
+            stmt->expr = CommaExpression::parse(lex, env);
             if (lex.getNext().type != RP)
             {
                 SyntaxError("Expect ')'");
@@ -284,7 +285,7 @@ SyntaxNode *SelectionStatement::parse(Lexer &lex, Environment *env)
             {
                 SyntaxError("Expect '('");
             }
-            stmt->expr = Expression::parse(lex, env);
+            stmt->expr = CommaExpression::parse(lex, env);
             if (lex.getNext().type != RP)
             {
                 SyntaxError("Expect ')'");
@@ -310,7 +311,7 @@ SyntaxNode *IterationStatement::parse(Lexer &lex, Environment *env)
             {
                 SyntaxError("Expect '('");
             }
-            stmt->expr = Expression::parse(lex, env);
+            stmt->expr = CommaExpression::parse(lex, env);
             if (lex.getNext().type != RP)
             {
                 SyntaxError("Expect ')'");
@@ -328,7 +329,7 @@ SyntaxNode *IterationStatement::parse(Lexer &lex, Environment *env)
             {
                 SyntaxError("Expect '('");
             }
-            stmt->expr = Expression::parse(lex, env);
+            stmt->expr = CommaExpression::parse(lex, env);
             if (lex.getNext().type != RP)
             {
                 SyntaxError("Expect ')'");
@@ -340,11 +341,13 @@ SyntaxNode *IterationStatement::parse(Lexer &lex, Environment *env)
             {
                 SyntaxError("Expect '('");
             }
-            stmt->expr = ExpressionStatement::parse(lex, env);
-            stmt->expr2 = ExpressionStatement::parse(lex, env);
+            stmt->expr = CommaExpression::parse(lex, env);
+            EXPECT(STMT_END);
+            stmt->expr2 = CommaExpression::parse(lex, env);
+            EXPECT(STMT_END);
             if (lex.peakNext().type != RP)
             {
-                stmt->expr3 = Expression::parse(lex, env);
+                stmt->expr3 = CommaExpression::parse(lex, env);
             }
             if (lex.getNext().type != RP)
             {
@@ -382,7 +385,8 @@ SyntaxNode *JumpStatement::parse(Lexer &lex, Environment *env)
             break;
         case RETURN:
             stmt->type = JMP_RETURN;
-            stmt->expr = ExpressionStatement::parse(lex, env);
+            stmt->expr = CommaExpression::parse(lex, env);
+            EXPECT(STMT_END);
             break;
         default:
             SyntaxError("Unexpected token");
@@ -391,11 +395,11 @@ SyntaxNode *JumpStatement::parse(Lexer &lex, Environment *env)
     return stmt;
 }
 
-SyntaxNode *Expression::parse(Lexer &lex, Environment *env)
+Expression *CommaExpression::parse(Lexer &lex, Environment *env)
 {
-    DebugParseTree(Expression);
-    Expression *expr = nullptr;
-    SyntaxNode *e;
+    DebugParseTree(CommaExpression);
+    CommaExpression *expr = nullptr;
+    Expression *e;
 
     while (true)
     {
@@ -415,7 +419,7 @@ SyntaxNode *Expression::parse(Lexer &lex, Environment *env)
                 return e;
             else
             {
-                expr = new Expression();
+                expr = new CommaExpression();
                 expr->exprs.push_back(e);
             }
         }
@@ -423,14 +427,14 @@ SyntaxNode *Expression::parse(Lexer &lex, Environment *env)
     }
 }
 // TODO: solve ambiguity, evaluate order
-SyntaxNode *AssignExpression::parse(Lexer &lex, Environment *env)
+Expression *AssignExpression::parse(Lexer &lex, Environment *env)
 {
     DebugParseTree(AssignExpression);
     AssignExpression *expr = nullptr;
 
     // condition or unary?
-    vector<SyntaxNode *> targets;
-    SyntaxNode *e = nullptr;
+    vector<Expression *> targets;
+    Expression *e = nullptr;
 
     // TODO: fix it, unary is not condition-expr
     // XXX: evaluation order?
@@ -456,16 +460,16 @@ SyntaxNode *AssignExpression::parse(Lexer &lex, Environment *env)
         return expr;
     }
 }
-SyntaxNode *CondExpression::parse(Lexer &lex, Environment *env)
+Expression *CondExpression::parse(Lexer &lex, Environment *env)
 {
     DebugParseTree(CondExpression);
-    SyntaxNode *e = OrExpression::parse(lex, env);
+    Expression *e = OrExpression::parse(lex, env);
     if (lex.peakNext().type == OP_QMARK)
     {
         CondExpression *expr = new CondExpression();
         expr->cond = e;
         lex.getNext();
-        expr->left = Expression::parse(lex, env);
+        expr->left = CommaExpression::parse(lex, env);
         if (lex.getNext().type != OP_COLON)
         {
             SyntaxError("Expect ':'");
@@ -478,10 +482,10 @@ SyntaxNode *CondExpression::parse(Lexer &lex, Environment *env)
         return e;
     }
 }
-SyntaxNode *OrExpression::parse(Lexer &lex, Environment *env)
+Expression *OrExpression::parse(Lexer &lex, Environment *env)
 {
     DebugParseTree(OrExpression);
-    SyntaxNode *e = AndExpression::parse(lex, env);
+    Expression *e = AndExpression::parse(lex, env);
     if (lex.peakNext().type == BOOL_OR)
     {
         OrExpression *expr = new OrExpression();
@@ -498,10 +502,10 @@ SyntaxNode *OrExpression::parse(Lexer &lex, Environment *env)
         return e;
     }
 }
-SyntaxNode *AndExpression::parse(Lexer &lex, Environment *env)
+Expression *AndExpression::parse(Lexer &lex, Environment *env)
 {
     DebugParseTree(AndExpression);
-    SyntaxNode *e = BitOrExpression::parse(lex, env);
+    Expression *e = BitOrExpression::parse(lex, env);
     if (lex.peakNext().type == BOOL_AND)
     {
         AndExpression *expr = new AndExpression();
@@ -518,9 +522,9 @@ SyntaxNode *AndExpression::parse(Lexer &lex, Environment *env)
         return e;
     }
 }
-SyntaxNode *BitOrExpression::parse(Lexer &lex, Environment *env)
+Expression *BitOrExpression::parse(Lexer &lex, Environment *env)
 {
-    SyntaxNode *e = BitXorExpression::parse(lex, env);
+    Expression *e = BitXorExpression::parse(lex, env);
     if (lex.peakNext().type == BIT_OR)
     {
         BitOrExpression *expr = new BitOrExpression();
@@ -537,9 +541,9 @@ SyntaxNode *BitOrExpression::parse(Lexer &lex, Environment *env)
         return e;
     }
 }
-SyntaxNode *BitXorExpression::parse(Lexer &lex, Environment *env)
+Expression *BitXorExpression::parse(Lexer &lex, Environment *env)
 {
-    SyntaxNode *e = BitAndExpression::parse(lex, env);
+    Expression *e = BitAndExpression::parse(lex, env);
     if (lex.peakNext().type == BIT_XOR)
     {
         BitXorExpression *expr = new BitXorExpression();
@@ -556,9 +560,9 @@ SyntaxNode *BitXorExpression::parse(Lexer &lex, Environment *env)
         return e;
     }
 }
-SyntaxNode *BitAndExpression::parse(Lexer &lex, Environment *env)
+Expression *BitAndExpression::parse(Lexer &lex, Environment *env)
 {
-    SyntaxNode *e = EqExpression::parse(lex, env);
+    Expression *e = EqExpression::parse(lex, env);
     if (lex.peakNext().type == BIT_AND)
     {
         BitAndExpression *expr = new BitAndExpression();
@@ -575,9 +579,9 @@ SyntaxNode *BitAndExpression::parse(Lexer &lex, Environment *env)
         return e;
     }
 }
-SyntaxNode *EqExpression::parse(Lexer &lex, Environment *env)
+Expression *EqExpression::parse(Lexer &lex, Environment *env)
 {
-    SyntaxNode *e = RelExpression::parse(lex, env);
+    Expression *e = RelExpression::parse(lex, env);
     if (lex.peakNext().type == REL_EQ || lex.peakNext().type == REL_NE)
     {
         EqExpression *expr = new EqExpression();
@@ -594,9 +598,9 @@ SyntaxNode *EqExpression::parse(Lexer &lex, Environment *env)
         return e;
     }
 }
-SyntaxNode *RelExpression::parse(Lexer &lex, Environment *env)
+Expression *RelExpression::parse(Lexer &lex, Environment *env)
 {
-    SyntaxNode *e = ShiftExpression::parse(lex, env);
+    Expression *e = ShiftExpression::parse(lex, env);
     if (lex.peakNext().type == REL_LT || lex.peakNext().type == REL_LE ||
         lex.peakNext().type == REL_GT || lex.peakNext().type == REL_GE)
     {
@@ -615,9 +619,9 @@ SyntaxNode *RelExpression::parse(Lexer &lex, Environment *env)
         return e;
     }
 }
-SyntaxNode *ShiftExpression::parse(Lexer &lex, Environment *env)
+Expression *ShiftExpression::parse(Lexer &lex, Environment *env)
 {
-    SyntaxNode *e = AddExpression::parse(lex, env);
+    Expression *e = AddExpression::parse(lex, env);
     if (lex.peakNext().type == BIT_SLEFT || lex.peakNext().type == BIT_SRIGHT)
     {
         ShiftExpression *expr = new ShiftExpression();
@@ -635,10 +639,10 @@ SyntaxNode *ShiftExpression::parse(Lexer &lex, Environment *env)
         return e;
     }
 }
-SyntaxNode *AddExpression::parse(Lexer &lex, Environment *env)
+Expression *AddExpression::parse(Lexer &lex, Environment *env)
 {
     DebugParseTree(AddExpression);
-    SyntaxNode *e = MulExpression::parse(lex, env);
+    Expression *e = MulExpression::parse(lex, env);
     if (lex.peakNext().type == OP_ADD || lex.peakNext().type == OP_SUB)
     {
         AddExpression *expr = new AddExpression();
@@ -655,10 +659,10 @@ SyntaxNode *AddExpression::parse(Lexer &lex, Environment *env)
         return e;
     }
 }
-SyntaxNode *MulExpression::parse(Lexer &lex, Environment *env)
+Expression *MulExpression::parse(Lexer &lex, Environment *env)
 {
     DebugParseTree(MulExpression);
-    SyntaxNode *e = CastExpression::parse(lex, env);
+    Expression *e = CastExpression::parse(lex, env);
     if (lex.peakNext().type == OP_MUL || lex.peakNext().type == OP_DIV ||
         lex.peakNext().type == OP_MOD)
     {
@@ -678,7 +682,7 @@ SyntaxNode *MulExpression::parse(Lexer &lex, Environment *env)
     }
 }
 // TODO: implement this
-SyntaxNode *CastExpression::parse(Lexer &lex, Environment *env)
+Expression *CastExpression::parse(Lexer &lex, Environment *env)
 {
     // cast or unary
     if (lex.peakNext().type == LP && IsTypeName(lex.peakNext(1).type))
@@ -702,7 +706,7 @@ SyntaxNode *CastExpression::parse(Lexer &lex, Environment *env)
         return UnaryExpression::parse(lex, env);
     }
 }
-SyntaxNode *UnaryExpression::parse(Lexer &lex, Environment *env)
+Expression *UnaryExpression::parse(Lexer &lex, Environment *env)
 {
     DebugParseTree(UnaryExpression);
     if (IsUnaryOperator(lex.peakNext().type))
@@ -741,7 +745,7 @@ SyntaxNode *UnaryExpression::parse(Lexer &lex, Environment *env)
     }
 }
 // TODO: implement this
-SyntaxNode *PostfixExpression::parse(Lexer &lex, Environment *env)
+Expression *PostfixExpression::parse(Lexer &lex, Environment *env)
 {
     DebugParseTree(PostfixExpression);
     return PrimaryExpression::parse(lex, env);
@@ -763,7 +767,7 @@ bool __isPrimaryExpression(TokenType t)
     }
     return is;
 }
-SyntaxNode *PrimaryExpression::parse(Lexer &lex, Environment *env)
+Expression *PrimaryExpression::parse(Lexer &lex, Environment *env)
 {
     DebugParseTree(PrimaryExpression);
     PrimaryExpression *p = nullptr;

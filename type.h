@@ -76,6 +76,34 @@ class Environment;
 // }
 // warning-list: compare unsigned int with int
 
+template <typename T>
+class Additive
+{
+   public:
+    virtual void add(T *) = 0;
+    virtual void sub(T *) = 0;
+};
+template <typename T>
+class Multiplicative
+{
+   public:
+    virtual void mul(T *) = 0;
+    virtual void div(T *) = 0;
+    virtual void mod(T *) = 0;
+};
+template <typename T>
+class Evaluable // r-value
+{
+   public:
+    virtual T * eval() = 0;
+};
+template <typename T>
+class Addressable // l-value
+{
+   public:
+    virtual void *addr() = 0;
+};
+
 // Type Representation
 enum ETypeClass
 {

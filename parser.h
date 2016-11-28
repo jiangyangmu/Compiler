@@ -21,6 +21,11 @@ class SyntaxNode
    public:
     virtual string debugString() { return ""; }
 };
+class Expression : public SyntaxNode
+{
+   public:
+    virtual TypeBase *type() const = 0;
+};
 
 // TODO: implement 'abstract-decl' part
 class TypeName : public SyntaxNode
@@ -61,12 +66,14 @@ class CompoundStatement : public SyntaxNode
 // no instance, dispatch only
 class ExpressionStatement : public SyntaxNode
 {
+    Expression *expr;
+
    public:
     static SyntaxNode *parse(Lexer &lex, Environment *env);
 };
 class SelectionStatement : public SyntaxNode
 {
-    SyntaxNode *expr;
+    Expression *expr;
     SyntaxNode *stmt;
     SyntaxNode *stmt2;
 
@@ -87,9 +94,9 @@ class IterationStatement : public SyntaxNode
     typedef enum IterationType { WHILE_LOOP, DO_LOOP, FOR_LOOP } IterationType;
 
     IterationType type;
-    SyntaxNode *expr;
-    SyntaxNode *expr2;
-    SyntaxNode *expr3;
+    Expression *expr;
+    Expression *expr2;
+    Expression *expr3;
     SyntaxNode *stmt;
 
    public:
@@ -122,7 +129,7 @@ class JumpStatement : public SyntaxNode
     } JumpType;
 
     JumpType type;
-    SyntaxNode *expr;
+    Expression *expr;
     int id;  // for goto Label
    public:
     static SyntaxNode *parse(Lexer &lex, Environment *env);
@@ -143,12 +150,13 @@ class JumpStatement : public SyntaxNode
     }
 };
 
-class Expression : public SyntaxNode
+class CommaExpression : public Expression
 {
-    vector<SyntaxNode *> exprs;
+    vector<Expression *> exprs;
 
    public:
-    static SyntaxNode *parse(Lexer &lex, Environment *env);
+    virtual TypeBase *type() const { return nullptr; }
+    static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
         string s = "expr>\n";
@@ -158,15 +166,16 @@ class Expression : public SyntaxNode
     }
 };
 // TODO: fix this class, only works for most cases for now
-class AssignExpression : public SyntaxNode
+class AssignExpression : public Expression
 {
     // treat unary as condition
     // vector<UnaryExpression *> targets;
-    vector<SyntaxNode *> targets;
-    SyntaxNode *source;
+    vector<Expression *> targets;
+    Expression *source;
 
    public:
-    static SyntaxNode *parse(Lexer &lex, Environment *env);
+    virtual TypeBase *type() const { return nullptr; }
+    static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
         string s = "=>\n";
@@ -176,14 +185,15 @@ class AssignExpression : public SyntaxNode
         return s;
     }
 };
-class CondExpression : public SyntaxNode
+class CondExpression : public Expression
 {
-    SyntaxNode *cond;
-    SyntaxNode *left;
-    SyntaxNode *right;
+    Expression *cond;
+    Expression *left;
+    Expression *right;
 
    public:
-    static SyntaxNode *parse(Lexer &lex, Environment *env);
+    virtual TypeBase *type() const { return nullptr; }
+    static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
         string s = "?:>\n";
@@ -194,12 +204,13 @@ class CondExpression : public SyntaxNode
         return s;
     }
 };
-class OrExpression : public SyntaxNode
+class OrExpression : public Expression
 {
-    vector<SyntaxNode *> exprs;
+    vector<Expression *> exprs;
 
    public:
-    static SyntaxNode *parse(Lexer &lex, Environment *env);
+    virtual TypeBase *type() const { return nullptr; }
+    static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
         string s = "||>\n";
@@ -208,12 +219,13 @@ class OrExpression : public SyntaxNode
         return s;
     }
 };
-class AndExpression : public SyntaxNode
+class AndExpression : public Expression
 {
-    vector<SyntaxNode *> exprs;
+    vector<Expression *> exprs;
 
    public:
-    static SyntaxNode *parse(Lexer &lex, Environment *env);
+    virtual TypeBase *type() const { return nullptr; }
+    static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
         string s = "&&>\n";
@@ -222,12 +234,13 @@ class AndExpression : public SyntaxNode
         return s;
     }
 };
-class BitOrExpression : public SyntaxNode
+class BitOrExpression : public Expression
 {
-    vector<SyntaxNode *> exprs;
+    vector<Expression *> exprs;
 
    public:
-    static SyntaxNode *parse(Lexer &lex, Environment *env);
+    virtual TypeBase *type() const { return nullptr; }
+    static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
         string s = "|>\n";
@@ -236,12 +249,13 @@ class BitOrExpression : public SyntaxNode
         return s;
     }
 };
-class BitXorExpression : public SyntaxNode
+class BitXorExpression : public Expression
 {
-    vector<SyntaxNode *> exprs;
+    vector<Expression *> exprs;
 
    public:
-    static SyntaxNode *parse(Lexer &lex, Environment *env);
+    virtual TypeBase *type() const { return nullptr; }
+    static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
         string s = "^>\n";
@@ -250,12 +264,13 @@ class BitXorExpression : public SyntaxNode
         return s;
     }
 };
-class BitAndExpression : public SyntaxNode
+class BitAndExpression : public Expression
 {
-    vector<SyntaxNode *> exprs;
+    vector<Expression *> exprs;
 
    public:
-    static SyntaxNode *parse(Lexer &lex, Environment *env);
+    virtual TypeBase *type() const { return nullptr; }
+    static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
         string s = "&>\n";
@@ -264,13 +279,14 @@ class BitAndExpression : public SyntaxNode
         return s;
     }
 };
-class EqExpression : public SyntaxNode
+class EqExpression : public Expression
 {
-    vector<SyntaxNode *> exprs;
+    vector<Expression *> exprs;
     vector<TokenType> ops;
 
    public:
-    static SyntaxNode *parse(Lexer &lex, Environment *env);
+    virtual TypeBase *type() const { return nullptr; }
+    static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
         string s = "equal>\n";
@@ -285,13 +301,14 @@ class EqExpression : public SyntaxNode
         return s;
     }
 };
-class RelExpression : public SyntaxNode
+class RelExpression : public Expression
 {
-    vector<SyntaxNode *> exprs;
+    vector<Expression *> exprs;
     vector<TokenType> ops;
 
    public:
-    static SyntaxNode *parse(Lexer &lex, Environment *env);
+    virtual TypeBase *type() const { return nullptr; }
+    static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
         string s = "rel>\n";
@@ -312,13 +329,14 @@ class RelExpression : public SyntaxNode
         return s;
     }
 };
-class ShiftExpression : public SyntaxNode
+class ShiftExpression : public Expression
 {
-    vector<SyntaxNode *> exprs;
+    vector<Expression *> exprs;
     vector<TokenType> ops;
 
    public:
-    static SyntaxNode *parse(Lexer &lex, Environment *env);
+    virtual TypeBase *type() const { return nullptr; }
+    static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
         string s = "shift>\n";
@@ -337,13 +355,14 @@ class ShiftExpression : public SyntaxNode
         return s;
     }
 };
-class AddExpression : public SyntaxNode
+class AddExpression : public Expression
 {
-    vector<SyntaxNode *> exprs;
+    vector<Expression *> exprs;
     vector<TokenType> ops;
 
    public:
-    static SyntaxNode *parse(Lexer &lex, Environment *env);
+    virtual TypeBase *type() const { return nullptr; }
+    static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
         string s = "+->\n";
@@ -362,13 +381,14 @@ class AddExpression : public SyntaxNode
         return s;
     }
 };
-class MulExpression : public SyntaxNode
+class MulExpression : public Expression
 {
-    vector<SyntaxNode *> exprs;
+    vector<Expression *> exprs;
     vector<TokenType> ops;
 
    public:
-    static SyntaxNode *parse(Lexer &lex, Environment *env);
+    virtual TypeBase *type() const { return nullptr; }
+    static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
         string s = "*/%>\n";
@@ -388,31 +408,36 @@ class MulExpression : public SyntaxNode
         return s;
     }
 };
-class CastExpression : public SyntaxNode
+class CastExpression : public Expression
 {
     vector<TypeBase *> types;
-    SyntaxNode *target;
+    Expression *target;
 
    public:
-    static SyntaxNode *parse(Lexer &lex, Environment *env);
+    virtual TypeBase *type() const { return nullptr; }
+    static Expression *parse(Lexer &lex, Environment *env);
 };
 // TODO: finish this!
-class UnaryExpression : public SyntaxNode
+class UnaryExpression : public Expression
 {
-    SyntaxNode *expr;
+    Expression *expr;
     TokenType op;
 
    public:
-    static SyntaxNode *parse(Lexer &lex, Environment *env);
+    virtual TypeBase *type() const { return nullptr; }
+    static Expression *parse(Lexer &lex, Environment *env);
 };
 // TODO: finish this!
-class PostfixExpression : public SyntaxNode
+class PostfixExpression : public Expression
 {
+    // indexing, func-call, dot-operator, point-to-operator,
+    // post-inc, post-dec
    public:
-    static SyntaxNode *parse(Lexer &lex, Environment *env);
+    virtual TypeBase *type() const { return nullptr; }
+    static Expression *parse(Lexer &lex, Environment *env);
 };
 // TODO: finish this!
-class PrimaryExpression : public SyntaxNode
+class PrimaryExpression : public Expression
 {
     Token t;
     union {
@@ -422,7 +447,8 @@ class PrimaryExpression : public SyntaxNode
     };
 
    public:
-    static SyntaxNode *parse(Lexer &lex, Environment *env);
+    virtual TypeBase *type() const { return nullptr; }
+    static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
         stringstream ss;
@@ -432,9 +458,10 @@ class PrimaryExpression : public SyntaxNode
         return s;
     }
 };
-class ConstExpression : public SyntaxNode
+class ConstExpression : public Expression
 {
    public:
+    virtual TypeBase *type() const { return nullptr; }
     static Token eval(CondExpression *expr);
 };
 
