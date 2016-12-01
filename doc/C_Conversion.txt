@@ -1,0 +1,91 @@
+C 类型系统 之 类型转换
+
+主要功能：
+	类型A 转换到 类型B
+	类型A + 类型B 的公共类型 类型C
+
+Struct/Union/Enum 不可转换成其它类型
+
+------------------------------------------------------------------------
+Array & Pointer
+
+[Convertion]
+
+Array -> Pointer
+	assign address to pointer (even target-type is different, only warning)
+
+Array -> Array
+Pointer -> Array
+	not possible
+
+Pointer of A -> Pointer of B
+	replace target-type
+
+[Common Type]
+
+(Array, Pointer) => Pointer
+
+### Code ###
+
+array-to-pointer()
+	pointer.value = array.address
+pointer-to-pointer(from, to)
+	to.value = from.value
+
+------------------------------------------------------------------------
+Integral & Floating & Enum-Constant
+
+Enum-Constant <=> int
+
+[Signed and unsigned integers]
+
+unsigned A -> B
+	if B includes value -> value unchanged
+	else -> ?
+
+signed A -> unsigned B
+	value >= 0 && A <= B -> value unchanged
+	else ->
+		promote A to at least B,
+		value += (B.MAX + 1),
+		view value as unsigned B
+
+A -> unsigned b (b < A)
+
+[Floating and integral]
+floating -> integral
+	## fractional part is discarded. If integral part is too large, undefined behavior.
+
+integral -> floating
+	## choose the nearest value, lower or higher
+
+[Floating]
+float -> double -> long double
+	## promotion loses nothing
+long double -> double -> float
+	## demotion choose the nearest value, lower or higher
+
+[Common Type]
+
+(unsigned long int, Integral) => unsigned long int
+
+(long int, unsigned int)
+	=> long int (if long int big enough)
+	=> unsigned long int (otherwise)
+
+(long int, Integral) => long int
+
+(unsigned int, Integral) => unsigned int
+(int, Integral) => int
+
+### Code ###
+
+common-type(Integral, Integral)
+common-type(Floating, Floating)
+common-type(Integral, Floating)
+common-type(Floating, Integral)
+
+integral-to-integral(Integral, Integral)
+integral-to-floating(Integral, Floating)
+floating-to-integral(Floating, Integral)
+floating-to-floating(Floating, Floating)

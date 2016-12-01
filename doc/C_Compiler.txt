@@ -1,0 +1,128 @@
+--------------------------------------------------
+路程：
+	[ok] 完善 StackVM 指令集设计。
+	[running] 实现 TypeSystem，扩充语法树生成过程。
+	[] 实现 遍历语法树代码生成功能。
+
+--------------------------------------------------
+[ 接口依赖：Lexer, SymbolTable, TypeSystem ]
+[ 结构依赖：Token, Type ]
+[ 生成：SyntaxNode ]
+生成语法树 ->
+	定义 ->
+		创建 SymbolTable
+		TypeSystem 解析定义, 返回定义的 符号命 给 SymbolTable
+	语句 ->
+		递归下降 ->
+			Symbol -> 交给 SymbolTable，返回引用。
+			一元操作 -> 交给 TypeSystem，检查该 type 是否可做该 op。
+			二元操作 -> 交给 TypeSystem，检查输入 type 是否和 op 的参数类型匹配，如果不匹配，是否可以转换成匹配的。
+			函数调用（多元操作） -> 交给 TypeSystem，匹配参数列表类型，如果不匹配，是否可以转换成匹配的。
+	* 每个结点要知道自己的 type
+	* 函数要在定义函数体前生成 type 放入 TypeSystem，并加入 SymbolTable
+	* 在结构体里定义自己的指针：要先把 symbol 放入 SymbolTable
+
+[ 接口依赖：SymbolTable, TypeSystem ]
+[ 结构依赖：SyntaxNode, 指令集 ]
+[ 语法依赖：求值顺序, 调用约定 ]
+生成代码 ->
+	后序遍历语法树 ->
+		出现 定义 ->
+			emit("st_alloc " + sum(all_defs))
+			调整 Symbol 到地址的映射，比如 {"a":"[ebp + 4]"}
+		出现 Symbol ->
+			emit("push " + table[Symbol])
+		出现 一元/二元操作 ->
+			交给 TypeSystem 生成代码
+		出现 函数调用 ->
+			从左到右求值参数		# 求值顺序 #
+			从右到左生成参数代码	# 调用约定 #
+			调用函数，清理栈
+
+--------------------------------------------------
+SymbolTable
+
+Symbol = {Name, Type*, Location}
+SymbolTable::add_symbol( symbol_name );
+SymbolTable::get_symbol( symbol_name );
+SymbolTable::get_location( symbol_name );
+
+任务：判断类型匹配、类型可进行的操作、内存占用、代码生成 -> 交给类型自己
+任务：判断符号重定义 -> 交给 SymbolTable
+问题：下面的类型都可以进行哪些操作？这个问题不 block 进度。
+问题：DoOperations 和指令集深度集成，是否所有的情况都能实现？貌似能。
+问题：get_addr 和 get_value 两个函数，需要 Symbol 来协作才能实现？让 Symbol 从外部传入地址，或者值。
+问题：符号定义覆盖只在变量之间发生？ [definition override]
+		不。
+		变量定义 可以覆盖外部的 变量定义，函数定义。
+		函数声明 覆盖不了任何东西，也斗不过 变量定义。（因为函数只能全局定义，所以内部只可能出现声明）
+		由于 struct 关键字的存在，比起变量名和函数名的冲突（单方面压制），结构名其实处在不同的空间，不与它们发生冲突。
+			毕竟结构名 属于 类型名，而变量名和函数名 属于 对象名，层次不一样。（struct 关键字就像进入 VIP 房间的钥匙一般）
+			结构定义 之间就可以相互覆盖了，甚至还能覆盖同一代码块早于自己定义的 同名结构体。
+			那 结构定义 这个东西有层次的概念吗？比如在一个代码块定义的的结构体，能在代码块外层空间使用吗？
+				并不能。还是有层次概念的。（搞个 TypeTable？）
+	* 看来类型系统比我想的还要动态，新的 struct 就像定义了个类型变量一样，超出作用域就失效了，
+	* 但是 struct 可以在同一个代码块内覆盖多次，这个 变量定义 还是做不到的。
+
+--------------------------------------------------
+TypeTable
+
+Type = {
+	Name:String, # 类型 ID
+	Size, ＃ 类型占用内存数量
+	＃ 检查类型可进行的操作，以及生成该操作的代码。
+	IsEqual(...), # 检查类型是否一致
+	HasOperations(add, sub, index, to_int, call, get_addr, get_value, etc.),
+	DoOperations(...)
+}
+
+VoidType	= {"Void", 0, None}
+IntType		= {"Int", Size, Operations(add, sub, mul, div, mod, and, or, not, to_float, get_addr, get_value, ...)}
+FloatType	= {"Float", Size, Operations(add, sub, mul, div, mod, to_int, get_addr, get_value, ...)}
+PointerType	= {"Pointer", Size, TargetType, Operations(add, sub, index, get_addr, get_value, ...)}
+ArrayType	= {"Array", Size(total), TargetType, Operations(index, get_addr, get_value, ...)}
+FuncType	= {"Func", Size(0), ReturnType, ParamType[], Body, Operations(call, ...)}
+StructType	= {"Struct", Size, Name, TargetType[], TargetName[], Operations(member, ...)}
+UnionType	= {"Union", Size, Name, TargetType[], TargetName[], Operations(member, ...)}
+EnumType	= {"Enum", Size, Name, Operations(like IntType...)}
+
+TypeTable = {
+	Types:HashMap<Name, Type*>, # 管理了当前代码块的类型
+	TypeTable *parent,
+	AddType(...),
+	FindType(...)
+}
+
+Symbol TypeTable::parse_declaration( lexer, type_table );
+
+	一些需要考虑的问题：
+
+	输入输出？
+		Token流 => Type结构体。
+
+	如何 parse 各种类型？
+		递归下降。
+
+	函数参数类型，返回类型的自动转换？
+		数组变指针。
+
+	函数的递归调用？
+		声明刚结束，就将函数加入 SymbolTable。
+	
+	结构内部定义自己的指针？
+		看到 struct Name 的时候就把 Name 加入 SymbolTable。
+
+TypeTable::parse_type_declaration( lexer, type_table );
+TypeSystem::check_op( type, op );
+TypeSystem::check_op( type1, type2, op );
+TypeSystem::check_transform( from, to );
+
+TypeSystem::emit_op_code( type, op );
+TypeSystem::emit_op_code( type1, type2, op );
+TypeSystem::emit_transform_code( from, to );
+
+
+--------------------------------------------------
+running: 实现 TypeTable parse()
+
+

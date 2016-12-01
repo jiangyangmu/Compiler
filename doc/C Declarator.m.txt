@@ -1,0 +1,59 @@
+Declarator
+
+=============== decl() ===============
+
+declaration				:= specifiers ( init-decl ( ',' init-decl )* )? ';'		# so int; is legal, though meaningless
+
+specifiers				:= ( storage-specifier | type-specifier | type-qualifier )+
+
+init-decl				:= decl ( '=' init )?
+
+---------------------------------------
+
+decl					:= ( pointer )? direct-decl
+
+# array & function's priority is higher than pointer
+direct-decl				:= ( identifier | '(' decl ')' ) ( ('[' ( constant-expr )? ']')* | ('(' param-list ')')? )
+*(pointer|array|func) -> (pointer|array|func)
+int * a[10], *b[10];
+
+
+constant-expr			:= cond-expr
+
+
+param-list				:= param-decl ( ',' param-decl )* ( ',' '...' )?
+
+param-decl				:= specifiers decl
+						----omit---- || specifiers abstract-decl
+
+>>>>omit----
+abstract-decl			:= ( pointer )? direct-abstract-decl
+
+direct-abstract-decl	:= '(' abstract-decl ')'
+						|| [direct-abstract-decl] '[' ( constant-expr )? ']'
+						|| [direct-abstract-decl] '(' ( param-list )? ')'
+----omit<<<<
+
+---------------------------------------
+
+init					:= assign-expr
+						|| '{' init-list (',')? '}'
+
+init-list				:= init ( ',' init )*
+
+---------------------------------------
+
+storage-specifier		:= typedef || extern || static || auto || register
+
+type-specifier			:= void || char || short || int || long || float || double || signed || unsigned
+						|| struct-or-union-specifier
+						|| enum-specifier
+						|| typedef-name
+
+type-qualifier			:= const || volatile
+
+pointer					:= '*' ( type-qualifier )+ (pointer)?
+
+identifier				:= [_a-zA-Z] [_a-zA-Z0-9]*
+
+identifier-list			:= identifier ( ',' identifier )*

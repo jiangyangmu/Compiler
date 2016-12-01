@@ -1,0 +1,181 @@
+TYPE SYSTEM
+
+
+Q: 类型系统中不纯粹的东西？ 目前先不管
+    specifier
+        typedef -> 类型定义
+        _ -> 对象定义
+            extern -> ？？？约束
+            static -> 存储类型约束
+            const -> 语法约束
+            volatile -> 忽略
+            auto -> 忽略
+            register -> 忽略
+
+Q: 硬件对类型转换的支持？
+
+Q: 作用域：如何管理全局变量？
+    访问管理 和 局部变量是一样的。
+    内存位置则固定为 全局区的一个 slot。
+
+---------------------------------------------
+Q: 如何定义一个类型？如何定义一个类型的对象？
+
+类型定义系统
+
+type => identifier OR '(declarator)' is ( [array of] ||  [function returns] ) [pointer of] specifier
+
+
+类型定义语法中的优先级：
+    1. right > left
+    2. near > far
+    3. position: specifier (pointer) ID (array | function)
+    => array = function > pointer > specifier
+
+pointer > specifier     := T *a         -> (T (*a) )
+
+function > pointer      := T *f(void)   -> (T (* (f(void)) ))
+function > specifier    := T f(int)     -> (T (f(void)) )
+
+array > pointer         := T *a[3]      -> (T (* (a[3]) ))
+array > specifier       := T a[3]       -> (T (a[3]) )
+
+---------------------------------------------
+Q: 左值（lvalue）是什么？
+
+lvalue is an expression referring to an object.
+
+lvalue 不是 Array，不是 incomplete-type，不是 const 的（如果是 struct/union，所有儿子都是 non-const）
+
+
+---------------------------------------------
+[~~~~~running~~~~~]
+Q: "类型转换" 和 "类型提升" 的机制？
+
+见 C_Conversion.txt
+
+---------------------------------------------
+Q: "判断一个对象是否可以执行某个操作" 的机制？
+
+---------------------------------------------
+Q: 如何管理函数的声明与定义？
+
+---------------------------------------------
+Q: 类型名的，变量名的，函数名的，符号空间冲突？
+    类型名：struct/union tag, enum tag
+        -> 相互之间无障碍覆盖
+    变量名：id, struct/union-member-id, enum-member
+
+关于 scope, namespace, linkage
+
+[SCOPE]
+identifier can be...
+    -> object(arithmatic, pointer, array, func)
+    -> struct/union/enum tag
+    -> struct/union-member
+    -> enum-constant
+    -> function-param
+    -> typedef name
+    -> label name
+    -> (or) macro name, macro parameter
+
+scope starts
+    after identifier appear
+        tag, enum-constant
+    after declarator finish
+        OTHERS
+
+scope range
+    function - in whole function
+        label name
+    file - until EOF
+        global declarations
+    block - until '}'
+        func-definition-params, local declarations
+    function-prototype - until ';'
+        func-declaration-params
+
+[NAMESPACE]
+in the same layer, there are 4 separate namespaces:
+    -> label name
+    -> tag
+    -> struct/union member
+    -> other(object, enum-constant)
+
+---------------------------------------------
+关键函数伪代码
+
+ParseType():
+    S = parse specifier (type = T)
+    P, P', N, F = parse declarator
+
+    S.parent = P
+    P'.parent = F
+    F.parent = N
+    return N
+
+ParseSpecifier():
+    make S
+    case t.type of
+        int -> S = int
+        float -> S = float
+        struct -> S = parse struct
+        enum -> S = parse enum
+    end
+    return S
+
+ParsePointer():
+    if '*':
+        drop '*', make P
+        Pn, Pn' = ParsePointer()
+        if Pn != <null>:
+            P.parent = Pn
+            return P, Pn'
+        else:
+            return P, P
+        fi
+    else:
+        return <null>, <null>
+    fi
+
+ParseDeclarator():
+    P, P' = parse pointer (type = *)
+
+    if '(':
+        N = parse declarator
+        expect ')'
+    else:
+        N = parse identifier
+    fi
+
+    if '[':
+        F = parse array (type = [])
+    elif '(':
+        F = parse function (type = ())
+        expect ')'
+    else：
+        nop
+    fi
+
+    return P, P', N, F
+
+ParseArray():
+    make F
+    while '[':
+        drop '['
+        I = parse value
+        F.push_dimension(I)
+        expect ']'
+    end
+    return F
+
+ParseFunction():
+    make F
+    expect '('
+    while not ')':
+        N = parse type
+        F.add_param({N.symbol, N})
+        expect ',' or ')'
+    end
+    expect ')'
+    return F

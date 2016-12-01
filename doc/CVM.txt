@@ -1,0 +1,46 @@
+CVM.txt
+
+------------ GUIDELINE ------------
+
+1. CPU
+
+calc	+, -, *, /, %
+bit		&, |, ^, ~
+bool	&&, ||, !
+msg		imm <-> reg <-> mem
+st_mem	push, pop
+ctrl	jump
+modul	call, ret
+
+2. Memory
+
+hp_mem	alloc, free (built-in)
+
+3. IO
+
+stdio	write, read (built-in)
+file	fopen, fread, fwrite, fclose (built-in)
+
+4. Debug
+	+ call stack verification
+	+ strice type system
+
+------------ INSTRUCTION ------------
+
+>>>>> Stack VM (64-bit)
+
+sp, bp
+ADDI, SUBI, MULI, DIVI, MODI - Integer
+ADDF, SUBF, MULF, DIVF, MODF - Float
+ADDD, SUBD, MULD, DIVD, MODD - Double
+AND, OR, XOR, NOT
+DUP
+PUSH <val>, POP
+
+ip
+CMP
+JMP, JMP_IF <addr>
+CALL, CALL_BUILTIN <name>
+RET
+
+
