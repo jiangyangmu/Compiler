@@ -44,14 +44,66 @@ ostream &operator<<(ostream &o, const Symbol &s)
     }
     return o;
 }
+void __debugPrint(string &&s)
+{
+    string tabs = "\t";
+    string line = "\t";
+    bool escape = false, empty = true;
+    for(char c : s)
+    {
+        if (c == '~')
+        {
+            escape = true;
+            continue;
+        }
+
+        if (!escape)
+        {
+            switch (c)
+            {
+                case '>': tabs += "  "; break;
+                case '<': tabs.pop_back(); tabs.pop_back(); break;
+                default: line.push_back(c); break;
+            }
+        }
+        else
+        {
+            line.push_back(c);
+            escape = false;
+        }
+        if (!line.empty())
+            empty = (empty && isspace(line.back()));
+
+        if (c == '\n')
+        {
+            if (!empty)
+                cout << line;
+            line = tabs;
+            empty = true;
+        }
+    }
+}
 void SymbolTable::debugPrint(Lexer &lex)
 {
     cout << "[Symbol Table] " << symbols.size() << " symbols" << endl;
     for (Symbol *s : symbols)
     {
         cout << "  " << (*s) << endl;
-        if (s->type && s->type->type() == TC_STRUCT)
-            dynamic_cast<StructType *>(s->type)->debugPrint();
+        if (s->type)
+        {
+            switch (s->type->type())
+            {
+                case TC_STRUCT:
+                    dynamic_cast<StructType *>(s->type)->debugPrint();
+                    break;
+                case TC_FUNC:
+                    if (dynamic_cast<FuncType *>(s->type)->body)
+                        __debugPrint(dynamic_cast<FuncType *>(s->type)->body->debugString());
+                    break;
+                default:
+                    break;
+            }
+        }
     }
 }
 

@@ -138,11 +138,9 @@ class DebugIndentHelper
 {
    public:
     static string _indent;
-    DebugIndentHelper() { _indent += "    "; }
+    DebugIndentHelper() { _indent += "  "; }
     ~DebugIndentHelper()
     {
-        _indent.pop_back();
-        _indent.pop_back();
         _indent.pop_back();
         _indent.pop_back();
     }
@@ -433,32 +431,17 @@ Expression *AssignExpression::parse(Lexer &lex, Environment *env)
     AssignExpression *expr = nullptr;
 
     // condition or unary?
-    vector<Expression *> targets;
-    Expression *e = nullptr;
-
     // TODO: fix it, unary is not condition-expr
     // XXX: evaluation order?
-    while (true)
-    {
-        e = CondExpression::parse(lex, env);
-        if (IsAssignOperator(lex.peakNext().type))
-        {
-            lex.getNext();
-            targets.push_back(e);
-        }
-        else
-            break;
-    }
+    Expression *target = CondExpression::parse(lex, env);
+    if (!IsAssignOperator(lex.peakNext().type))
+        return target;
 
-    if (targets.empty())
-        return e;
-    else
-    {
-        expr = new AssignExpression();
-        expr->source = e;
-        expr->targets = targets;
-        return expr;
-    }
+    expr = new AssignExpression();
+    expr->t = lex.getNext().type;
+    expr->target = target;
+    expr->source = AssignExpression::parse(lex, env);
+    return expr;
 }
 Expression *CondExpression::parse(Lexer &lex, Environment *env)
 {
@@ -488,19 +471,14 @@ Expression *OrExpression::parse(Lexer &lex, Environment *env)
     Expression *e = AndExpression::parse(lex, env);
     if (lex.peakNext().type == BOOL_OR)
     {
+        lex.getNext();
         OrExpression *expr = new OrExpression();
-        expr->exprs.push_back(e);
-        while (lex.peakNext().type == BOOL_OR)
-        {
-            lex.getNext();
-            expr->exprs.push_back(AndExpression::parse(lex, env));
-        }
+        expr->left = e;
+        expr->right = OrExpression::parse(lex, env);
         return expr;
     }
     else
-    {
         return e;
-    }
 }
 Expression *AndExpression::parse(Lexer &lex, Environment *env)
 {
@@ -508,76 +486,56 @@ Expression *AndExpression::parse(Lexer &lex, Environment *env)
     Expression *e = BitOrExpression::parse(lex, env);
     if (lex.peakNext().type == BOOL_AND)
     {
+        lex.getNext();
         AndExpression *expr = new AndExpression();
-        expr->exprs.push_back(e);
-        while (lex.peakNext().type == BOOL_AND)
-        {
-            lex.getNext();
-            expr->exprs.push_back(BitOrExpression::parse(lex, env));
-        }
+        expr->left = e;
+        expr->right = AndExpression::parse(lex, env);
         return expr;
     }
     else
-    {
         return e;
-    }
 }
 Expression *BitOrExpression::parse(Lexer &lex, Environment *env)
 {
     Expression *e = BitXorExpression::parse(lex, env);
     if (lex.peakNext().type == BIT_OR)
     {
+        lex.getNext();
         BitOrExpression *expr = new BitOrExpression();
-        expr->exprs.push_back(e);
-        while (lex.peakNext().type == BIT_OR)
-        {
-            lex.getNext();
-            expr->exprs.push_back(BitXorExpression::parse(lex, env));
-        }
+        expr->left = e;
+        expr->right = BitOrExpression::parse(lex, env);
         return expr;
     }
     else
-    {
         return e;
-    }
 }
 Expression *BitXorExpression::parse(Lexer &lex, Environment *env)
 {
     Expression *e = BitAndExpression::parse(lex, env);
     if (lex.peakNext().type == BIT_XOR)
     {
+        lex.getNext();
         BitXorExpression *expr = new BitXorExpression();
-        expr->exprs.push_back(e);
-        while (lex.peakNext().type == BIT_XOR)
-        {
-            lex.getNext();
-            expr->exprs.push_back(BitAndExpression::parse(lex, env));
-        }
+        expr->left = e;
+        expr->right = BitXorExpression::parse(lex, env);
         return expr;
     }
     else
-    {
         return e;
-    }
 }
 Expression *BitAndExpression::parse(Lexer &lex, Environment *env)
 {
     Expression *e = EqExpression::parse(lex, env);
     if (lex.peakNext().type == BIT_AND)
     {
+        lex.getNext();
         BitAndExpression *expr = new BitAndExpression();
-        expr->exprs.push_back(e);
-        while (lex.peakNext().type == BIT_AND)
-        {
-            lex.getNext();
-            expr->exprs.push_back(EqExpression::parse(lex, env));
-        }
+        expr->left = e;
+        expr->right = BitAndExpression::parse(lex, env);
         return expr;
     }
     else
-    {
         return e;
-    }
 }
 Expression *EqExpression::parse(Lexer &lex, Environment *env)
 {
@@ -585,18 +543,13 @@ Expression *EqExpression::parse(Lexer &lex, Environment *env)
     if (lex.peakNext().type == REL_EQ || lex.peakNext().type == REL_NE)
     {
         EqExpression *expr = new EqExpression();
-        expr->exprs.push_back(e);
-        while (lex.peakNext().type == REL_EQ || lex.peakNext().type == REL_NE)
-        {
-            expr->ops.push_back(lex.getNext().type);
-            expr->exprs.push_back(RelExpression::parse(lex, env));
-        }
+        expr->op = lex.getNext().type;
+        expr->left = e;
+        expr->right = EqExpression::parse(lex, env);
         return expr;
     }
     else
-    {
         return e;
-    }
 }
 Expression *RelExpression::parse(Lexer &lex, Environment *env)
 {
@@ -605,19 +558,13 @@ Expression *RelExpression::parse(Lexer &lex, Environment *env)
         lex.peakNext().type == REL_GT || lex.peakNext().type == REL_GE)
     {
         RelExpression *expr = new RelExpression();
-        expr->exprs.push_back(e);
-        while (lex.peakNext().type == REL_LT || lex.peakNext().type == REL_LE ||
-               lex.peakNext().type == REL_GT || lex.peakNext().type == REL_GE)
-        {
-            expr->ops.push_back(lex.getNext().type);
-            expr->exprs.push_back(ShiftExpression::parse(lex, env));
-        }
+        expr->op = lex.getNext().type;
+        expr->left = e;
+        expr->right = RelExpression::parse(lex, env);
         return expr;
     }
     else
-    {
         return e;
-    }
 }
 Expression *ShiftExpression::parse(Lexer &lex, Environment *env)
 {
@@ -625,19 +572,13 @@ Expression *ShiftExpression::parse(Lexer &lex, Environment *env)
     if (lex.peakNext().type == BIT_SLEFT || lex.peakNext().type == BIT_SRIGHT)
     {
         ShiftExpression *expr = new ShiftExpression();
-        expr->exprs.push_back(e);
-        while (lex.peakNext().type == BIT_SLEFT ||
-               lex.peakNext().type == BIT_SRIGHT)
-        {
-            expr->ops.push_back(lex.getNext().type);
-            expr->exprs.push_back(AddExpression::parse(lex, env));
-        }
+        expr->op = lex.getNext().type;
+        expr->left = e;
+        expr->right = ShiftExpression::parse(lex, env);
         return expr;
     }
     else
-    {
         return e;
-    }
 }
 Expression *AddExpression::parse(Lexer &lex, Environment *env)
 {
@@ -646,18 +587,13 @@ Expression *AddExpression::parse(Lexer &lex, Environment *env)
     if (lex.peakNext().type == OP_ADD || lex.peakNext().type == OP_SUB)
     {
         AddExpression *expr = new AddExpression();
-        expr->exprs.push_back(e);
-        while (lex.peakNext().type == OP_ADD || lex.peakNext().type == OP_SUB)
-        {
-            expr->ops.push_back(lex.getNext().type);
-            expr->exprs.push_back(MulExpression::parse(lex, env));
-        }
+        expr->op = lex.getNext().type;
+        expr->left = e;
+        expr->right = AddExpression::parse(lex, env);
         return expr;
     }
     else
-    {
         return e;
-    }
 }
 Expression *MulExpression::parse(Lexer &lex, Environment *env)
 {
@@ -667,19 +603,13 @@ Expression *MulExpression::parse(Lexer &lex, Environment *env)
         lex.peakNext().type == OP_MOD)
     {
         MulExpression *expr = new MulExpression();
-        expr->exprs.push_back(e);
-        while (lex.peakNext().type == OP_MUL || lex.peakNext().type == OP_DIV ||
-               lex.peakNext().type == OP_MOD)
-        {
-            expr->ops.push_back(lex.getNext().type);
-            expr->exprs.push_back(CastExpression::parse(lex, env));
-        }
+        expr->op = lex.getNext().type;
+        expr->left = e;
+        expr->right = MulExpression::parse(lex, env);
         return expr;
     }
     else
-    {
         return e;
-    }
 }
 // TODO: implement this
 Expression *CastExpression::parse(Lexer &lex, Environment *env)
@@ -741,14 +671,107 @@ Expression *UnaryExpression::parse(Lexer &lex, Environment *env)
     }
     else
     {
-        return PostfixExpression::parse(lex, env);
+        return PostfixExpression::parse(lex, env, PrimaryExpression::parse(lex, env));
     }
 }
-// TODO: implement this
-Expression *PostfixExpression::parse(Lexer &lex, Environment *env)
+/*
+ * primary-expr
+ * postfix-expr '[' expr ']'
+ * postfix-expr '(' [argument-expr-list] ')'
+ * postfix-expr '.' identifier
+ * postfix-expr '->' identifier
+ * postfix-expr '++'
+ * postfix-expr '--'
+ */
+bool __isPostfixOperator(TokenType t)
+{
+    bool is = false;
+    switch (t)
+    {
+        case LSB:
+        case LP:
+        case REFER_TO:
+        case POINT_TO:
+        case OP_INC:
+        case OP_DEC:
+            is = true;
+            break;
+        default:
+            break;
+    }
+    return is;
+}
+Expression *PostfixExpression::parse(Lexer &lex, Environment *env, Expression *target)
 {
     DebugParseTree(PostfixExpression);
-    return PrimaryExpression::parse(lex, env);
+    if (__isPostfixOperator(lex.peakNext().type))
+    {
+        PostfixExpression *expr = new PostfixExpression();
+        expr->target = target;
+        switch (lex.peakNext().type)
+        {
+            case LSB:
+                EXPECT(LSB);
+                expr->op = POSTFIX_INDEX;
+                expr->index = CommaExpression::parse(lex, env);
+                if (expr->index == nullptr)
+                    SyntaxError("Expect expression.");
+                if (expr->index->type()->type() != TC_INT)
+                    SyntaxError("Expect integral type as array index.");
+                EXPECT(RSB);
+                break;
+            case LP:
+                EXPECT(LP);
+                expr->op = POSTFIX_CALL;
+                if (lex.peakNext().type != RP)
+                {
+                    while (true)
+                    {
+                        expr->params.push_back(AssignExpression::parse(lex, env));
+                        if (lex.peakNext().type == OP_COMMA)
+                            lex.getNext();
+                        else
+                            break;
+                    }
+                }
+                EXPECT(RP);
+                break;
+            case REFER_TO:
+                lex.getNext();
+                expr->op = POSTFIX_OBJECT_OFFSET;
+                expr->member = lex.symbolName(EXPECT_GET(SYMBOL).symid);
+                break;
+            case POINT_TO:
+                lex.getNext();
+                expr->op = POSTFIX_POINTER_OFFSET;
+                expr->member = lex.symbolName(EXPECT_GET(SYMBOL).symid);
+                break;
+            case OP_INC:
+                lex.getNext();
+                expr->op = POSTFIX_INC;
+                break;
+            case OP_DEC:
+                lex.getNext();
+                expr->op = POSTFIX_DEC;
+                break;
+            default:
+                SyntaxError("Should not reach here.");
+                break;
+        }
+
+        Expression *next = PostfixExpression::parse(lex, env, expr);
+        if (next == expr)
+            return expr;
+        else
+        {
+            dynamic_cast<PostfixExpression *>(next)->target = expr;
+            return next;
+        }
+    }
+    else
+    {
+        return target;
+    }
 }
 bool __isPrimaryExpression(TokenType t)
 {
@@ -786,7 +809,7 @@ Expression *PrimaryExpression::parse(Lexer &lex, Environment *env)
                 SyntaxError("Symbol '" + lex.symbolName(p->t.symid).toString() + "' not found");
             break;
         default:
-            SyntaxError("Unsupported primary expression");
+            SyntaxErrorEx("Unsupported primary expression");
             break;
     }
     return p;

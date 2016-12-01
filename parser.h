@@ -1,7 +1,6 @@
 #pragma once
 
 #include <iostream>
-#include <sstream>
 #include <stack>
 using namespace std;
 
@@ -19,7 +18,7 @@ bool IsUnaryOperator(TokenType t);
 class SyntaxNode
 {
    public:
-    virtual string debugString() { return ""; }
+    virtual string debugString() { return "~<?~>"; }
 };
 class Expression : public SyntaxNode
 {
@@ -44,6 +43,10 @@ class LabelStatement : public SyntaxNode
 {
    public:
     static SyntaxNode *parse(Lexer &lex, Environment *env);
+    virtual string debugString()
+    {
+        return "~<LabelStatement~>";
+    }
 };
 class CompoundStatement : public SyntaxNode
 {
@@ -59,7 +62,7 @@ class CompoundStatement : public SyntaxNode
         {
             s += stmt->debugString();
         }
-        s += "<}\n";
+        s += "<\n}\n";
         return s;
     }
 };
@@ -70,7 +73,12 @@ class ExpressionStatement : public SyntaxNode
 
    public:
     static SyntaxNode *parse(Lexer &lex, Environment *env);
+    virtual string debugString()
+    {
+        return expr->debugString();
+    }
 };
+// TODO: implement switch
 class SelectionStatement : public SyntaxNode
 {
     Expression *expr;
@@ -81,7 +89,14 @@ class SelectionStatement : public SyntaxNode
     static SyntaxNode *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
-        string s = "Selection>\n";
+        string s;
+        // switch (type)
+        // {
+        //     case IF: s += "if"; break;
+        //     case SWITCH: s += "switch"; break;
+        //     default: break;
+        // }
+        s += "if>\n";
         s += expr->debugString();
         s += stmt->debugString();
         if (stmt2) s += stmt2->debugString();
@@ -115,6 +130,7 @@ class IterationStatement : public SyntaxNode
         if (expr) s += expr->debugString();
         if (expr2) s += expr2->debugString();
         if (expr3) s += expr3->debugString();
+        if (stmt) s += stmt->debugString();
         s += "<\n";
         return s;
     }
@@ -155,11 +171,14 @@ class CommaExpression : public Expression
     vector<Expression *> exprs;
 
    public:
-    virtual TypeBase *type() const { return nullptr; }
+    virtual TypeBase *type() const
+    {
+        return exprs.back()->type();
+    }
     static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
-        string s = "expr>\n";
+        string s = ",>\n";
         for (SyntaxNode *e : exprs) s += e->debugString();
         s += "<\n";
         return s;
@@ -171,6 +190,8 @@ class AssignExpression : public Expression
     // treat unary as condition
     // vector<UnaryExpression *> targets;
     vector<Expression *> targets;
+    TokenType t;
+    Expression *target;
     Expression *source;
 
    public:
@@ -179,7 +200,8 @@ class AssignExpression : public Expression
     virtual string debugString()
     {
         string s = "=>\n";
-        for (SyntaxNode *t : targets) s += t->debugString();
+        // for (SyntaxNode *t : targets) s += t->debugString();
+        if (target) s += target->debugString();
         if (source) s += source->debugString();
         s += "<\n";
         return s;
@@ -206,7 +228,7 @@ class CondExpression : public Expression
 };
 class OrExpression : public Expression
 {
-    vector<Expression *> exprs;
+    Expression *left, *right;
 
    public:
     virtual TypeBase *type() const { return nullptr; }
@@ -214,14 +236,15 @@ class OrExpression : public Expression
     virtual string debugString()
     {
         string s = "||>\n";
-        for (SyntaxNode *e : exprs) s += e->debugString();
+        if (left) s += left->debugString();
+        if (right) s += right->debugString();
         s += "<\n";
         return s;
     }
 };
 class AndExpression : public Expression
 {
-    vector<Expression *> exprs;
+    Expression *left, *right;
 
    public:
     virtual TypeBase *type() const { return nullptr; }
@@ -229,14 +252,15 @@ class AndExpression : public Expression
     virtual string debugString()
     {
         string s = "&&>\n";
-        for (SyntaxNode *e : exprs) s += e->debugString();
+        if (left) s += left->debugString();
+        if (right) s += right->debugString();
         s += "<\n";
         return s;
     }
 };
 class BitOrExpression : public Expression
 {
-    vector<Expression *> exprs;
+    Expression *left, *right;
 
    public:
     virtual TypeBase *type() const { return nullptr; }
@@ -244,14 +268,15 @@ class BitOrExpression : public Expression
     virtual string debugString()
     {
         string s = "|>\n";
-        for (SyntaxNode *e : exprs) s += e->debugString();
+        if (left) s += left->debugString();
+        if (right) s += right->debugString();
         s += "<\n";
         return s;
     }
 };
 class BitXorExpression : public Expression
 {
-    vector<Expression *> exprs;
+    Expression *left, *right;
 
    public:
     virtual TypeBase *type() const { return nullptr; }
@@ -259,14 +284,15 @@ class BitXorExpression : public Expression
     virtual string debugString()
     {
         string s = "^>\n";
-        for (SyntaxNode *e : exprs) s += e->debugString();
+        if (left) s += left->debugString();
+        if (right) s += right->debugString();
         s += "<\n";
         return s;
     }
 };
 class BitAndExpression : public Expression
 {
-    vector<Expression *> exprs;
+    Expression *left, *right;
 
    public:
     virtual TypeBase *type() const { return nullptr; }
@@ -274,136 +300,127 @@ class BitAndExpression : public Expression
     virtual string debugString()
     {
         string s = "&>\n";
-        for (SyntaxNode *e : exprs) s += e->debugString();
+        if (left) s += left->debugString();
+        if (right) s += right->debugString();
         s += "<\n";
         return s;
     }
 };
 class EqExpression : public Expression
 {
-    vector<Expression *> exprs;
-    vector<TokenType> ops;
+    Expression *left, *right;
+    TokenType op;
 
    public:
     virtual TypeBase *type() const { return nullptr; }
     static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
-        string s = "equal>\n";
-        s += exprs[0]->debugString();
-        for (size_t i = 1; i < exprs.size(); ++i)
-        {
-            if (ops[i] == REL_EQ) s += "==\n";
-            else s += "!=\n";
-            s += exprs[i]->debugString();
-        }
+        string s;
+        if (op == REL_EQ) s += "==";
+        else s += "!=";
+        s += ">\n";
+        if (left) s += left->debugString();
+        if (right) s += right->debugString();
         s += "<\n";
         return s;
     }
 };
 class RelExpression : public Expression
 {
-    vector<Expression *> exprs;
-    vector<TokenType> ops;
+    Expression *left, *right;
+    TokenType op;
 
    public:
     virtual TypeBase *type() const { return nullptr; }
     static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
-        string s = "rel>\n";
-        s += exprs[0]->debugString();
-        for (size_t i = 1; i < exprs.size(); ++i)
+        string s;
+        switch (op)
         {
-            switch (ops[i])
-            {
-                case REL_GT: s += "\v>\n"; break;
-                case REL_GE: s += "\v>=\n"; break;
-                case REL_LT: s += "\v<\n"; break;
-                case REL_LE: s += "\v<=\n"; break;
-                default: break;
-            }
-            s += exprs[i]->debugString();
+            case REL_GT: s += "~>\n"; break;
+            case REL_GE: s += "~>=\n"; break;
+            case REL_LT: s += "~<\n"; break;
+            case REL_LE: s += "~<=\n"; break;
+            default: break;
         }
+        s += ">\n";
+        if (left) s += left->debugString();
+        if (right) s += right->debugString();
         s += "<\n";
         return s;
     }
 };
 class ShiftExpression : public Expression
 {
-    vector<Expression *> exprs;
-    vector<TokenType> ops;
+    Expression *left, *right;
+    TokenType op;
 
    public:
     virtual TypeBase *type() const { return nullptr; }
     static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
-        string s = "shift>\n";
-        s += exprs[0]->debugString();
-        for (size_t i = 1; i < exprs.size(); ++i)
+        string s;
+        switch (op)
         {
-            switch (ops[i])
-            {
-                case BIT_SLEFT: s += "\v<\v<\n"; break;
-                case BIT_SRIGHT: s += "\v>\v>\n"; break;
-                default: break;
-            }
-            s += exprs[i]->debugString();
+            case BIT_SLEFT: s += "~<~<\n"; break;
+            case BIT_SRIGHT: s += "~>~>\n"; break;
+            default: break;
         }
+        s += ">\n";
+        if (left) s += left->debugString();
+        if (right) s += right->debugString();
         s += "<\n";
         return s;
     }
 };
 class AddExpression : public Expression
 {
-    vector<Expression *> exprs;
-    vector<TokenType> ops;
+    Expression *left, *right;
+    TokenType op;
 
    public:
     virtual TypeBase *type() const { return nullptr; }
     static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
-        string s = "+->\n";
-        s += exprs[0]->debugString();
-        for (size_t i = 1; i < exprs.size(); ++i)
+        string s;
+        switch (op)
         {
-            switch (ops[i])
-            {
-                case OP_ADD: s += "+\n"; break;
-                case OP_SUB: s += "-\n"; break;
-                default: break;
-            }
-            s += exprs[i]->debugString();
+            case OP_ADD: s += "+\n"; break;
+            case OP_SUB: s += "-\n"; break;
+            default: break;
         }
+        s += ">\n";
+        if (left) s += left->debugString();
+        if (right) s += right->debugString();
         s += "<\n";
         return s;
     }
 };
 class MulExpression : public Expression
 {
-    vector<Expression *> exprs;
-    vector<TokenType> ops;
+    Expression *left, *right;
+    TokenType op;
 
    public:
     virtual TypeBase *type() const { return nullptr; }
     static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
-        string s = "*/%>\n";
-        s += exprs[0]->debugString();
-        for (size_t i = 1; i < exprs.size(); ++i)
+        string s;
+        switch (op)
         {
-            switch (ops[i])
-            {
-                case OP_MUL: s += "*\n"; break;
-                case OP_DIV: s += "/\n"; break;
-                case OP_MOD: s += "%\n"; break;
-                default: break;
-            }
-            s += exprs[i]->debugString();
+            case OP_MUL: s += "*\n"; break;
+            case OP_DIV: s += "/\n"; break;
+            case OP_MOD: s += "%\n"; break;
+            default: break;
         }
+        s += ">\n";
+        if (left) s += left->debugString();
+        if (right) s += right->debugString();
         s += "<\n";
         return s;
     }
@@ -430,11 +447,62 @@ class UnaryExpression : public Expression
 // TODO: finish this!
 class PostfixExpression : public Expression
 {
-    // indexing, func-call, dot-operator, point-to-operator,
-    // post-inc, post-dec
+    typedef enum PostfixOperation {
+        POSTFIX_INDEX,
+        POSTFIX_CALL,
+        POSTFIX_OBJECT_OFFSET,
+        POSTFIX_POINTER_OFFSET,
+        POSTFIX_INC,
+        POSTFIX_DEC
+    } PostfixOperation;
+    PostfixOperation op;
+    Expression *target;
+    union {
+        Expression *index; // array index
+        vector<Expression *> params; // function arguments
+        StringRef member; // member id
+    };
+
    public:
+    PostfixExpression() : params() {}
     virtual TypeBase *type() const { return nullptr; }
-    static Expression *parse(Lexer &lex, Environment *env);
+    static Expression *parse(Lexer &lex, Environment *env, Expression *target);
+    virtual string debugString()
+    {
+        assert( target != nullptr );
+        string s;
+        switch (op)
+        {
+            case POSTFIX_INDEX:
+                s += "[]>\n";
+                s += index->debugString();
+                break;
+            case POSTFIX_CALL:
+                s += "()>\n";
+                for (Expression *e : params)
+                    s += e->debugString();
+                break;
+            case POSTFIX_OBJECT_OFFSET:
+                s += ".>\n";
+                s += member.toString();
+                break;
+            case POSTFIX_POINTER_OFFSET:
+                s += "-~>>\n";
+                s += member.toString();
+                break;
+            case POSTFIX_INC:
+                s += "++>\n";
+                break;
+            case POSTFIX_DEC:
+                s += "-->\n";
+                break;
+            default:
+                break;
+        }
+        s += target->debugString();
+        s += "<\n";
+        return s;
+    }
 };
 // TODO: finish this!
 class PrimaryExpression : public Expression
@@ -451,10 +519,19 @@ class PrimaryExpression : public Expression
     static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
-        stringstream ss;
         string s;
-        ss << t << endl;
-        ss >> s;
+        switch (t.type)
+        {
+            case SYMBOL:
+                s += symbol->name.toString();
+                break;
+            case CONST_INT:
+                s += to_string(ival);
+                break;
+            default:
+                break;
+        }
+        s += '\n';
         return s;
     }
 };

@@ -76,32 +76,133 @@ class Environment;
 // }
 // warning-list: compare unsigned int with int
 
-template <typename T>
-class Additive
+enum ETypeOperations
 {
+    TOp_ADD = 1,
+    TOp_SUB = (1 << 1),
+    TOp_INC = (1 << 2),
+    TOp_DEC = (1 << 3),
+    TOp_MUL = (1 << 4),
+    TOp_DIV = (1 << 5),
+    TOp_MOD = (1 << 6),
+    TOp_EVAL = (1 << 7),
+    TOp_ADDR = (1 << 8),
+    TOp_ASSIGN = (1 << 9),
+    TOp_INDEX = (1 << 10),
+    TOp_OFFSET = (1 << 11)
+};
+
+class IntType;
+
+class OperationMask
+{
+    int mask;
+
+   protected:
+    void addOperation(ETypeOperations op)
+    {
+        mask |= op;
+    }
+
    public:
-    virtual void add(T *) = 0;
-    virtual void sub(T *) = 0;
+    bool hasOperation(ETypeOperations op) const
+    {
+        return (mask & op);
+    }
 };
 template <typename T>
-class Multiplicative
+class Additive : virtual public OperationMask
 {
    public:
-    virtual void mul(T *) = 0;
-    virtual void div(T *) = 0;
-    virtual void mod(T *) = 0;
+    Additive<T>()
+    {
+        addOperation(TOp_ADD);
+        addOperation(TOp_SUB);
+        addOperation(TOp_INC);
+        addOperation(TOp_DEC);
+    }
+    virtual void add(T *) { /* debug */ };
+    virtual void sub(T *) { /* debug */ };
+    virtual void inc(T *) { /* debug */ };
+    virtual void dec(T *) { /* debug */ };
 };
 template <typename T>
-class Evaluable // r-value
+class Multiplicative : virtual public OperationMask
 {
    public:
-    virtual T * eval() = 0;
+    Multiplicative<T>()
+    {
+        addOperation(TOp_MUL);
+        addOperation(TOp_DIV);
+        addOperation(TOp_MOD);
+    }
+    virtual void mul(T *) { /* debug */ };
+    virtual void div(T *) { /* debug */ };
+    virtual void mod(T *) { /* debug */ };
+};
+template <typename T>  // r-value
+class Evaluable : virtual public OperationMask
+{
+   public:
+    Evaluable<T>()
+    {
+        addOperation(TOp_EVAL);
+    }
+    virtual T *eval() { /* debug */ return nullptr; };
+};
+template <typename T>  // l-value
+class Addressable : virtual public OperationMask
+{
+   public:
+    Addressable<T>()
+    {
+        addOperation(TOp_ADDR);
+    }
+    virtual void *addr() { /* debug */ return nullptr; };
+};
+template <typename T>  // l-value
+class Assignable : virtual public OperationMask
+{
+   public:
+    Assignable<T>()
+    {
+        addOperation(TOp_ASSIGN);
+    }
+    virtual void assign(T *) { /* debug */ };
 };
 template <typename T>
-class Addressable // l-value
+class Indexable : virtual public OperationMask
 {
    public:
-    virtual void *addr() = 0;
+    Indexable<T>()
+    {
+        addOperation(TOp_INDEX);
+    }
+    virtual void index(IntType *) { /* debug */ };
+};
+template <typename T>  // struct member access
+class Offsetable : virtual public OperationMask
+{
+   public:
+    Offsetable<T>()
+    {
+        addOperation(TOp_OFFSET);
+    }
+    virtual void offset(StringRef ) { /* debug */ };
+};
+
+// Group class
+template <typename T>
+class Scalar : public Additive<T>, public Multiplicative<T>
+{
+};
+template <typename T>
+class LValue : public Evaluable<T>, public Addressable<T>, public Assignable<T>
+{
+};
+template <typename T>
+class RValue : public Evaluable<T>, public Addressable<T>
+{
 };
 
 // Type Representation
@@ -118,7 +219,7 @@ enum ETypeClass
     TC_ENUM
 };
 
-class TypeBase : public ListLike<TypeBase>
+class TypeBase : public ListLike<TypeBase>, virtual public OperationMask
 {
    public:
     virtual ETypeClass type() const = 0;
@@ -150,7 +251,7 @@ class VoidType : public TypeBase
 // TC_UInt: unsigned (int)
 // TC_LONG: (signed) long (int)
 // TC_ULONG: unsigned long (int)
-class IntType : public TypeBase
+class IntType : public TypeBase, public LValue<IntType>, public Scalar<IntType>
 {
    public:
     // IntType(int bytes, bool is_signed);
@@ -170,7 +271,9 @@ class IntType : public TypeBase
 // TC_FLOAT: float
 // TC_DOUBLE: double
 // TC_LDOUBLE: long double
-class FloatType : public TypeBase
+class FloatType : public TypeBase,
+                  public LValue<FloatType>,
+                  public Scalar<FloatType>
 {
    public:
     virtual ETypeClass type() const
@@ -186,7 +289,9 @@ class FloatType : public TypeBase
         return other.type() == TC_FLOAT;
     }
 };
-class PointerType : public TypeBase
+class PointerType : public TypeBase,
+                    public LValue<PointerType>,
+                    public Indexable<PointerType>
 {
    public:
     TypeBase *target() const
@@ -210,7 +315,10 @@ class PointerType : public TypeBase
         return target()->equal(*(o.target()));
     }
 };
-class ArrayType : public TypeBase
+// Array is const-pointer, or an address constant
+class ArrayType : public TypeBase,
+                  public RValue<ArrayType>,
+                  public Indexable<ArrayType>
 {
    public:
     vector<int> axis;
@@ -238,7 +346,9 @@ class ArrayType : public TypeBase
         return length == o.length && target()->equal(*(o.target()));
     }
 };
-class FuncType : public TypeBase
+// Function is const-pointer, or an address constant
+class FuncType : public TypeBase,
+                 public RValue<FuncType>
 {
    public:
     SyntaxNode *body;
@@ -262,7 +372,7 @@ class FuncType : public TypeBase
         return other.type() == TC_FUNC;
     }
 };
-class StructType : public TypeBase
+class StructType : public TypeBase, public LValue<StructType>, public Offsetable<StructType>
 {
     vector<struct Symbol *> members;
 
@@ -303,7 +413,7 @@ class StructType : public TypeBase
             cout << '\t' << (*m) << endl;
     }
 };
-class UnionType : public TypeBase
+class UnionType : public TypeBase, public LValue<UnionType>, public Offsetable<StructType>
 {
     // vector<Symbol> members;
 
@@ -321,7 +431,7 @@ class UnionType : public TypeBase
         return other.type() == TC_UNION;
     }
 };
-class EnumType : public TypeBase
+class EnumType : public TypeBase, public LValue<EnumType>
 {
     // vector<Symbol> members;
 
