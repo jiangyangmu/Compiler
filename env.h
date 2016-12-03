@@ -9,14 +9,17 @@ class Environment : public TreeLike<Environment>
 {
     static int idgen;
     int id;
-    TypeTable types;
+    SymbolTable symbols;
 
    public:
-    SymbolTable symbols;
+    TypeTable factory;
     Environment() : id(idgen++) {}
+
     Symbol *find(ESymbolCategory category, StringRef name) const;
+    void add(Symbol *s);
+    void debugPrint(Lexer &lex) const;
+
     static void ParseLocalDeclaration(Lexer &lex, Environment *env);
     static void ParseGlobalDeclaration(Lexer &lex, Environment *env);
     static TypeBase *ParseTypename(Lexer &lex, Environment *env);
-    void debugPrint(Lexer &lex);
 };

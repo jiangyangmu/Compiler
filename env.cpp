@@ -2,15 +2,28 @@
 #include "parser.h"
 #include "type.h"
 
-// static struct
-// {
-//     IntType i8, ui8, i16, ui16, i32, ui32, i64, ui64;
-//     FloatType f32, f64;
-// } primitives;
-
 #include <iostream>
 using namespace std;
-string DebugTypeClass(ETypeClass tc)
+
+TypeBase *TypeTable::newIntegral(TokenType type, bool is_signed)
+{
+    static IntType i8(1, true), u8(1, false);
+    static IntType i16(2, true), u16(2, false);
+    static IntType i32(4, true), u32(4, false);
+    static IntType i64(8, true), u64(8, false);
+    IntType *i = nullptr;
+    switch (type)
+    {
+        case TYPE_CHAR: i = is_signed ? &i8 : &u8; break;
+        case TYPE_SHORT: i = is_signed ? &i16 : &u16; break;
+        case TYPE_INT: i = is_signed ? &i32 : &u32; break;
+        case TYPE_LONG: i = is_signed ? &i64 : &u64; break;
+        default: SyntaxError("Invalid Integral Type"); break;
+    }
+    return new IntType(*i);
+}
+
+static string DebugTypeClass(ETypeClass tc)
 {
     switch (tc)
     {
@@ -83,10 +96,10 @@ void __debugPrint(string &&s)
         }
     }
 }
-void SymbolTable::debugPrint(Lexer &lex)
+void SymbolTable::debugPrint(Lexer &lex) const
 {
     cout << "[Symbol Table] " << symbols.size() << " symbols" << endl;
-    for (Symbol *s : symbols)
+    for (const Symbol *s : symbols)
     {
         cout << "  " << (*s) << endl;
         if (s->type)
@@ -98,7 +111,8 @@ void SymbolTable::debugPrint(Lexer &lex)
                     break;
                 case TC_FUNC:
                     if (dynamic_cast<FuncType *>(s->type)->body)
-                        __debugPrint(dynamic_cast<FuncType *>(s->type)->body->debugString());
+                        cout << "\t{ ... }" << endl;
+                    //     __debugPrint(dynamic_cast<FuncType *>(s->type)->body->debugString());
                     break;
                 default:
                     break;
@@ -108,7 +122,7 @@ void SymbolTable::debugPrint(Lexer &lex)
 }
 
 int Environment::idgen = 0;
-void Environment::debugPrint(Lexer &lex)
+void Environment::debugPrint(Lexer &lex) const
 {
     cout << "Environment [" << id << "] with " << getChildren().size()
          << " children:";
@@ -131,6 +145,27 @@ Symbol *Environment::find(ESymbolCategory category, StringRef name) const
     }
     return s;
 }
+void Environment::add(Symbol *s)
+{
+    assert(s != nullptr);
+    Symbol *dup = symbols.find(s->category, s->name);
+    if (dup != nullptr)
+    {
+        assert(dup->type != nullptr);
+        if (dup->type->type() == TC_FUNC)
+        {
+            FuncType *func = dynamic_cast<FuncType *>(dup->type);
+            assert(func != nullptr);
+            if (func->body != nullptr)
+                SyntaxError("Function '" + s->name.toString() + "' redefined.");
+        }
+        else
+            SyntaxError("Symbol '" + s->name.toString() + "' redefined.");
+    }
+    else if (find(s->category, s->name) != nullptr)
+        SyntaxWarning("Symbol '" + s->name.toString() + "' override outer definition.");
+    symbols.add(s);
+}
 
 TypeBase *__parseVoidType(Lexer &lex)
 {
@@ -142,21 +177,44 @@ TypeBase *__parseVoidType(Lexer &lex)
     lex.getNext();
     return new VoidType();
 }
-TypeBase *__parseIntegralType(Lexer &lex)
+TypeBase *__parseIntegralType(Lexer &lex, Environment *env)
 {
     // cout << "__parseIntegralType()" << endl;
-    TypeBase *i = nullptr;
-    switch (lex.getNext().type)
+    bool is_signed = false;
+    switch (lex.peakNext().type)
     {
-        case TYPE_INT:    // i = &primitives.i32; break;
-        case TYPE_CHAR:   // i = &primitives.i8; break;
-        case TYPE_SHORT:  // i = &primitives.i16; break;
-        case TYPE_LONG:   // i = &primitives.i64; break;
-            i = new IntType();
-            break;
-        default: SyntaxError("Unexpected token");
+        case SIGNED: is_signed = true; lex.getNext(); break;
+        case UNSIGNED: lex.getNext(); break;
+        default: break;
     }
-    return i;
+
+    TokenType type = TYPE_INT;
+    switch (lex.peakNext().type)
+    {
+        case TYPE_CHAR:
+            type = TYPE_CHAR;
+            lex.getNext();
+            break;
+        case TYPE_SHORT:
+            type = TYPE_SHORT;
+            lex.getNext();
+            if (lex.peakNext().type == TYPE_INT)
+                lex.getNext();
+            break;
+        case TYPE_LONG:
+            type = TYPE_LONG;
+            lex.getNext();
+            if (lex.peakNext().type == TYPE_INT)
+                lex.getNext();
+            break;
+        case TYPE_INT:
+            lex.getNext();
+            break;
+        default:
+            SyntaxError("Unexpected token");
+            break;
+    }
+    return env->factory.newIntegral(type, is_signed);
 }
 TypeBase *__parseFloatingType(Lexer &lex)
 {
@@ -185,7 +243,7 @@ TypeBase *__parseStructType(Lexer &lex, Environment *env)
         // use defined struct
         StringRef tag = lex.symbolName(lex.getNext().symid);
         // TODO: not defined yet, incomplete type?
-        return env->symbols.find(SC_TAG, tag)->type;
+        return env->find(SC_TAG, tag)->type;
     }
     else
     {
@@ -232,7 +290,7 @@ TypeBase *__parseStructType(Lexer &lex, Environment *env)
         struct_tag->type = st;
         struct_tag->addr = 0;
 
-        env->symbols.add(struct_tag);
+        env->add(struct_tag);
 
         return st;
     }
@@ -244,7 +302,7 @@ TypeBase *__parseEnumType(Lexer &lex, Environment *env)
     {
         // use defined enum
         StringRef tag = lex.symbolName(lex.getNext().symid);
-        return env->symbols.find(SC_TAG, tag)->type;
+        return env->find(SC_TAG, tag)->type;
     }
     else
     {
@@ -270,7 +328,7 @@ TypeBase *__parseEnumType(Lexer &lex, Environment *env)
             e->name = id;
             e->type = et;
             e->value = value++;
-            env->symbols.add(e);
+            env->add(e);
             if (lex.peakNext().type == OP_COMMA)
                 lex.getNext();
             else if (lex.peakNext().type == BLK_END)
@@ -284,7 +342,7 @@ TypeBase *__parseEnumType(Lexer &lex, Environment *env)
         enum_tag->type = et;
         enum_tag->addr = 0;
 
-        env->symbols.add(enum_tag);
+        env->add(enum_tag);
 
         return et;
     }
@@ -338,7 +396,7 @@ TypeBase *__parseFuncType(Lexer &lex, Environment *env)
     {
         // p.location = location;
         // location += p.type->size();
-        f->env->symbols.add(*p);
+        f->env->add(*p);
     }
 
     return f;
@@ -397,12 +455,12 @@ TypeBase *__parseSpecifier(Lexer &lex, Environment *env)
         case UNSIGNED:
         case TYPE_INT:
         case TYPE_SHORT:
-        case TYPE_CHAR: t = __parseIntegralType(lex); break;
+        case TYPE_CHAR: t = __parseIntegralType(lex, env); break;
         case TYPE_LONG:
             if (lex.peakNext(1).type == TYPE_DOUBLE)
                 t = __parseFloatingType(lex);
             else
-                t = __parseIntegralType(lex);
+                t = __parseIntegralType(lex, env);
             break;
         case TYPE_DOUBLE:
         case TYPE_FLOAT: t = __parseFloatingType(lex); break;
@@ -471,7 +529,7 @@ TypeBase *__parseDeclarator(Lexer &lex, Environment *env, TypeBase *spec,
 void __parseDeclaration(Lexer &lex, Environment *env, bool allow_func_def)
 {
     // cout << "__parseDeclaration()" << endl;
-    StringRef symbol;
+    StringRef symbol("<anonymous-symbol>");
     TypeBase *spec = __parseSpecifier(lex, env);
     TypeBase *decl = __parseDeclarator(lex, env, spec, symbol);
     if (lex.peakNext().type == BLK_BEGIN)
@@ -489,7 +547,7 @@ void __parseDeclaration(Lexer &lex, Environment *env, bool allow_func_def)
         f->name = symbol;
         f->type = func;
         f->addr = 0;
-        env->symbols.add(f);
+        env->add(f);
     }
     else
     {
@@ -509,7 +567,7 @@ void __parseDeclaration(Lexer &lex, Environment *env, bool allow_func_def)
             v->name = symbol;
             v->type = decl;
             v->addr = 0;
-            env->symbols.add(v);
+            env->add(v);
             if (lex.peakNext().type == OP_COMMA)
             {
                 lex.getNext();

@@ -35,6 +35,18 @@ pointer-to-pointer(from, to)
 ------------------------------------------------------------------------
 Integral & Floating & Enum-Constant
 
+>>>>>>>>>>>>>>>>>>>>>
+TC_CHAR: char
+TC_UCHAR: unsigned char
+TC_SCHAR: signed char
+TC_SHORT: (signed) short (int)
+TC_USHORT: unsigned short (int)
+TC_INT: (signed) (int)
+TC_UINT: unsigned (int)
+TC_LONG: (signed) long (int)
+TC_ULONG: unsigned long (int)
+<<<<<<<<<<<<<<<<<<<<<
+
 Enum-Constant <=> int
 
 [Signed and unsigned integers]

@@ -103,79 +103,10 @@ in the same layer, there are 4 separate namespaces:
     -> other(object, enum-constant)
 
 ---------------------------------------------
-关键函数伪代码
+Q: 类型系统 和 表达式 的交互？
 
-ParseType():
-    S = parse specifier (type = T)
-    P, P', N, F = parse declarator
+某个表达式的类型：自己知道 or 合成
+类型约束：类型是否支持此表达式
 
-    S.parent = P
-    P'.parent = F
-    F.parent = N
-    return N
-
-ParseSpecifier():
-    make S
-    case t.type of
-        int -> S = int
-        float -> S = float
-        struct -> S = parse struct
-        enum -> S = parse enum
-    end
-    return S
-
-ParsePointer():
-    if '*':
-        drop '*', make P
-        Pn, Pn' = ParsePointer()
-        if Pn != <null>:
-            P.parent = Pn
-            return P, Pn'
-        else:
-            return P, P
-        fi
-    else:
-        return <null>, <null>
-    fi
-
-ParseDeclarator():
-    P, P' = parse pointer (type = *)
-
-    if '(':
-        N = parse declarator
-        expect ')'
-    else:
-        N = parse identifier
-    fi
-
-    if '[':
-        F = parse array (type = [])
-    elif '(':
-        F = parse function (type = ())
-        expect ')'
-    else：
-        nop
-    fi
-
-    return P, P', N, F
-
-ParseArray():
-    make F
-    while '[':
-        drop '['
-        I = parse value
-        F.push_dimension(I)
-        expect ']'
-    end
-    return F
-
-ParseFunction():
-    make F
-    expect '('
-    while not ')':
-        N = parse type
-        F.add_param({N.symbol, N})
-        expect ',' or ')'
-    end
-    expect ')'
-    return F
+TODO:
+    1. 修正表达式结合性，比如 AddExpression

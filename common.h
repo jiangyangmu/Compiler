@@ -118,7 +118,7 @@ class StringRef
         return s;
     }
 
-    const char operator[](size_t offset) const
+    char operator[](size_t offset) const
     {
         assert((begin + offset) < end);
         return begin[offset];
@@ -170,6 +170,9 @@ class TreeLike
     std::vector<T *> children;
 
    public:
+    TreeLike<T>() : parent_(nullptr)
+    {
+    }
     virtual ~TreeLike<T>()
     {
     }
@@ -199,6 +202,9 @@ class ListLike
     T *next_, *prev_;
 
    public:
+    ListLike<T>() : next_(nullptr), prev_(nullptr)
+    {
+    }
     virtual ~ListLike<T>()
     {
     }
@@ -237,6 +243,27 @@ class ListLike
 
 #ifndef DEBUG_UTILS
 #define DEBUG_UTILS
+
+// TODO: easy way to print enum constant as string
+
+#define NON_COPYABLE(type) \
+    type() = default;      \
+    type(type &) = default;
+
+#define SyntaxWarning(msg)                                      \
+    do                                                          \
+    {                                                           \
+        cout << "Warning: " << msg << " at " << __FILE__ << ':' \
+             << to_string(__LINE__) << endl;                    \
+    } while (0)
+
+#define SyntaxWarningEx(msg)                                              \
+    do                                                                    \
+    {                                                                     \
+        cout << "Warning: " << msg << " at " << __FILE__ << ':'           \
+             << to_string(__LINE__) << '\t' << "'" << lex.peakNext() \
+             << "' at " << lex.peakNext().line << endl;                 \
+    } while (0)
 
 #define SyntaxError(msg)                                       \
     do                                                         \

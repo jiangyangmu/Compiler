@@ -22,8 +22,12 @@ class SyntaxNode
 };
 class Expression : public SyntaxNode
 {
+   protected:
+    TypeBase *type_;
    public:
-    virtual TypeBase *type() const = 0;
+    Expression() : type_(nullptr) {}
+    // Expression(TypeBase *t) type_(t) { assert(type_ != nullptr); }
+    virtual TypeBase *type() const { return type_; }
 };
 
 // TODO: implement 'abstract-decl' part
@@ -168,18 +172,16 @@ class JumpStatement : public SyntaxNode
 
 class CommaExpression : public Expression
 {
-    vector<Expression *> exprs;
+    // vector<Expression *> exprs;
+    Expression *curr, *next;
 
    public:
-    virtual TypeBase *type() const
-    {
-        return exprs.back()->type();
-    }
     static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
         string s = ",>\n";
-        for (SyntaxNode *e : exprs) s += e->debugString();
+        s += curr->debugString();
+        if (next) s += next->debugString();
         s += "<\n";
         return s;
     }
@@ -189,13 +191,10 @@ class AssignExpression : public Expression
 {
     // treat unary as condition
     // vector<UnaryExpression *> targets;
-    vector<Expression *> targets;
-    TokenType t;
-    Expression *target;
-    Expression *source;
+    Expression *target, *source;
+    TokenType op;
 
    public:
-    virtual TypeBase *type() const { return nullptr; }
     static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
@@ -214,7 +213,6 @@ class CondExpression : public Expression
     Expression *right;
 
    public:
-    virtual TypeBase *type() const { return nullptr; }
     static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
@@ -231,7 +229,6 @@ class OrExpression : public Expression
     Expression *left, *right;
 
    public:
-    virtual TypeBase *type() const { return nullptr; }
     static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
@@ -247,7 +244,6 @@ class AndExpression : public Expression
     Expression *left, *right;
 
    public:
-    virtual TypeBase *type() const { return nullptr; }
     static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
@@ -263,7 +259,6 @@ class BitOrExpression : public Expression
     Expression *left, *right;
 
    public:
-    virtual TypeBase *type() const { return nullptr; }
     static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
@@ -279,7 +274,6 @@ class BitXorExpression : public Expression
     Expression *left, *right;
 
    public:
-    virtual TypeBase *type() const { return nullptr; }
     static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
@@ -295,7 +289,6 @@ class BitAndExpression : public Expression
     Expression *left, *right;
 
    public:
-    virtual TypeBase *type() const { return nullptr; }
     static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
@@ -312,7 +305,6 @@ class EqExpression : public Expression
     TokenType op;
 
    public:
-    virtual TypeBase *type() const { return nullptr; }
     static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
@@ -332,7 +324,6 @@ class RelExpression : public Expression
     TokenType op;
 
    public:
-    virtual TypeBase *type() const { return nullptr; }
     static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
@@ -358,7 +349,6 @@ class ShiftExpression : public Expression
     TokenType op;
 
    public:
-    virtual TypeBase *type() const { return nullptr; }
     static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
@@ -382,7 +372,6 @@ class AddExpression : public Expression
     TokenType op;
 
    public:
-    virtual TypeBase *type() const { return nullptr; }
     static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
@@ -406,7 +395,6 @@ class MulExpression : public Expression
     TokenType op;
 
    public:
-    virtual TypeBase *type() const { return nullptr; }
     static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
@@ -431,7 +419,6 @@ class CastExpression : public Expression
     Expression *target;
 
    public:
-    virtual TypeBase *type() const { return nullptr; }
     static Expression *parse(Lexer &lex, Environment *env);
 };
 // TODO: finish this!
@@ -441,7 +428,6 @@ class UnaryExpression : public Expression
     TokenType op;
 
    public:
-    virtual TypeBase *type() const { return nullptr; }
     static Expression *parse(Lexer &lex, Environment *env);
 };
 // TODO: finish this!
@@ -465,7 +451,6 @@ class PostfixExpression : public Expression
 
    public:
     PostfixExpression() : params() {}
-    virtual TypeBase *type() const { return nullptr; }
     static Expression *parse(Lexer &lex, Environment *env, Expression *target);
     virtual string debugString()
     {
@@ -515,7 +500,6 @@ class PrimaryExpression : public Expression
     };
 
    public:
-    virtual TypeBase *type() const { return nullptr; }
     static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
@@ -538,18 +522,24 @@ class PrimaryExpression : public Expression
 class ConstExpression : public Expression
 {
    public:
-    virtual TypeBase *type() const { return nullptr; }
     static Token eval(CondExpression *expr);
 };
 
 class Parser
 {
     Environment env;
+    Lexer &lex;
 
    public:
-    void parse(Lexer &lex)
+    Parser(Lexer &l) : lex(l)
+    {
+    }
+    void parse()
     {
         Environment::ParseGlobalDeclaration(lex, &env);
+    }
+    void debugPrint() const
+    {
         env.debugPrint(lex);
     }
 };

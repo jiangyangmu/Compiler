@@ -409,7 +409,7 @@ class Lexer
             }
 
             StringRef sp(l, r - l);
-            for (int i = 0; i < ELEMENT_COUNT(ALL_KEYWORD); ++i)
+            for (size_t i = 0; i < ELEMENT_COUNT(ALL_KEYWORD); ++i)
             {
                 if (sp == ALL_KEYWORD[i])
                 {

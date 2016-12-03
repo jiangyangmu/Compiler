@@ -37,10 +37,10 @@ int main(int argc, char *argv[])
         source += '\n', print_source += '\n';
     }
 
-    cout << "-------------- source --------------" << endl
-         << print_source << endl;
+    cout << "-------------- source --------------" << endl;
+    // cout << print_source << endl;
     // remove comment
-    bool incomment = false;
+    // bool incomment = false;
     const char *end = source.data() + source.size();
     char *ptr = const_cast<char *>(source.data());
     while (ptr != end)
@@ -76,8 +76,9 @@ int main(int argc, char *argv[])
     // lex.debugPrint();
 
     cout << "-------------- parser --------------" << endl;
-    Parser p;
-    p.parse(lex);
+    Parser p(lex);
+    p.parse();
+    // p.debugPrint();
 
     // system("pause");
     return 0;

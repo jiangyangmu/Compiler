@@ -31,18 +31,12 @@ struct Symbol
 
 // Symbol System
 // 1. label <-> location
-//      addLabel()
-//      useLabel()
 // 2. tag <-> struct/union/enum
-//      addTag()
-//      findTag()
 // 3. id <-> object/enum-constant
-//      addId()
-//      findId()
 class SymbolTable
 {
     vector<Symbol *> symbols;
-    size_t stack_size;
+    // size_t stack_size;
 
    public:
     void add(Symbol *t)
@@ -58,5 +52,5 @@ class SymbolTable
         }
         return nullptr;
     }
-    void debugPrint(Lexer &lex);
+    void debugPrint(Lexer &lex) const;
 };

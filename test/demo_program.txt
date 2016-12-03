@@ -1,6 +1,6 @@
 int main();
 
-int f(int i1, int i2, int i3)
+int func(int i1, int i2, int i3)
 {
     return i1 + i2 + i3;
 }
@@ -8,21 +8,32 @@ int f(int i1, int i2, int i3)
 int main()
 {
     int a, b, c;
-    int d;
+    int d, e, f;
     int i;
+    int arr[3];
 
     a = 3;
     b = 5;
     c = 7;
 
+    a[1] = 11;
+
+    arr[0] = 111;
+    a = b, c, d + 1, e + 3, f;
+    a = b + c, d + e, f;
     a = b = c = d = a + b * c;
+    i = a ? b : c ? d : e;
+    i = a || b && c || d && e;
+    i = a << 11 + 3;
+    i = a << 11 + 3 >> b;
+    i = 1 + 2 * 3 + b * e;
 
     for (i = 0; i < 100; i++++)
     {
         a += b;
         if (c < a && b < c)
         {
-            d = f(a, b, c);
+            d = func(a, b, c);
         }
     }
 

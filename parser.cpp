@@ -32,8 +32,7 @@ bool IsDeclaration(TokenType t)
             // TODO: other typedef names
             decl = true;
             break;
-        default:
-            break;
+        default: break;
     }
     return decl;
 }
@@ -52,11 +51,8 @@ bool IsAssignOperator(TokenType t)
         case ASSIGN_SRIGHT:
         case ASSIGN_AND:
         case ASSIGN_OR:
-        case ASSIGN_XOR:
-            is = true;
-            break;
-        default:
-            break;
+        case ASSIGN_XOR: is = true; break;
+        default: break;
     }
     return is;
 }
@@ -70,11 +66,8 @@ bool IsUnaryOperator(TokenType t)
         case OP_MUL:
         case OP_ADD:
         case OP_SUB:
-        case BOOL_NOT:
-            is = true;
-            break;
-        default:
-            break;
+        case BOOL_NOT: is = true; break;
+        default: break;
     }
     return is;
 }
@@ -97,11 +90,8 @@ bool IsTypeName(TokenType t)
         case UNSIGNED:
         case SIGNED:
         case TYPE_STRUCT:
-        case TYPE_ENUM:
-            is = true;
-            break;
-        default:
-            break;
+        case TYPE_ENUM: is = true; break;
+        default: break;
     }
     return is;
 }
@@ -125,11 +115,8 @@ bool IsExpression(TokenType t)
         case CONST_CHAR:
         case CONST_FLOAT:
         case STRING:
-        case LP:
-            is = true;
-            break;
-        default:
-            break;
+        case LP: is = true; break;
+        default: break;
     }
     return is;
 }
@@ -138,7 +125,10 @@ class DebugIndentHelper
 {
    public:
     static string _indent;
-    DebugIndentHelper() { _indent += "  "; }
+    DebugIndentHelper()
+    {
+        _indent += "  ";
+    }
     ~DebugIndentHelper()
     {
         _indent.pop_back();
@@ -153,7 +143,10 @@ string DebugIndentHelper::_indent;
 // cout << __dh.get() << #name " at Token " << lex.peakNext()
 //      << ", line " << lex.peakNext().line << endl;
 
-SyntaxNode *TypeName::parse(Lexer &lex, Environment *env) { return nullptr; }
+SyntaxNode *TypeName::parse(Lexer &lex, Environment *env)
+{
+    return nullptr;
+}
 // no instance, only dispatch
 SyntaxNode *Statement::parse(Lexer &lex, Environment *env)
 {
@@ -172,27 +165,17 @@ SyntaxNode *Statement::parse(Lexer &lex, Environment *env)
             }
             break;
         case CASE:
-        case DEFAULT:
-            node = LabelStatement::parse(lex, env);
-            break;
-        case BLK_BEGIN:
-            node = CompoundStatement::parse(lex, env);
-            break;
+        case DEFAULT: node = LabelStatement::parse(lex, env); break;
+        case BLK_BEGIN: node = CompoundStatement::parse(lex, env); break;
         case IF:
-        case SWITCH:
-            node = SelectionStatement::parse(lex, env);
-            break;
+        case SWITCH: node = SelectionStatement::parse(lex, env); break;
         case WHILE:
         case DO:
-        case FOR:
-            node = IterationStatement::parse(lex, env);
-            break;
+        case FOR: node = IterationStatement::parse(lex, env); break;
         case GOTO:
         case CONTINUE:
         case BREAK:
-        case RETURN:
-            node = JumpStatement::parse(lex, env);
-            break;
+        case RETURN: node = JumpStatement::parse(lex, env); break;
         default:
             /* TODO: check FIRST(expr) */
             node = ExpressionStatement::parse(lex, env);
@@ -207,7 +190,8 @@ SyntaxNode *LabelStatement::parse(Lexer &lex, Environment *env)
     SyntaxError("Unsupported feature: Label Statement");
     return nullptr;
 }
-SyntaxNode *CompoundStatement::parse(Lexer &lex, Environment *env, bool reuse_env)
+SyntaxNode *CompoundStatement::parse(Lexer &lex, Environment *env,
+                                     bool reuse_env)
 {
     DebugParseTree(CompoundStatement);
     CompoundStatement *node = new CompoundStatement();
@@ -291,9 +275,7 @@ SyntaxNode *SelectionStatement::parse(Lexer &lex, Environment *env)
             // TODO: switch constraits
             stmt->stmt = Statement::parse(lex, env);
             break;
-        default:
-            SyntaxError("Unexpected token");
-            break;
+        default: SyntaxError("Unexpected token"); break;
     }
     return stmt;
 }
@@ -353,9 +335,7 @@ SyntaxNode *IterationStatement::parse(Lexer &lex, Environment *env)
             }
             stmt->stmt = Statement::parse(lex, env);
             break;
-        default:
-            SyntaxError("Unexpected token");
-            break;
+        default: SyntaxError("Unexpected token"); break;
     }
     return stmt;
 }
@@ -378,51 +358,76 @@ SyntaxNode *JumpStatement::parse(Lexer &lex, Environment *env)
                 SyntaxError("Expect ';'");
             }
             break;
-        case BREAK:
-            stmt->type = JMP_BREAK;
-            break;
+        case BREAK: stmt->type = JMP_BREAK; break;
         case RETURN:
             stmt->type = JMP_RETURN;
             stmt->expr = CommaExpression::parse(lex, env);
             EXPECT(STMT_END);
             break;
-        default:
-            SyntaxError("Unexpected token");
-            break;
+        default: SyntaxError("Unexpected token"); break;
     }
     return stmt;
 }
 
+static string DebugTypeClass(ETypeClass tc)
+{
+    switch (tc)
+    {
+        case TC_INT: return "int";
+        case TC_FLOAT: return "float";
+        case TC_POINTER: return "pointer";
+        case TC_ARRAY: return "array";
+        case TC_FUNC: return "func";
+        case TC_STRUCT: return "struct";
+        case TC_UNION: return "union";
+        case TC_ENUM: return "enum";
+        default: break;
+    }
+    return "<null>";
+}
+static string DebugType(TypeBase *t)
+{
+    if (t == nullptr)
+        return "<nullptr>";
+    else
+        return DebugTypeClass(t->type());
+}
+#define EXPECT_TYPE_IS(ptr, type_)                                  \
+    do                                                              \
+    {                                                               \
+        if ((ptr) == nullptr || (ptr)->type() != (type_))           \
+            SyntaxWarningEx("Expect '" + DebugTypeClass(type_) +    \
+                            "', but get '" + DebugType(ptr) + "'"); \
+    } while (0)
+#define EXPECT_TYPE_WITH(ptr, op)                         \
+    do                                                    \
+    {                                                     \
+        if ((ptr) == nullptr || !(ptr)->hasOperation(op)) \
+            SyntaxWarningEx("Type '" + DebugType(ptr) +   \
+                            "' don't support " #op);      \
+    } while (0)
+
 Expression *CommaExpression::parse(Lexer &lex, Environment *env)
 {
     DebugParseTree(CommaExpression);
-    CommaExpression *expr = nullptr;
-    Expression *e;
+    if (!IsExpression(lex.peakNext().type))
+        SyntaxError("Expect expression");
 
-    while (true)
+    Expression *e = AssignExpression::parse(lex, env);
+    if (lex.peakNext().type == OP_COMMA)
     {
-        if (IsExpression(lex.peakNext().type))
-        {
-            e = AssignExpression::parse(lex, env);
-        }
-        if (expr)
-        {
-            expr->exprs.push_back(e);
-            if (lex.peakNext().type != OP_COMMA)
-                return expr;
-        }
-        else
-        {
-            if (lex.peakNext().type != OP_COMMA)
-                return e;
-            else
-            {
-                expr = new CommaExpression();
-                expr->exprs.push_back(e);
-            }
-        }
         lex.getNext();
+        CommaExpression *expr = new CommaExpression();
+        expr->curr = e;
+        expr->next = CommaExpression::parse(lex, env);
+        if (expr->next)
+            expr->type_ = expr->next->type();
+        else
+            expr->type_ = e->type();
+        return expr;
     }
+    else
+        return e;
 }
 // TODO: solve ambiguity, evaluate order
 Expression *AssignExpression::parse(Lexer &lex, Environment *env)
@@ -438,9 +443,13 @@ Expression *AssignExpression::parse(Lexer &lex, Environment *env)
         return target;
 
     expr = new AssignExpression();
-    expr->t = lex.getNext().type;
+    expr->op = lex.getNext().type;
     expr->target = target;
     expr->source = AssignExpression::parse(lex, env);
+
+    EXPECT_TYPE_WITH(target->type(), TOp_ASSIGN);
+    expr->type_ = target->type();
+
     return expr;
 }
 Expression *CondExpression::parse(Lexer &lex, Environment *env)
@@ -590,6 +599,10 @@ Expression *AddExpression::parse(Lexer &lex, Environment *env)
         expr->op = lex.getNext().type;
         expr->left = e;
         expr->right = AddExpression::parse(lex, env);
+
+        EXPECT_TYPE_WITH(e->type(), TOp_ADD);
+        expr->type_ = e->type();
+
         return expr;
     }
     else
@@ -606,6 +619,7 @@ Expression *MulExpression::parse(Lexer &lex, Environment *env)
         expr->op = lex.getNext().type;
         expr->left = e;
         expr->right = MulExpression::parse(lex, env);
+        expr->type_ = e->type();
         return expr;
     }
     else
@@ -621,7 +635,7 @@ Expression *CastExpression::parse(Lexer &lex, Environment *env)
         while (lex.peakNext().type == LP && IsTypeName(lex.peakNext(1).type))
         {
             lex.getNext();
-            TypeBase *type = nullptr; // ParseTypename(lex, env);
+            TypeBase *type = nullptr;  // ParseTypename(lex, env);
             expr->types.push_back(type);
             if (lex.getNext().type != RP)
             {
@@ -653,7 +667,8 @@ Expression *UnaryExpression::parse(Lexer &lex, Environment *env)
                 expr->op = lex.getNext().type;
                 if (lex.peakNext().type == LP)
                 {
-                    // expr->expr = new SyntaxNode(type = ParseTypename(lex, env));
+                    // expr->expr = new SyntaxNode(type = ParseTypename(lex,
+                    // env));
                     if (lex.getNext().type != RP)
                     {
                         SyntaxError("Expecting ')'");
@@ -671,7 +686,8 @@ Expression *UnaryExpression::parse(Lexer &lex, Environment *env)
     }
     else
     {
-        return PostfixExpression::parse(lex, env, PrimaryExpression::parse(lex, env));
+        return PostfixExpression::parse(lex, env,
+                                        PrimaryExpression::parse(lex, env));
     }
 }
 /*
@@ -693,41 +709,49 @@ bool __isPostfixOperator(TokenType t)
         case REFER_TO:
         case POINT_TO:
         case OP_INC:
-        case OP_DEC:
-            is = true;
-            break;
-        default:
-            break;
+        case OP_DEC: is = true; break;
+        default: break;
     }
     return is;
 }
-Expression *PostfixExpression::parse(Lexer &lex, Environment *env, Expression *target)
+Expression *PostfixExpression::parse(Lexer &lex, Environment *env,
+                                     Expression *target)
 {
     DebugParseTree(PostfixExpression);
     if (__isPostfixOperator(lex.peakNext().type))
     {
         PostfixExpression *expr = new PostfixExpression();
         expr->target = target;
+        // TODO: optional PrimaryExpression
+        assert(target != nullptr);
+        // assert(target->type() != nullptr);
+
         switch (lex.peakNext().type)
         {
             case LSB:
                 EXPECT(LSB);
+                EXPECT_TYPE_WITH(expr->target->type(), TOp_INDEX);
                 expr->op = POSTFIX_INDEX;
                 expr->index = CommaExpression::parse(lex, env);
                 if (expr->index == nullptr)
                     SyntaxError("Expect expression.");
-                if (expr->index->type()->type() != TC_INT)
-                    SyntaxError("Expect integral type as array index.");
+                EXPECT_TYPE_IS(expr->index->type(), TC_INT);
+                if (dynamic_cast<Indexable *>(expr->target->type()))
+                    expr->type_ =
+                        dynamic_cast<Indexable *>(expr->target->type())
+                            ->indexedType();
                 EXPECT(RSB);
                 break;
             case LP:
                 EXPECT(LP);
+                EXPECT_TYPE_WITH(expr->target->type(), TOp_CALL);
                 expr->op = POSTFIX_CALL;
                 if (lex.peakNext().type != RP)
                 {
                     while (true)
                     {
-                        expr->params.push_back(AssignExpression::parse(lex, env));
+                        expr->params.push_back(
+                            AssignExpression::parse(lex, env));
                         if (lex.peakNext().type == OP_COMMA)
                             lex.getNext();
                         else
@@ -738,25 +762,32 @@ Expression *PostfixExpression::parse(Lexer &lex, Environment *env, Expression *t
                 break;
             case REFER_TO:
                 lex.getNext();
+                EXPECT_TYPE_WITH(expr->target->type(), TOp_OFFSET);
                 expr->op = POSTFIX_OBJECT_OFFSET;
                 expr->member = lex.symbolName(EXPECT_GET(SYMBOL).symid);
                 break;
             case POINT_TO:
                 lex.getNext();
+                EXPECT_TYPE_IS(expr->target->type(), TC_POINTER);
+                EXPECT_TYPE_WITH(
+                    dynamic_cast<PointerType *>(expr->target->type())->target(),
+                    TOp_OFFSET);
                 expr->op = POSTFIX_POINTER_OFFSET;
                 expr->member = lex.symbolName(EXPECT_GET(SYMBOL).symid);
                 break;
             case OP_INC:
                 lex.getNext();
                 expr->op = POSTFIX_INC;
+                EXPECT_TYPE_WITH(expr->target->type(), TOp_INC);
+                expr->type_ = expr->target->type();
                 break;
             case OP_DEC:
                 lex.getNext();
                 expr->op = POSTFIX_DEC;
+                EXPECT_TYPE_WITH(expr->target->type(), TOp_DEC);
+                expr->type_ = expr->target->type();
                 break;
-            default:
-                SyntaxError("Should not reach here.");
-                break;
+            default: SyntaxError("Should not reach here."); break;
         }
 
         Expression *next = PostfixExpression::parse(lex, env, expr);
@@ -782,11 +813,8 @@ bool __isPrimaryExpression(TokenType t)
         case CONST_INT:
         case CONST_FLOAT:
         case STRING:
-        case LP:
-            is = true;
-            break;
-        default:
-            break;
+        case LP: is = true; break;
+        default: break;
     }
     return is;
 }
@@ -800,17 +828,18 @@ Expression *PrimaryExpression::parse(Lexer &lex, Environment *env)
             p = new PrimaryExpression();
             p->t = lex.getNext();
             p->ival = p->t.ival;
+            p->type_ = env->factory.newIntegral(TYPE_INT, true);
             break;
         case SYMBOL:
             p = new PrimaryExpression();
             p->t = lex.getNext();
             p->symbol = env->find(SC_ID, lex.symbolName(p->t.symid));
             if (p->symbol == nullptr)
-                SyntaxError("Symbol '" + lex.symbolName(p->t.symid).toString() + "' not found");
+                SyntaxError("Symbol '" + lex.symbolName(p->t.symid).toString() +
+                            "' not found");
+            p->type_ = p->symbol->type;
             break;
-        default:
-            SyntaxErrorEx("Unsupported primary expression");
-            break;
+        default: SyntaxErrorEx("Unsupported primary expression"); break;
     }
     return p;
 }
