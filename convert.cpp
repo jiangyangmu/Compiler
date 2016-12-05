@@ -1,4 +1,5 @@
 #include "convert.h"
+#include <climits>
 
 bool uadd_ok(unsigned int u1, unsigned int u2)
 {
