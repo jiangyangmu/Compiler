@@ -5,6 +5,8 @@
 #include <iostream>
 using namespace std;
 
+// -------- for TypeTable -------
+
 TypeBase *TypeTable::newIntegral(TokenType type, bool is_signed)
 {
     static IntType i8(1, true), u8(1, false);
@@ -22,6 +24,8 @@ TypeBase *TypeTable::newIntegral(TokenType type, bool is_signed)
     }
     return new IntType(*i);
 }
+
+// -------- for SymbolTable -------
 
 static string DebugTypeClass(ETypeClass tc)
 {
@@ -94,6 +98,11 @@ void __debugPrint(string &&s)
             line = tabs;
             empty = true;
         }
+        else
+        {
+            if (empty && line.size() != tabs.size())
+                line = tabs;
+        }
     }
 }
 void SymbolTable::debugPrint(Lexer &lex) const
@@ -111,8 +120,8 @@ void SymbolTable::debugPrint(Lexer &lex) const
                     break;
                 case TC_FUNC:
                     if (dynamic_cast<FuncType *>(s->type)->body)
-                        cout << "\t{ ... }" << endl;
-                    //     __debugPrint(dynamic_cast<FuncType *>(s->type)->body->debugString());
+                        // cout << "\t{ ... }" << endl;
+                        __debugPrint(dynamic_cast<FuncType *>(s->type)->body->debugString());
                     break;
                 default:
                     break;
@@ -120,6 +129,8 @@ void SymbolTable::debugPrint(Lexer &lex) const
         }
     }
 }
+
+// -------- for Environment --------
 
 int Environment::idgen = 0;
 void Environment::debugPrint(Lexer &lex) const
@@ -541,13 +552,16 @@ void __parseDeclaration(Lexer &lex, Environment *env, bool allow_func_def)
         // assert( decl->type() == TC_FUNC );
         FuncType *func = dynamic_cast<FuncType *>(decl);
         func->env->setParent(env);
-        func->body = CompoundStatement::parse(lex, func->env, true);
+
         Symbol *f = new Symbol();
         f->category = SC_ID;
         f->name = symbol;
         f->type = func;
         f->addr = 0;
+
+        // add func declaration before parsing its body
         env->add(f);
+        func->body = CompoundStatement::parse(lex, func->env, true);
     }
     else
     {

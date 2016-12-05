@@ -102,8 +102,13 @@ class SelectionStatement : public SyntaxNode
         // }
         s += "if>\n";
         s += expr->debugString();
+        s += "<then>\n";
         s += stmt->debugString();
-        if (stmt2) s += stmt2->debugString();
+        if (stmt2)
+        {
+            s += "<else>\n";
+            s += stmt2->debugString();
+        }
         s += "<\n";
         return s;
     }
@@ -372,7 +377,8 @@ class AddExpression : public Expression
     TokenType op;
 
    public:
-    static Expression *parse(Lexer &lex, Environment *env);
+    static Expression *parse(Lexer &lex, Environment *env,
+                             Expression *left = nullptr);
     virtual string debugString()
     {
         string s;

@@ -1,0 +1,21 @@
+int recur(int a, int b)
+{
+    if (a < b)
+        return a + recur(a + 1, b);
+    else if (a > b)
+        return a + recur(a - 1, b);
+    else
+        return b;
+}
+
+int main()
+{
+    int v1, v2;
+
+    v1 = 3;
+    v2 = 5;
+
+    recur(v1, v2);
+
+    return 0;
+}

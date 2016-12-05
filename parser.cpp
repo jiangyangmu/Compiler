@@ -462,10 +462,7 @@ Expression *CondExpression::parse(Lexer &lex, Environment *env)
         expr->cond = e;
         lex.getNext();
         expr->left = CommaExpression::parse(lex, env);
-        if (lex.getNext().type != OP_COLON)
-        {
-            SyntaxError("Expect ':'");
-        }
+        EXPECT(OP_COLON);
         expr->right = CondExpression::parse(lex, env);
         return expr;
     }
@@ -589,24 +586,25 @@ Expression *ShiftExpression::parse(Lexer &lex, Environment *env)
     else
         return e;
 }
-Expression *AddExpression::parse(Lexer &lex, Environment *env)
+Expression *AddExpression::parse(Lexer &lex, Environment *env, Expression *left)
 {
     DebugParseTree(AddExpression);
-    Expression *e = MulExpression::parse(lex, env);
+    if (left == nullptr)
+        left = MulExpression::parse(lex, env);
     if (lex.peakNext().type == OP_ADD || lex.peakNext().type == OP_SUB)
     {
         AddExpression *expr = new AddExpression();
         expr->op = lex.getNext().type;
-        expr->left = e;
-        expr->right = AddExpression::parse(lex, env);
+        expr->left = left;
+        expr->right = MulExpression::parse(lex, env);
 
-        EXPECT_TYPE_WITH(e->type(), TOp_ADD);
-        expr->type_ = e->type();
+        EXPECT_TYPE_WITH(left->type(), TOp_ADD);
+        expr->type_ = left->type();
 
-        return expr;
+        return parse(lex, env, expr);
     }
     else
-        return e;
+        return left;
 }
 Expression *MulExpression::parse(Lexer &lex, Environment *env)
 {

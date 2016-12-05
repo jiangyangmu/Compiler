@@ -78,7 +78,7 @@ int main(int argc, char *argv[])
     cout << "-------------- parser --------------" << endl;
     Parser p(lex);
     p.parse();
-    // p.debugPrint();
+    p.debugPrint();
 
     // system("pause");
     return 0;
