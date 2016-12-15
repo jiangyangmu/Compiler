@@ -11,7 +11,7 @@
 #define _jmp(addr) _inst(INST_JMP, addr, false, nullptr)
 #define _jmp_if(addr) _inst(INST_JMP_IF, addr, false, nullptr)
 
-#define _str(s) vm.add_global(s)
+#define _str(s) vm.add_string(s)
 
 int main(int argc, char * argv[])
 {

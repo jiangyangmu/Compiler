@@ -39,4 +39,6 @@ int main()
     {
         int inner_ival;
     }
+
+    // enum EFirstEnum fe;
 }

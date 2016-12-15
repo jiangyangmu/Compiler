@@ -1,5 +1,7 @@
 #pragma once
 
+#include "lexer.h"
+
 class TypeBase;
 
 // Symbol Representation
@@ -35,22 +37,20 @@ struct Symbol
 // 3. id <-> object/enum-constant
 class SymbolTable
 {
+    friend class Environment;
+
     vector<Symbol *> symbols;
-    // size_t stack_size;
+    size_t size_;
 
    public:
-    void add(Symbol *t)
+    SymbolTable() : size_(0)
     {
-        symbols.push_back(t);
     }
-    Symbol *find(ESymbolCategory category, StringRef name) const
+    void add(Symbol *t);
+    Symbol *find(ESymbolCategory category, StringRef name) const;
+    size_t size() const
     {
-        for (auto s = symbols.rbegin(); s != symbols.rend(); ++s)
-        {
-            if ((*s)->category == category && (*s)->name == name)
-                return *s;
-        }
-        return nullptr;
+        return size_;
     }
     void debugPrint(Lexer &lex) const;
 };

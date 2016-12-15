@@ -1,3 +1,5 @@
+#define HAS_LEXER
+
 #include "env.h"
 #include "parser.h"
 #include "type.h"
@@ -7,19 +9,55 @@ using namespace std;
 
 // -------- for TypeTable -------
 
+const IntType &TypeTable::Char()
+{
+    static IntType i8(1, true);
+    return i8;
+}
+const IntType &TypeTable::UChar()
+{
+    static IntType u8(1, false);
+    return u8;
+}
+const IntType &TypeTable::Short()
+{
+    static IntType i16(2, true);
+    return i16;
+}
+const IntType &TypeTable::UShort()
+{
+    static IntType u16(2, false);
+    return u16;
+}
+const IntType &TypeTable::Int()
+{
+    static IntType i32(4, true);
+    return i32;
+}
+const IntType &TypeTable::UInt()
+{
+    static IntType u32(4, false);
+    return u32;
+}
+const IntType &TypeTable::Long()
+{
+    static IntType i64(8, true);
+    return i64;
+}
+const IntType &TypeTable::ULong()
+{
+    static IntType u64(8, false);
+    return u64;
+}
 TypeBase *TypeTable::newIntegral(TokenType type, bool is_signed)
 {
-    static IntType i8(1, true), u8(1, false);
-    static IntType i16(2, true), u16(2, false);
-    static IntType i32(4, true), u32(4, false);
-    static IntType i64(8, true), u64(8, false);
-    IntType *i = nullptr;
+    const IntType *i = nullptr;
     switch (type)
     {
-        case TYPE_CHAR: i = is_signed ? &i8 : &u8; break;
-        case TYPE_SHORT: i = is_signed ? &i16 : &u16; break;
-        case TYPE_INT: i = is_signed ? &i32 : &u32; break;
-        case TYPE_LONG: i = is_signed ? &i64 : &u64; break;
+        case TYPE_CHAR: i = is_signed ? &Char() : &UChar(); break;
+        case TYPE_SHORT: i = is_signed ? &Short() : &UShort(); break;
+        case TYPE_INT: i = is_signed ? &Int() : &UInt(); break;
+        case TYPE_LONG: i = is_signed ? &Long() : &ULong(); break;
         default: SyntaxError("Invalid Integral Type"); break;
     }
     return new IntType(*i);
@@ -56,7 +94,10 @@ ostream &operator<<(ostream &o, const Symbol &s)
     TypeBase *t = s.type;
     while (t)
     {
-        o << ' ' << DebugTypeClass(t->type());
+        if (t->type() == TC_INT)
+            o << ' ' << dynamic_cast<IntType *>(t)->toString();
+        else
+            o << ' ' << DebugTypeClass(t->type());
         t = t->next();
     }
     return o;
@@ -105,6 +146,21 @@ void __debugPrint(string &&s)
         }
     }
 }
+void SymbolTable::add(Symbol *t)
+{
+    symbols.push_back(t);
+    if (t->type)
+        size_ += t->type->size();
+}
+Symbol *SymbolTable::find(ESymbolCategory category, StringRef name) const
+{
+    for (auto s = symbols.rbegin(); s != symbols.rend(); ++s)
+    {
+        if ((*s)->category == category && (*s)->name == name)
+            return *s;
+    }
+    return nullptr;
+}
 void SymbolTable::debugPrint(Lexer &lex) const
 {
     cout << "[Symbol Table] " << symbols.size() << " symbols" << endl;
@@ -120,8 +176,8 @@ void SymbolTable::debugPrint(Lexer &lex) const
                     break;
                 case TC_FUNC:
                     if (dynamic_cast<FuncType *>(s->type)->body)
-                        // cout << "\t{ ... }" << endl;
-                        __debugPrint(dynamic_cast<FuncType *>(s->type)->body->debugString());
+                        cout << "\t{ ... }" << endl;
+                        // __debugPrint(dynamic_cast<FuncType *>(s->type)->body->debugString());
                     break;
                 default:
                     break;
@@ -177,6 +233,44 @@ void Environment::add(Symbol *s)
         SyntaxWarning("Symbol '" + s->name.toString() + "' override outer definition.");
     symbols.add(s);
 }
+size_t Environment::allSymbolSize() const
+{
+    return symbols.size();
+}
+void Environment::emit() const
+{
+    // ... setup code ...
+    // if (isRoot())
+    //     Emit("_start:");
+
+    // allocate space for global variables
+    if (symbols.size() > 0)
+        Emit("alloc %u", symbols.size());
+
+    // ... setup code ...
+    if (isRoot())
+    {
+        // Emit("call _main");
+        // Emit("free %u", symbols.size());
+        // Emit("ret");
+
+        // generate code for function bodies
+        for (const Symbol *s : symbols.symbols)
+        {
+            if (s->type->type() == TC_FUNC)
+            {
+                FuncType *func = dynamic_cast<FuncType *>(s->type);
+                if (func->body)
+                {
+                    Emit("_%s:", s->name.toString().data());
+                    func->body->emit(this);
+                }
+                else
+                    SyntaxWarning("function '" + s->name.toString() + "' has no body.");
+            }
+        }
+    }
+}
 
 TypeBase *__parseVoidType(Lexer &lex)
 {
@@ -191,11 +285,11 @@ TypeBase *__parseVoidType(Lexer &lex)
 TypeBase *__parseIntegralType(Lexer &lex, Environment *env)
 {
     // cout << "__parseIntegralType()" << endl;
-    bool is_signed = false;
+    bool is_signed = true;
     switch (lex.peakNext().type)
     {
-        case SIGNED: is_signed = true; lex.getNext(); break;
-        case UNSIGNED: lex.getNext(); break;
+        case SIGNED: lex.getNext(); break;
+        case UNSIGNED: is_signed = false; lex.getNext(); break;
         default: break;
     }
 
@@ -252,7 +346,7 @@ TypeBase *__parseStructType(Lexer &lex, Environment *env)
     if (lex.peakNext().type == SYMBOL && lex.peakNext(1).type != BLK_BEGIN)
     {
         // use defined struct
-        StringRef tag = lex.symbolName(lex.getNext().symid);
+        StringRef tag = lex.getNext().symbol;
         // TODO: not defined yet, incomplete type?
         return env->find(SC_TAG, tag)->type;
     }
@@ -261,7 +355,7 @@ TypeBase *__parseStructType(Lexer &lex, Environment *env)
         // tag
         StringRef tag("<anonymous-struct>");
         if (lex.peakNext().type == SYMBOL)
-            tag = lex.symbolName(lex.getNext().symid);
+            tag = lex.getNext().symbol;
 
         // type definition
         StructType *st = new StructType();
@@ -312,15 +406,18 @@ TypeBase *__parseEnumType(Lexer &lex, Environment *env)
     if (lex.peakNext().type == SYMBOL && lex.peakNext(1).type != BLK_BEGIN)
     {
         // use defined enum
-        StringRef tag = lex.symbolName(lex.getNext().symid);
-        return env->find(SC_TAG, tag)->type;
+        StringRef tag = lex.getNext().symbol;
+        Symbol *s = env->find(SC_TAG, tag);
+        if (s == nullptr)
+            SyntaxError("Unknown enum type '" + tag.toString() + "'");
+        return s->type;
     }
     else
     {
         // tag
         StringRef tag("<anonymous-enum>");
         if (lex.peakNext().type == SYMBOL)
-            tag = lex.symbolName(lex.getNext().symid);
+            tag = lex.getNext().symbol;
 
         // type definition
         EnumType *et = new EnumType();
@@ -332,7 +429,7 @@ TypeBase *__parseEnumType(Lexer &lex, Environment *env)
             {
                 SyntaxErrorEx("diagnosis");
             }
-            StringRef id = lex.symbolName(EXPECT_GET(SYMBOL).symid);
+            StringRef id = EXPECT_GET(SYMBOL).symbol;
             // new enum constant
             Symbol *e = new Symbol();
             e->category = SC_ENUM_CONST;
@@ -396,7 +493,7 @@ TypeBase *__parseFuncType(Lexer &lex, Environment *env)
             else if (lex.peakNext().type == OP_COMMA)
                 lex.getNext();
             else
-                SyntaxError("Unexpected token");
+                SyntaxErrorEx("Unexpected token");
         }
     }
     EXPECT(RP);
@@ -507,7 +604,7 @@ TypeBase *__parseDeclarator(Lexer &lex, Environment *env, TypeBase *spec,
     }
     else if (lex.peakNext().type == SYMBOL)
     {
-        symbol = lex.symbolName(lex.getNext().symid);
+        symbol = lex.getNext().symbol;
     }
     else
     {
@@ -568,13 +665,13 @@ void __parseDeclaration(Lexer &lex, Environment *env, bool allow_func_def)
         // Declaration
         while (true)
         {
-            if (symbol.size() == 0)
+            if (symbol == "<anonymous-symbol>")
             {
                 if (spec->type() == TC_STRUCT || spec->type() == TC_ENUM ||
                     spec->type() == TC_UNION)
                     break;
                 else
-                    SyntaxError("Missing identifier");
+                    SyntaxWarningEx("Missing identifier");
             }
             Symbol *v = new Symbol();
             v->category = SC_ID;

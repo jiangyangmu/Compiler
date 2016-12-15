@@ -1,5 +1,8 @@
 #include "convert.h"
+
 #include <climits>
+#include <iostream>
+using namespace std;
 
 bool uadd_ok(unsigned int u1, unsigned int u2)
 {
@@ -66,4 +69,59 @@ int tmod_ok(int i1, int i2)
 }
 // warning-list: compare unsigned int with int
 
+TypeBase *IntegralPromotion(TypeBase *left, TypeBase *right)
+{
+    assert(left != nullptr && right != nullptr);
+    EXPECT_TYPE_IS(left, TC_INT);
+    EXPECT_TYPE_IS(right, TC_INT);
 
+    IntType *l = dynamic_cast<IntType *>(left);
+    IntType *r = dynamic_cast<IntType *>(right);
+
+    // No promotion needed
+    if (l->equal(*r))
+        return l;
+
+    IntType *p = nullptr;
+
+    // unsigned long int, * => unsigned long int
+    if (l->equal(TypeTable::ULong()))
+        p = l;
+    else if (r->equal(TypeTable::ULong()))
+        p = r;
+
+    // long int, unsigned int => long int (or unsigned long int)
+    else if (l->equal(TypeTable::Long()) && r->equal(TypeTable::UInt()))
+        p = l;
+    else if (r->equal(TypeTable::Long()) && l->equal(TypeTable::UInt()))
+        p = r;
+
+    // long int, *(not unsigned int) => long int
+    else if (l->equal(TypeTable::Long()))
+        p = l;
+    else if (r->equal(TypeTable::Long()))
+        p = r;
+
+    // unsigned int, * => unsigned int
+    else if (l->equal(TypeTable::UInt()))
+        p = l;
+    else if (r->equal(TypeTable::UInt()))
+        p = r;
+
+    // int, * => int
+    else if (l->equal(TypeTable::Int()))
+        p = l;
+    else if (r->equal(TypeTable::Int()))
+        p = r;
+
+    assert(p != nullptr);
+    SyntaxWarning("Promotion: " + l->toString() + " + " + r->toString() +
+                  " = " + p->toString());
+
+    return left;
+}
+
+TypeBase *CommonType(TypeBase *left, TypeBase *right)
+{
+    return IntegralPromotion(left, right);
+}

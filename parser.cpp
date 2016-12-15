@@ -7,6 +7,7 @@ using namespace std;
 #include "env.h"
 #include "lexer.h"
 #include "parser.h"
+#include "convert.h"
 
 bool IsDeclaration(TokenType t)
 {
@@ -369,44 +370,6 @@ SyntaxNode *JumpStatement::parse(Lexer &lex, Environment *env)
     return stmt;
 }
 
-static string DebugTypeClass(ETypeClass tc)
-{
-    switch (tc)
-    {
-        case TC_INT: return "int";
-        case TC_FLOAT: return "float";
-        case TC_POINTER: return "pointer";
-        case TC_ARRAY: return "array";
-        case TC_FUNC: return "func";
-        case TC_STRUCT: return "struct";
-        case TC_UNION: return "union";
-        case TC_ENUM: return "enum";
-        default: break;
-    }
-    return "<null>";
-}
-static string DebugType(TypeBase *t)
-{
-    if (t == nullptr)
-        return "<nullptr>";
-    else
-        return DebugTypeClass(t->type());
-}
-#define EXPECT_TYPE_IS(ptr, type_)                                  \
-    do                                                              \
-    {                                                               \
-        if ((ptr) == nullptr || (ptr)->type() != (type_))           \
-            SyntaxWarningEx("Expect '" + DebugTypeClass(type_) +    \
-                            "', but get '" + DebugType(ptr) + "'"); \
-    } while (0)
-#define EXPECT_TYPE_WITH(ptr, op)                         \
-    do                                                    \
-    {                                                     \
-        if ((ptr) == nullptr || !(ptr)->hasOperation(op)) \
-            SyntaxWarningEx("Type '" + DebugType(ptr) +   \
-                            "' don't support " #op);      \
-    } while (0)
-
 Expression *CommaExpression::parse(Lexer &lex, Environment *env)
 {
     DebugParseTree(CommaExpression);
@@ -599,7 +562,9 @@ Expression *AddExpression::parse(Lexer &lex, Environment *env, Expression *left)
         expr->right = MulExpression::parse(lex, env);
 
         EXPECT_TYPE_WITH(left->type(), TOp_ADD);
-        expr->type_ = left->type();
+        EXPECT_TYPE_WITH(expr->right->type(), TOp_ADD);
+
+        expr->type_ = CommonType(expr->left->type(), expr->right->type());
 
         return parse(lex, env, expr);
     }
@@ -617,7 +582,12 @@ Expression *MulExpression::parse(Lexer &lex, Environment *env)
         expr->op = lex.getNext().type;
         expr->left = e;
         expr->right = MulExpression::parse(lex, env);
-        expr->type_ = e->type();
+
+        EXPECT_TYPE_WITH(expr->left->type(), TOp_MUL);
+        EXPECT_TYPE_WITH(expr->right->type(), TOp_MUL);
+
+        expr->type_ = CommonType(expr->left->type(), expr->right->type());
+
         return expr;
     }
     else
@@ -742,7 +712,8 @@ Expression *PostfixExpression::parse(Lexer &lex, Environment *env,
                 break;
             case LP:
                 EXPECT(LP);
-                EXPECT_TYPE_WITH(expr->target->type(), TOp_CALL);
+                EXPECT_TYPE_IS(expr->target->type(), TC_FUNC);
+                // EXPECT_TYPE_WITH(expr->target->type(), TOp_CALL);
                 expr->op = POSTFIX_CALL;
                 if (lex.peakNext().type != RP)
                 {
@@ -756,13 +727,15 @@ Expression *PostfixExpression::parse(Lexer &lex, Environment *env,
                             break;
                     }
                 }
+                expr->type_ =
+                    dynamic_cast<FuncType *>(expr->target->type())->rtype();
                 EXPECT(RP);
                 break;
             case REFER_TO:
                 lex.getNext();
                 EXPECT_TYPE_WITH(expr->target->type(), TOp_OFFSET);
                 expr->op = POSTFIX_OBJECT_OFFSET;
-                expr->member = lex.symbolName(EXPECT_GET(SYMBOL).symid);
+                expr->member = EXPECT_GET(SYMBOL).symbol;
                 break;
             case POINT_TO:
                 lex.getNext();
@@ -771,7 +744,10 @@ Expression *PostfixExpression::parse(Lexer &lex, Environment *env,
                     dynamic_cast<PointerType *>(expr->target->type())->target(),
                     TOp_OFFSET);
                 expr->op = POSTFIX_POINTER_OFFSET;
-                expr->member = lex.symbolName(EXPECT_GET(SYMBOL).symid);
+                expr->member = EXPECT_GET(SYMBOL).symbol;
+                expr->type_ = dynamic_cast<StructType *>(expr->target->type())
+                                  ->getMember(expr->member)
+                                  ->type;
                 break;
             case OP_INC:
                 lex.getNext();
@@ -828,12 +804,17 @@ Expression *PrimaryExpression::parse(Lexer &lex, Environment *env)
             p->ival = p->t.ival;
             p->type_ = env->factory.newIntegral(TYPE_INT, true);
             break;
+        case STRING:
+            p = new PrimaryExpression();
+            p->t = lex.getNext();
+            p->str = &p->t.string_;
+            break;
         case SYMBOL:
             p = new PrimaryExpression();
             p->t = lex.getNext();
-            p->symbol = env->find(SC_ID, lex.symbolName(p->t.symid));
+            p->symbol = env->find(SC_ID, p->t.symbol);
             if (p->symbol == nullptr)
-                SyntaxError("Symbol '" + lex.symbolName(p->t.symid).toString() +
+                SyntaxError("Symbol '" + p->t.symbol.toString() +
                             "' not found");
             p->type_ = p->symbol->type;
             break;
@@ -841,3 +822,4 @@ Expression *PrimaryExpression::parse(Lexer &lex, Environment *env)
     }
     return p;
 }
+

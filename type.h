@@ -6,6 +6,7 @@ using namespace std;
 
 // #include "parser.h"
 // #include "env.h"
+#include "common.h"
 #include "symbol.h"
 
 class SyntaxNode;
@@ -178,10 +179,34 @@ enum ETypeClass
 class TypeBase : public ListLike<TypeBase>, virtual public OperationMask
 {
    public:
-    static TypeBase *merge(TypeBase *l, TypeBase *r);
+    // static TypeBase *merge(TypeBase *l, TypeBase *r);
+    // static TypeBase *convert(TypeBase *from, TypeBase *to);
     virtual ETypeClass type() const = 0;
     virtual long size() const = 0;
-    virtual bool equal(TypeBase &other) const = 0;
+    virtual bool equal(const TypeBase &other) const = 0;
+    static string DebugTypeClass(ETypeClass tc)
+    {
+        switch (tc)
+        {
+            case TC_INT: return "int";
+            case TC_FLOAT: return "float";
+            case TC_POINTER: return "pointer";
+            case TC_ARRAY: return "array";
+            case TC_FUNC: return "func";
+            case TC_STRUCT: return "struct";
+            case TC_UNION: return "union";
+            case TC_ENUM: return "enum";
+            default: break;
+        }
+        return "<null>";
+    }
+    static string DebugType(TypeBase *t)
+    {
+        if (t == nullptr)
+            return "<nullptr>";
+        else
+            return DebugTypeClass(t->type());
+    }
 };
 class VoidType : public TypeBase
 {
@@ -194,19 +219,30 @@ class VoidType : public TypeBase
     {
         return 0;
     }
-    virtual bool equal(TypeBase &other) const
+    virtual bool equal(const TypeBase &other) const
     {
         return other.type() == TC_VOID;
     }
 };
 class IntType : public TypeBase, public LValue<IntType>, public Scalar<IntType>
 {
-    NON_COPYABLE(IntType)
+    // NON_COPYABLE(IntType)
     friend class TypeTable;
 
     int bytes;
     bool signed_;
 
+    IntType() = default;
+    IntType(const IntType &o)
+    {
+        bytes = o.bytes;
+        signed_ = o.signed_;
+    }
+    IntType(IntType &&o)
+    {
+        bytes = o.bytes;
+        signed_ = o.signed_;
+    }
     IntType(int size, bool is_signed) : bytes(size), signed_(is_signed)
     {
         switch (size)
@@ -222,6 +258,10 @@ class IntType : public TypeBase, public LValue<IntType>, public Scalar<IntType>
     }
 
    public:
+    bool isSigned() const
+    {
+        return signed_;
+    }
     virtual ETypeClass type() const
     {
         return TC_INT;
@@ -230,14 +270,29 @@ class IntType : public TypeBase, public LValue<IntType>, public Scalar<IntType>
     {
         return bytes;
     }
-    virtual bool equal(TypeBase &other) const
+    virtual bool equal(const TypeBase &other) const
     {
         if (type() == other.type())
         {
-            IntType &ref = dynamic_cast<IntType &>(other);
+            const IntType &ref = dynamic_cast<const IntType &>(other);
             return bytes == ref.bytes && signed_ == ref.signed_;
         }
         return false;
+    }
+    string toString() const
+    {
+        string s;
+        if (!signed_)
+            s += "unsigned ";
+        switch (bytes)
+        {
+            case 1: s += "char"; break;
+            case 2: s += "short"; break;
+            case 4: s += "int"; break;
+            case 8: s += "long"; break;
+            default: break;
+        }
+        return s;
     }
 };
 // TC_FLOAT: float
@@ -256,7 +311,7 @@ class FloatType : public TypeBase,
     {
         return 4;
     }
-    virtual bool equal(TypeBase &other) const
+    virtual bool equal(const TypeBase &other) const
     {
         return other.type() == TC_FLOAT;
     }
@@ -279,11 +334,11 @@ class PointerType : public TypeBase,
     {
         return sizeof(void *);
     }
-    virtual bool equal(TypeBase &other) const
+    virtual bool equal(const TypeBase &other) const
     {
         if (other.type() != TC_POINTER)
             return false;
-        PointerType &o = dynamic_cast<PointerType &>(other);
+        const PointerType &o = dynamic_cast<const PointerType &>(other);
         return target()->equal(*(o.target()));
     }
 };
@@ -308,11 +363,11 @@ class ArrayType : public TypeBase, public RValue<ArrayType>, public Indexable
     {
         return length * target()->size();
     }
-    virtual bool equal(TypeBase &other) const
+    virtual bool equal(const TypeBase &other) const
     {
         if (other.type() != TC_ARRAY)
             return false;
-        ArrayType &o = dynamic_cast<ArrayType &>(other);
+        const ArrayType &o = dynamic_cast<const ArrayType &>(other);
         return length == o.length && target()->equal(*(o.target()));
     }
 
@@ -345,7 +400,7 @@ class FuncType : public TypeBase, public RValue<FuncType>, public Callable
     {
         return 0;
     }
-    virtual bool equal(TypeBase &other) const
+    virtual bool equal(const TypeBase &other) const
     {
         return other.type() == TC_FUNC;
     }
@@ -375,6 +430,15 @@ class StructType : public TypeBase,
         }
         members.push_back(s);
     }
+    Symbol * getMember(StringRef name) const
+    {
+        for (auto &m : members)
+        {
+            if (m->name == name)
+                return m;
+        }
+        return nullptr;
+    }
     virtual ETypeClass type() const
     {
         return TC_STRUCT;
@@ -383,7 +447,7 @@ class StructType : public TypeBase,
     {
         return 4;
     }
-    virtual bool equal(TypeBase &other) const
+    virtual bool equal(const TypeBase &other) const
     {
         return other.type() == TC_STRUCT;
     }
@@ -408,7 +472,7 @@ class UnionType : public TypeBase,
     {
         return 4;
     }
-    virtual bool equal(TypeBase &other) const
+    virtual bool equal(const TypeBase &other) const
     {
         return other.type() == TC_UNION;
     }
@@ -426,7 +490,7 @@ class EnumType : public TypeBase, public LValue<EnumType>
     {
         return 4;
     }
-    virtual bool equal(TypeBase &other) const
+    virtual bool equal(const TypeBase &other) const
     {
         return other.type() == TC_ENUM;
     }
@@ -440,4 +504,12 @@ class TypeTable
 
    public:
     TypeBase *newIntegral(TokenType type, bool is_signed);
+    static const IntType &Char();
+    static const IntType &UChar();
+    static const IntType &Short();
+    static const IntType &UShort();
+    static const IntType &Int();
+    static const IntType &UInt();
+    static const IntType &Long();
+    static const IntType &ULong();
 };

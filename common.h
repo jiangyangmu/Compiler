@@ -246,9 +246,10 @@ class ListLike
 
 // TODO: easy way to print enum constant as string
 
-#define NON_COPYABLE(type) \
-    type() = default;      \
-    type(type &) = default;
+#define NON_COPYABLE(type)   \
+    type() = default;        \
+    type(type &&) = default; \
+    type(const type &) = default;
 
 #define SyntaxWarning(msg)                                      \
     do                                                          \
@@ -257,13 +258,17 @@ class ListLike
              << to_string(__LINE__) << endl;                    \
     } while (0)
 
-#define SyntaxWarningEx(msg)                                              \
-    do                                                                    \
-    {                                                                     \
-        cout << "Warning: " << msg << " at " << __FILE__ << ':'           \
+#ifdef HAS_LEXER
+#define SyntaxWarningEx(msg)                                         \
+    do                                                               \
+    {                                                                \
+        cout << "Warning: " << msg << " at " << __FILE__ << ':'      \
              << to_string(__LINE__) << '\t' << "'" << lex.peakNext() \
-             << "' at " << lex.peakNext().line << endl;                 \
+             << "' at " << lex.peakNext().line << endl;              \
     } while (0)
+#else
+#define SyntaxWarningEx(msg) SyntaxWarning(msg)
+#endif
 
 #define SyntaxError(msg)                                       \
     do                                                         \
@@ -273,7 +278,16 @@ class ListLike
         exit(1);                                               \
     } while (0)
 
-#define SyntaxErrorEx(msg)                                        \
+#define SyntaxErrorEx(msg)                                           \
+    do                                                               \
+    {                                                                \
+        cout << "Syntax: " << msg << " at " << __FILE__ << ':'       \
+             << to_string(__LINE__) << '\t' << "'" << lex.peakNext() \
+             << "' at " << lex.peakNext().line << endl;              \
+        exit(1);                                                     \
+    } while (0)
+
+#define SyntaxErrorDebug(msg)                                     \
     do                                                            \
     {                                                             \
         cout << "Syntax: " << msg << " at " << __FILE__ << ':'    \
@@ -319,6 +333,22 @@ class ListLike
                  << " at " << __FILE__ << ':' << to_string(__LINE__) << endl, \
             exit(1), Token())                                                 \
          : lex.getNext())
+
+#define EXPECT_TYPE_IS(ptr, type_)                                            \
+    do                                                                        \
+    {                                                                         \
+        if ((ptr) == nullptr || (ptr)->type() != (type_))                     \
+            SyntaxWarningEx("Expect '" + TypeBase::DebugTypeClass(type_) +    \
+                            "', but get '" + TypeBase::DebugType(ptr) + "'"); \
+    } while (0)
+
+#define EXPECT_TYPE_WITH(ptr, op)                                 \
+    do                                                            \
+    {                                                             \
+        if ((ptr) == nullptr || !(ptr)->hasOperation(op))         \
+            SyntaxWarningEx("Type '" + TypeBase::DebugType(ptr) + \
+                            "' don't support " #op);              \
+    } while (0)
 
 #define LexError(msg)                                       \
     do                                                      \

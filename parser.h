@@ -6,6 +6,7 @@ using namespace std;
 
 #include "lexer.h"
 #include "env.h"
+#include "codegen.h"
 
 // XXX: all tryParse() functions return 'nullptr' on failure!!!
 // XXX: all parse() functions raise SyntaxError on failure!!!
@@ -15,10 +16,11 @@ bool IsDeclaration(TokenType t);
 bool IsAssignOperator(TokenType t);
 bool IsUnaryOperator(TokenType t);
 
-class SyntaxNode
+class SyntaxNode : public CodeGenerator
 {
    public:
     virtual string debugString() { return "~<?~>"; }
+    virtual void emit(const Environment *env) const { Emit("<emit not implemented>"); }
 };
 class Expression : public SyntaxNode
 {
@@ -69,6 +71,14 @@ class CompoundStatement : public SyntaxNode
         s += "<\n}\n";
         return s;
     }
+    virtual void emit(const Environment *__not_used) const
+    {
+        env->emit();
+        for (const SyntaxNode *stmt : stmts)
+        {
+            stmt->emit(env);
+        }
+    }
 };
 // no instance, dispatch only
 class ExpressionStatement : public SyntaxNode
@@ -80,6 +90,11 @@ class ExpressionStatement : public SyntaxNode
     virtual string debugString()
     {
         return expr->debugString();
+    }
+    virtual void emit(const Environment *env) const
+    {
+        expr->emit(env);
+        Emit("pop");
     }
 };
 // TODO: implement switch
@@ -111,6 +126,21 @@ class SelectionStatement : public SyntaxNode
         }
         s += "<\n";
         return s;
+    }
+    virtual void emit(const Environment *env) const
+    {
+        expr->emit(env);
+        Emit("jmp_if L1");
+        Emit("jmp L2");
+        Emit("L1:");
+        stmt->emit(env);
+        Emit("jmp L3");
+        Emit("L2:");
+        if (stmt2)
+        {
+            stmt2->emit(env);
+        }
+        Emit("L3:");
     }
 };
 class IterationStatement : public SyntaxNode
@@ -173,6 +203,11 @@ class JumpStatement : public SyntaxNode
         s += "<\n";
         return s;
     }
+    virtual void emit(const Environment *env) const
+    {
+        expr->emit(env);
+        Emit("ret");
+    }
 };
 
 class CommaExpression : public Expression
@@ -209,6 +244,12 @@ class AssignExpression : public Expression
         if (source) s += source->debugString();
         s += "<\n";
         return s;
+    }
+    virtual void emit(const Environment *env) const
+    {
+        target->emit(env); // target address on stack top
+        source->emit(env);
+        Emit("assign");
     }
 };
 class CondExpression : public Expression
@@ -494,6 +535,23 @@ class PostfixExpression : public Expression
         s += "<\n";
         return s;
     }
+    virtual void emit(const Environment *env) const
+    {
+        switch (op)
+        {
+            case POSTFIX_CALL:
+                for (auto it = params.rbegin(); it != params.rend(); ++it)
+                    (*it)->emit(env);
+                target->emit(env);
+                Emit("call");
+                for (size_t i = 0; i < params.size(); ++i)
+                    Emit("pop");
+                break;
+            default:
+                SyntaxError("PostfixExpression: not implemented");
+                break;
+        }
+    }
 };
 // TODO: finish this!
 class PrimaryExpression : public Expression
@@ -501,7 +559,7 @@ class PrimaryExpression : public Expression
     Token t;
     union {
         int ival;
-        char *str;
+        StringRef *str;
         Symbol *symbol;
     };
 
@@ -518,11 +576,28 @@ class PrimaryExpression : public Expression
             case CONST_INT:
                 s += to_string(ival);
                 break;
+            case STRING:
+                s += str->toString();
+                break;
             default:
                 break;
         }
         s += '\n';
         return s;
+    }
+    virtual void emit(const Environment *env) const
+    {
+        switch (t.type)
+        {
+            case CONST_INT: Emit("push %d", ival); break;
+            case STRING:
+                Emit("push str(\"%s\")", str->toString().data());
+                break;
+            case SYMBOL:
+                Emit("push addr(%s)", symbol->name.toString().data());
+                break;
+            default: Emit("<unknown PrimaryExpression>"); break;
+        }
     }
 };
 class ConstExpression : public Expression
@@ -547,5 +622,9 @@ class Parser
     void debugPrint() const
     {
         env.debugPrint(lex);
+    }
+    void emit() const
+    {
+        env.emit();
     }
 };

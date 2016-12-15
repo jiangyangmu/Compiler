@@ -8,6 +8,7 @@ using namespace std;
 
 #include "lexer.h"
 #include "parser.h"
+#include "codegen.h"
 
 int main(int argc, char *argv[])
 {
@@ -78,7 +79,11 @@ int main(int argc, char *argv[])
     cout << "-------------- parser --------------" << endl;
     Parser p(lex);
     p.parse();
-    p.debugPrint();
+    // p.debugPrint();
+
+    cout << "-------------- code --------------" << endl;
+    p.emit();
+    cout << Emitted() << endl;
 
     // system("pause");
     return 0;

@@ -47,7 +47,7 @@ TC_LONG: (signed) long (int)
 TC_ULONG: unsigned long (int)
 <<<<<<<<<<<<<<<<<<<<<
 
-Enum-Constant <=> int
+Enum-Constant [is equal to] int
 
 [Signed and unsigned integers]
 

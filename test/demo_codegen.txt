@@ -1,0 +1,10 @@
+void write(char *data, int size);
+
+int main()
+{
+    int a, b;
+    a = 1;
+    b = 2;
+    write("hello, world!", 3);
+    return 0;
+}

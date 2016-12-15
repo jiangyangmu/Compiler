@@ -58,8 +58,8 @@ struct Token
     //long typeid_; // to support user defined type
 	union
 	{
-        int symid;
-        int strid;
+        StringRef symbol;
+        StringRef string_;
 		int ival;
 		char cval;
         float fval;
@@ -67,6 +67,8 @@ struct Token
 	};
     // debug
     int line;
+
+    Token() : symbol() {}
 
     static string DebugTokenType(TokenType t)
     {
@@ -155,6 +157,7 @@ struct Token
             case BIT_SRIGHT: s = ">>"; break;
 
             case CONST_INT: s = "int"; break;
+            case STRING: s = "string"; break;
 	        //CONST_INT, CONST_CHAR, CONST_FLOAT, STRING,
             default: s = "unknown"; break;
         }
@@ -172,7 +175,7 @@ struct Token
             case BLK_END: o << '}'; break;
             case STMT_END: o << ';'; break;
             case VAR_PARAM: o << "..."; break;
-            case SYMBOL: o << "id(" << t.symid << ')'; break;
+            case SYMBOL: o << "id(" << t.symbol.toString() << ')'; break;
             case REFER_TO: o << '.'; break;
             case POINT_TO: o << "->"; break;
             case TYPEDEF: o << "typedef"; break;
@@ -246,6 +249,7 @@ struct Token
             case BIT_SRIGHT: o << ">>"; break;
 
             case CONST_INT: o << "int(" << t.ival << ")"; break;
+            case STRING: o << "string(\"" << t.string_ << "\")"; break;
 	        //CONST_INT, CONST_CHAR, CONST_FLOAT, STRING,
             default: o << "unknown"; break;
         }
@@ -347,6 +351,7 @@ class Lexer
         t.type = NONE;
 
         // handle punc & REFER_TO
+        const char *str_begin, *str_end;
         switch (input.peak())
         {
             case '(':
@@ -374,6 +379,16 @@ class Lexer
                 t.type = (input.peak(1) == '.' && input.peak(2) == '.')
                              ? VAR_PARAM
                              : REFER_TO;
+                break;
+            case '"':
+                t.type = STRING;
+                input.pop();
+                str_begin = input.data();
+                str_end = str_begin;
+                while (*str_end != '"')
+                    ++str_end;
+                t.string_ = StringRef(str_begin, str_end - str_begin);
+                input.pop(str_end - str_begin);
                 break;
             default:
                 break;
@@ -420,8 +435,7 @@ class Lexer
             if (r != l && t.type == NONE)
             {
                 t.type = SYMBOL;
-                t.symid = symbols.size();
-                symbols.push_back(sp);
+                t.symbol = sp;
             }
         }
         if (t.type != NONE)
@@ -620,34 +634,21 @@ class Lexer
         return tk;
     }
 
-    StringRef symbolName(size_t symid)
-    {
-        if (symid < symbols.size())
-            return symbols[symid];
-        else
-            return StringRef();
-    }
-
     void debugPrint()
     {
         deque<Token> cp = tokens;
         while (hasNext())
         {
             Token t = peakNext();
-            cout << "Token: " << t;
-            if (t.type == SYMBOL)
-                cout << ':' << symbolName(t.symid);
-            cout << endl;
+            cout << "Token: " << t << endl;
             getNext();
         }
         tokens = cp;
     }
 
    private:
-    vector<StringRef> symbols;  // symbol names
     deque<Token> tokens;
     int lnum;
     const char *lstart;
-    // vector<StringRef> strings; // string constants
 };
 

@@ -1,5 +1,6 @@
 #pragma once
 
+#include <algorithm>
 #include <iostream>
 #include <string>
 #include <vector>
@@ -174,7 +175,7 @@ class StackVM
     void debug()
     {
         long base = sp, length = 8192 - sp;
-        printf("[");
+        printf("\tStack: [ ");
         for (long i = 0; i < length; ++i)
         {
             printf("%ld ", memory[base + i]);
@@ -183,7 +184,7 @@ class StackVM
     }
 
    public:
-    long add_global(const char *str)
+    long add_string(const char *str)
     {
         char *base = (char *)memory;
         long addr, offset;
@@ -195,6 +196,14 @@ class StackVM
         hp += (offset + sizeof(long) - 1) / sizeof(long);
         return addr;
     }
+    long add_data(const char *data, int size)
+    {
+        char *base = (char *)memory;
+        long addr = hp * sizeof(long);
+        copy_n(data, size, base + addr);
+        hp += (size + sizeof(long) - 1) / sizeof(long);
+        return addr;
+    }
 
    public:
     StackVM() : sp(8192), bp(0), hp(0), ip(0) { fill_n(memory, 8192, 0l); }
@@ -203,7 +212,7 @@ class StackVM
         while (true)
         {
             Instruction i = code[ip];
-            cout << ip << ": " << i << endl;
+            cout << ip << ": " << i;
             switch (i.type)
             {
                 case INST_ADD:
@@ -244,6 +253,7 @@ class StackVM
                     break;
             }
             debug();
+            cout << endl;
             ++ip;
         }
     }
