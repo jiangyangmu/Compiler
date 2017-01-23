@@ -239,16 +239,7 @@ size_t Environment::allSymbolSize() const
 }
 void Environment::emit() const
 {
-    // ... setup code ...
-    // if (isRoot())
-    //     Emit("_start:");
-
-    // allocate space for global variables
-    if (symbols.size() > 0)
-        Emit("alloc %u", symbols.size());
-
-    // ... setup code ...
-    if (isRoot())
+    if (isRoot()) // global scope
     {
         // Emit("call _main");
         // Emit("free %u", symbols.size());
@@ -260,15 +251,28 @@ void Environment::emit() const
             if (s->type->type() == TC_FUNC)
             {
                 FuncType *func = dynamic_cast<FuncType *>(s->type);
+                EmitDecl(".global _%s", s->name.toString().data());
                 if (func->body)
                 {
                     Emit("_%s:", s->name.toString().data());
-                    func->body->emit(this);
+                    Emit("pushq %%rbp");
+                    Emit("movq %%rsp, %%rbp");
+                    Emit("sub $16, %%rsp");
+                    func->body->emit(this, FOR_NOTHING);
                 }
                 else
                     SyntaxWarning("function '" + s->name.toString() + "' has no body.");
             }
+            else if (s->type->type() == TC_INT)
+            {
+                EmitData("_%s: .int 0", s->name.toString().data());
+            }
         }
+    }
+    else // function scope
+    {
+        if (symbols.size() > 0)
+            SyntaxError("Not implemented.");
     }
 }
 

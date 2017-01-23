@@ -778,6 +778,24 @@ Expression *PostfixExpression::parse(Lexer &lex, Environment *env,
         return target;
     }
 }
+void PostfixExpression::emit(const Environment *env, EEmitGoal goal) const
+    {
+        // PrimaryExpression *e = dynamic_cast<PrimaryExpression *>(target);
+        switch (op)
+        {
+            case POSTFIX_CALL:
+                // for (auto it = params.rbegin(); it != params.rend(); ++it)
+                //     (*it)->emit(env, false);
+                // // target->emit(env);
+                // Emit("call %s", e->symbol->name.toString().c_str());
+                // for (size_t i = 0; i < params.size(); ++i)
+                //     Emit("pop");
+                // break;
+            default:
+                SyntaxError("PostfixExpression: not implemented");
+                break;
+        }
+    }
 bool __isPrimaryExpression(TokenType t)
 {
     bool is = false;

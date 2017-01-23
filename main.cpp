@@ -38,7 +38,7 @@ int main(int argc, char *argv[])
         source += '\n', print_source += '\n';
     }
 
-    cout << "-------------- source --------------" << endl;
+    // cout << "-------------- source --------------" << endl;
     // cout << print_source << endl;
     // remove comment
     // bool incomment = false;
@@ -71,17 +71,17 @@ int main(int argc, char *argv[])
         else ++ptr;
     }
 
-    cout << "-------------- lexer --------------" << endl;
+    // cout << "-------------- lexer --------------" << endl;
     StringBuf sb(source.data(), source.size());
     lex.tokenize(sb);
     // lex.debugPrint();
 
-    cout << "-------------- parser --------------" << endl;
+    // cout << "-------------- parser --------------" << endl;
     Parser p(lex);
     p.parse();
     // p.debugPrint();
 
-    cout << "-------------- code --------------" << endl;
+    // cout << "-------------- code --------------" << endl;
     p.emit();
     cout << Emitted() << endl;
 

@@ -119,6 +119,7 @@ expr					:= assign-expr ( ',' assign-expr )*
 assign-expr				:= ( unary-expr assign-op )* cond-expr
 
 # a ? b1 : b2 ? c1 : c2;
+# C 里 cond-expr 是 rvalue，C++ 里是 lvalue
 cond-expr				:= OR-expr ( '?' expr ':' cond-expr )?			# tricky here, why 'expr' and 'cond-expr' ??
 
 OR-expr					:= AND-expr ( '||' logical-AND-expr )*
@@ -144,6 +145,7 @@ mul-expr				:= cast-expr ( ('*'|'/'|'%') cast-expr )*
 cast-expr				:= ( '(' type-name ')' )* unary-expr
 
 # prefix-expr
+# ++i 在 C 里是 rvalue，C++ 里是 lvalue
 unary-expr				:= postfix-expr
 						|| '++' unary-expr
 						|| '--' unary-expr
@@ -176,6 +178,10 @@ stmt					:= labeled-stmt
 						|| iteration-stmt
 						|| jump-stmt
 
+						   # 注意这里，Label 是一个 identifier，不仅仅词法上符合，
+						   # 语法行为也符合，比如有 function-wise scope。
+						   # 而且，由于 Label: stmt 是一条语句，
+						   # 所以 Label 无法在全局域出现，只能在某个函数体内。
 labeled-stmt			:= identifier ':' stmt
 						|| 'case' constant-expr ':' stmt
 						|| 'default' ':' stmt
