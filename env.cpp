@@ -62,6 +62,15 @@ TypeBase *TypeTable::newIntegral(TokenType type, bool is_signed)
     }
     return new IntType(*i);
 }
+TypeBase *TypeTable::newStringLiteral()
+{
+    static ConstPointerType cpt;
+    if (cpt.next() == nullptr)
+    {
+        newIntegral(TYPE_CHAR, false)->mergeAtHead(&cpt);
+    }
+    return &cpt;
+}
 
 // -------- for SymbolTable -------
 
@@ -259,7 +268,8 @@ void Environment::emit()
                     func->body->emit(this, FOR_NOTHING);
                 }
                 else
-                    SyntaxWarning("function '" + s->name.toString() + "' has no body.");
+                    ;//SyntaxWarning("function '" + s->name.toString() + "' has no body.");
+                // TODO: support 'extern'
             }
             else if (s->type->type() == TC_INT)
             {
@@ -696,6 +706,8 @@ void __parseDeclaration(Lexer &lex, Environment *env, bool allow_func_def)
     }
     else
     {
+        if (spec == nullptr)
+            SyntaxErrorDebug("Invalid specifier");
         // Declaration
         while (true)
         {

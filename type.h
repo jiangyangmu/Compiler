@@ -342,6 +342,32 @@ class PointerType : public TypeBase,
         return target()->equal(*(o.target()));
     }
 };
+class ConstPointerType : public TypeBase,
+                    public Evaluable<PointerType>,
+                    public Indexable
+{
+   public:
+    TypeBase *target() const
+    {
+        assert(next() != nullptr);
+        return next();
+    }
+    virtual ETypeClass type() const
+    {
+        return TC_POINTER;
+    }
+    virtual long size() const
+    {
+        return sizeof(void *);
+    }
+    virtual bool equal(const TypeBase &other) const
+    {
+        if (other.type() != TC_POINTER)
+            return false;
+        const PointerType &o = dynamic_cast<const PointerType &>(other);
+        return target()->equal(*(o.target()));
+    }
+};
 // Array is const-pointer, or an address constant
 class ArrayType : public TypeBase, public RValue<ArrayType>, public Indexable
 {
@@ -504,6 +530,7 @@ class TypeTable
 
    public:
     TypeBase *newIntegral(TokenType type, bool is_signed);
+    TypeBase *newStringLiteral();
     static const IntType &Char();
     static const IntType &UChar();
     static const IntType &Short();

@@ -811,6 +811,7 @@ Expression *PrimaryExpression::parse(Lexer &lex, Environment *env)
             p = new PrimaryExpression();
             p->t = lex.getNext();
             p->str = &p->t.string_;
+            p->type_ = env->factory.newStringLiteral();
             break;
         case SYMBOL:
             p = new PrimaryExpression();
@@ -1178,6 +1179,7 @@ void PrimaryExpression::emit(Environment *env, EEmitGoal goal) const
 {
     vector<StringRef> regs{StringRef("%rdi"), StringRef("%rsi"), StringRef("%rdx"),
                            StringRef("-8(%rbp)"), StringRef("%r8"),  StringRef("%r9")};
+    StringRef l;
     switch (t.type)
     {
         case CONST_INT:
@@ -1187,8 +1189,12 @@ void PrimaryExpression::emit(Environment *env, EEmitGoal goal) const
                 SyntaxError("Can't get address of a rvalue");
             break;
         case STRING:
-            // Emit("push str(\"%s\")", str->toString().data());
-            Emit("<unknown PrimaryExpression>");
+            l = CreateLabel("L.str");
+            EmitData("%s: .asciz \"%s\"", l.data(), str->toString().data());
+            if (goal == FOR_VALUE)
+                Emit("leaq %s(%%rip), %%rax", l.data());
+            else if (goal == FOR_ADDRESS)
+                SyntaxError("Can't get address of a rvalue");
             break;
         case SYMBOL:
             if (goal == FOR_VALUE)
