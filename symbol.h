@@ -25,8 +25,9 @@ struct Symbol
     StringRef name;
     TypeBase *type;
     union {
-        long addr;
-        long value;
+        long addr; // struct offset
+        long value; // enum value
+        long position; // parameter position
     };
     friend std::ostream &operator<<(std::ostream &o, const Symbol &s);
 };

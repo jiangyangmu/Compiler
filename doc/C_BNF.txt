@@ -114,7 +114,8 @@ enumerator				:= enumeration-constant ( '=' constant-expression )?
 
 =============== expr(completed) ===============
 
-expr					:= assign-expr ( ',' assign-expr )*
+expr					:= comma-expr
+comma-expr				:= assign-expr ( ',' assign-expr )*
 
 assign-expr				:= ( unary-expr assign-op )* cond-expr
 

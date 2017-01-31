@@ -1,11 +1,18 @@
-int a;
+int i;
 int b;
 int c;
+int d;
 
 int main()
 {
-    a = 3;
-    b = 20;
-    c = a + b + 100;
-    return c;
+    c = (d = 0, b = 1, d >= b ? 11 : 15);
+
+    for (i = b; i <= c; i = i + 1)
+    {
+        if (i <= 5) continue;
+        d = d + i;
+        if (i >= 10) break;
+    }
+
+    return d;
 }

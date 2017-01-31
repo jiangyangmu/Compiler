@@ -20,7 +20,7 @@ class SyntaxNode : public CodeGenerator
 {
    public:
     virtual string debugString() { return "~<?~>"; }
-    virtual void emit(const Environment *env, EEmitGoal goal) const { Emit("<emit not implemented>"); }
+    virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 class Expression : public SyntaxNode
 {
@@ -71,14 +71,7 @@ class CompoundStatement : public SyntaxNode
         s += "<\n}\n";
         return s;
     }
-    virtual void emit(const Environment *__not_used, EEmitGoal goal) const
-    {
-        env->emit();
-        for (const SyntaxNode *stmt : stmts)
-        {
-            stmt->emit(env, FOR_NOTHING);
-        }
-    }
+    virtual void emit(Environment *__not_used, EEmitGoal goal) const;
 };
 // no instance, dispatch only
 class ExpressionStatement : public SyntaxNode
@@ -91,10 +84,7 @@ class ExpressionStatement : public SyntaxNode
     {
         return expr->debugString();
     }
-    virtual void emit(const Environment *env, EEmitGoal goal) const
-    {
-        expr->emit(env, FOR_NOTHING);
-    }
+    virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 // TODO: implement switch
 class SelectionStatement : public SyntaxNode
@@ -126,21 +116,7 @@ class SelectionStatement : public SyntaxNode
         s += "<\n";
         return s;
     }
-    virtual void emit(const Environment *env, EEmitGoal goal) const
-    {
-        expr->emit(env, FOR_VALUE);
-        Emit("jmp_if L1");
-        Emit("jmp L2");
-        Emit("L1:");
-        stmt->emit(env, FOR_NOTHING);
-        Emit("jmp L3");
-        Emit("L2:");
-        if (stmt2)
-        {
-            stmt2->emit(env, FOR_NOTHING);
-        }
-        Emit("L3:");
-    }
+    virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 class IterationStatement : public SyntaxNode
 {
@@ -172,6 +148,7 @@ class IterationStatement : public SyntaxNode
         s += "<\n";
         return s;
     }
+    virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 class JumpStatement : public SyntaxNode
 {
@@ -202,20 +179,7 @@ class JumpStatement : public SyntaxNode
         s += "<\n";
         return s;
     }
-    virtual void emit(const Environment *env, EEmitGoal goal) const
-    {
-        if (type == JMP_RETURN)
-        {
-            if (expr)
-                expr->emit(env, FOR_VALUE);
-            Emit("leave");
-            Emit("ret");
-        }
-        else
-        {
-            SyntaxError("JumpStatement: not implemented");
-        }
-    }
+    virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 
 class CommaExpression : public Expression
@@ -233,6 +197,7 @@ class CommaExpression : public Expression
         s += "<\n";
         return s;
     }
+    virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 // TODO: fix this class, only works for most cases for now
 class AssignExpression : public Expression
@@ -253,17 +218,7 @@ class AssignExpression : public Expression
         s += "<\n";
         return s;
     }
-    virtual void emit(const Environment *env, EEmitGoal goal) const
-    {
-        // TODO: evaluate should be from left to right
-        source->emit(env, FOR_VALUE);
-        Emit("movq %%rax, %%rcx");
-        target->emit(env, FOR_ADDRESS);
-        Emit("movq %%rcx, (%%rax)");
-
-        if (goal == FOR_VALUE)
-            Emit("movq %%rcx, %%rax");
-    }
+    virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 class CondExpression : public Expression
 {
@@ -282,6 +237,7 @@ class CondExpression : public Expression
         s += "<\n";
         return s;
     }
+    virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 class OrExpression : public Expression
 {
@@ -297,6 +253,7 @@ class OrExpression : public Expression
         s += "<\n";
         return s;
     }
+    virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 class AndExpression : public Expression
 {
@@ -312,6 +269,7 @@ class AndExpression : public Expression
         s += "<\n";
         return s;
     }
+    virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 class BitOrExpression : public Expression
 {
@@ -327,6 +285,7 @@ class BitOrExpression : public Expression
         s += "<\n";
         return s;
     }
+    virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 class BitXorExpression : public Expression
 {
@@ -342,6 +301,7 @@ class BitXorExpression : public Expression
         s += "<\n";
         return s;
     }
+    virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 class BitAndExpression : public Expression
 {
@@ -357,6 +317,7 @@ class BitAndExpression : public Expression
         s += "<\n";
         return s;
     }
+    virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 class EqExpression : public Expression
 {
@@ -376,6 +337,7 @@ class EqExpression : public Expression
         s += "<\n";
         return s;
     }
+    virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 class RelExpression : public Expression
 {
@@ -401,6 +363,7 @@ class RelExpression : public Expression
         s += "<\n";
         return s;
     }
+    virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 class ShiftExpression : public Expression
 {
@@ -424,6 +387,7 @@ class ShiftExpression : public Expression
         s += "<\n";
         return s;
     }
+    virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 class AddExpression : public Expression
 {
@@ -448,18 +412,7 @@ class AddExpression : public Expression
         s += "<\n";
         return s;
     }
-    virtual void emit(const Environment *env, EEmitGoal goal) const
-    {
-        left->emit(env, FOR_VALUE);
-        Emit("pushq %%rax");
-        right->emit(env, FOR_VALUE);
-        Emit("movq %%rax, %%rcx");
-        Emit("popq %%rax");
-        Emit("addq %%rcx, %%rax");
-
-        if (goal == FOR_ADDRESS)
-            SyntaxError("Can't get address of a rvalue");
-    }
+    virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 class MulExpression : public Expression
 {
@@ -560,7 +513,7 @@ class PostfixExpression : public Expression
         s += "<\n";
         return s;
     }
-    virtual void emit(const Environment *env, EEmitGoal goal) const;
+    virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 // TODO: finish this!
 class PrimaryExpression : public Expression
@@ -572,6 +525,7 @@ class PrimaryExpression : public Expression
         int ival;
         StringRef *str;
         Symbol *symbol;
+        Expression *expr;
     };
 
    public:
@@ -596,28 +550,7 @@ class PrimaryExpression : public Expression
         s += '\n';
         return s;
     }
-    virtual void emit(const Environment *env, EEmitGoal goal) const
-    {
-        switch (t.type)
-        {
-            case CONST_INT:
-                if (goal == FOR_VALUE)
-                    Emit("movq $%d, %%rax", ival);
-                else if (goal == FOR_ADDRESS)
-                    SyntaxError("Can't get address of a rvalue");
-                break;
-            case STRING:
-                // Emit("push str(\"%s\")", str->toString().data());
-                break;
-            case SYMBOL:
-                if (goal == FOR_VALUE)
-                    Emit("movq _%s(%%rip), %%rax", symbol->name.toString().data());
-                else if (goal == FOR_ADDRESS)
-                    Emit("leaq _%s(%%rip), %%rax", symbol->name.toString().data());
-                break;
-            default: Emit("<unknown PrimaryExpression>"); break;
-        }
-    }
+    virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 class ConstExpression : public Expression
 {
@@ -642,7 +575,7 @@ class Parser
     {
         env.debugPrint(lex);
     }
-    void emit() const
+    void emit()
     {
         env.emit();
     }

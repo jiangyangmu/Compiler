@@ -118,6 +118,11 @@ class StringRef
         return s;
     }
 
+    const char *data() const
+    {
+        return begin;
+    }
+
     char operator[](size_t offset) const
     {
         assert((begin + offset) < end);

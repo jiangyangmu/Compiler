@@ -154,7 +154,7 @@ void SymbolTable::add(Symbol *t)
 }
 Symbol *SymbolTable::find(ESymbolCategory category, StringRef name) const
 {
-    for (auto s = symbols.rbegin(); s != symbols.rend(); ++s)
+    for (auto s = symbols.begin(); s != symbols.end(); ++s)
     {
         if ((*s)->category == category && (*s)->name == name)
             return *s;
@@ -176,8 +176,8 @@ void SymbolTable::debugPrint(Lexer &lex) const
                     break;
                 case TC_FUNC:
                     if (dynamic_cast<FuncType *>(s->type)->body)
-                        cout << "\t{ ... }" << endl;
-                        // __debugPrint(dynamic_cast<FuncType *>(s->type)->body->debugString());
+                        // cout << "\t{ ... }" << endl;
+                        __debugPrint(dynamic_cast<FuncType *>(s->type)->body->debugString());
                     break;
                 default:
                     break;
@@ -237,14 +237,10 @@ size_t Environment::allSymbolSize() const
 {
     return symbols.size();
 }
-void Environment::emit() const
+void Environment::emit()
 {
     if (isRoot()) // global scope
     {
-        // Emit("call _main");
-        // Emit("free %u", symbols.size());
-        // Emit("ret");
-
         // generate code for function bodies
         for (const Symbol *s : symbols.symbols)
         {
@@ -257,7 +253,7 @@ void Environment::emit() const
                     Emit("_%s:", s->name.toString().data());
                     Emit("pushq %%rbp");
                     Emit("movq %%rsp, %%rbp");
-                    Emit("sub $16, %%rsp");
+                    Emit("subq $64, %%rsp");
                     func->body->emit(this, FOR_NOTHING);
                 }
                 else
@@ -265,15 +261,53 @@ void Environment::emit() const
             }
             else if (s->type->type() == TC_INT)
             {
-                EmitData("_%s: .int 0", s->name.toString().data());
+                EmitData("_%s: .quad 0", s->name.toString().data());
             }
         }
     }
-    else // function scope
+    else // block scope
     {
-        if (symbols.size() > 0)
+        int param = 0;
+        for (const Symbol *s : symbols.symbols)
+        {
+            if (s->category == SC_ID && s->position > 0)
+                ++param;
+        }
+        if (param > 6)
             SyntaxError("Not implemented.");
     }
+}
+void Environment::pushLabel(StringRef start, StringRef end)
+{
+    slabels.push_back(start);
+    elabels.push_back(end);
+}
+void Environment::popLabel()
+{
+    slabels.pop_back();
+    elabels.pop_back();
+}
+StringRef Environment::startLabel() const
+{
+    StringRef l;
+    if (!slabels.empty())
+        l = slabels.back();
+    else if (parent())
+        l = parent()->startLabel();
+    else
+        SyntaxError("can't use 'continue' here");
+    return l;
+}
+StringRef Environment::endLabel() const
+{
+    StringRef l;
+    if (!elabels.empty())
+        l = elabels.back();
+    else if (parent())
+        l = parent()->endLabel();
+    else
+        SyntaxError("can't use 'break' here");
+    return l;
 }
 
 TypeBase *__parseVoidType(Lexer &lex)
@@ -490,7 +524,7 @@ TypeBase *__parseFuncType(Lexer &lex, Environment *env)
             s->category = SC_ID;
             s->name = symbol;
             s->type = decl;
-            s->addr = 0;
+            s->position = 0;
             params.push_back(s);
             if (lex.peakNext().type == RP)
                 break;
@@ -502,12 +536,12 @@ TypeBase *__parseFuncType(Lexer &lex, Environment *env)
     }
     EXPECT(RP);
 
-    // calculate parameter location
-    // long location = 0;
-    for (auto p = params.rbegin(); p != params.rend(); ++p)
+    // calculate parameter position
+    // XXX: starting from 1
+    long pos = 0;
+    for (auto p = params.begin(); p != params.end(); ++p)
     {
-        // p.location = location;
-        // location += p.type->size();
+        (*p)->position = ++pos;
         f->env->add(*p);
     }
 

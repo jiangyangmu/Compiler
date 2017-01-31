@@ -514,7 +514,7 @@ class Lexer
                 break;
             case '>':
                 if (input.peak(1) == '=')
-                    t.type = REL_GE, oplen = 1;
+                    t.type = REL_GE, oplen = 2;
                 else if (input.peak(1) == '>')
                 {
                     if (input.peak(2) == '=')

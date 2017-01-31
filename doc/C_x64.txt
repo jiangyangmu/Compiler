@@ -1,21 +1,45 @@
 C_x64.txt
 
+---------- 全局设计 ----------
+
+Label 管理 [OK]
+Storage 管理
+
 ---- entry-point ----
-global start
+	.global _main
 
-section .text
-start:
-	call main
-	syscall "exit(0)"
+	.text
+_main:
+	...
 
-section .data
-...
-section .bss
-...
+	.data
+	...
 
+---------- 寄存器分配 ----------
+
+特殊用途勿动：
+	堆栈：rbp, rsp
+	调用：r11 (caller saved：你可以随便用，我需要的话会自己保存)
+	返回：rax
+
+params: rdi, rsi, rdx, rcx, r8, r9
+callee: rbx, r12, r13, r14, r15 (你用可以，但要负责复原)
+caller: r10
+
+使用优先级：r10 > rdi, rsi, rdx, rcx, r8, r9 > stack > rbx, r12, r13, r14, r15
 
 ---------- 堆栈图 ----------
 
+8k+16(%rbp)	memory argument eight-byte k
+...			...
+16(%rbp)	memory argument eight-byte 0
+------ 16-byte aligned ------
+8(%rbp)		return address
+0(%rbp)		prev %rbp value
+-8(%rbp)	[...
+				function's private memory
+0(%rsp)		...]
+-128(%rsp)	red zone (128 bytes)
 
 ---------- 数据图 ----------
 

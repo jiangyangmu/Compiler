@@ -1,6 +1,7 @@
 #include <iostream>
 #include <stack>
 #include <string>
+#include <vector>
 using namespace std;
 
 #include "common.h"
@@ -318,22 +319,22 @@ SyntaxNode *IterationStatement::parse(Lexer &lex, Environment *env)
             break;
         case FOR:
             stmt->type = FOR_LOOP;
-            if (lex.getNext().type != LP)
+            EXPECT(LP);
+            if (lex.peakNext().type != STMT_END)
             {
-                SyntaxError("Expect '('");
+                stmt->expr = CommaExpression::parse(lex, env);
             }
-            stmt->expr = CommaExpression::parse(lex, env);
             EXPECT(STMT_END);
-            stmt->expr2 = CommaExpression::parse(lex, env);
+            if (lex.peakNext().type != STMT_END)
+            {
+                stmt->expr2 = CommaExpression::parse(lex, env);
+            }
             EXPECT(STMT_END);
             if (lex.peakNext().type != RP)
             {
                 stmt->expr3 = CommaExpression::parse(lex, env);
             }
-            if (lex.getNext().type != RP)
-            {
-                SyntaxError("Expect ')'");
-            }
+            EXPECT(RP);
             stmt->stmt = Statement::parse(lex, env);
             break;
         default: SyntaxError("Unexpected token"); break;
@@ -354,12 +355,12 @@ SyntaxNode *JumpStatement::parse(Lexer &lex, Environment *env)
             break;
         case CONTINUE:
             stmt->type = JMP_CONTINUE;
-            if (lex.getNext().type != STMT_END)
-            {
-                SyntaxError("Expect ';'");
-            }
+            EXPECT(STMT_END);
             break;
-        case BREAK: stmt->type = JMP_BREAK; break;
+        case BREAK:
+            stmt->type = JMP_BREAK;
+            EXPECT(STMT_END);
+            break;
         case RETURN:
             stmt->type = JMP_RETURN;
             stmt->expr = CommaExpression::parse(lex, env);
@@ -374,7 +375,7 @@ Expression *CommaExpression::parse(Lexer &lex, Environment *env)
 {
     DebugParseTree(CommaExpression);
     if (!IsExpression(lex.peakNext().type))
-        SyntaxError("Expect expression");
+        SyntaxErrorDebug("Expect expression");
 
     Expression *e = AssignExpression::parse(lex, env);
     if (lex.peakNext().type == OP_COMMA)
@@ -459,6 +460,7 @@ Expression *AndExpression::parse(Lexer &lex, Environment *env)
         AndExpression *expr = new AndExpression();
         expr->left = e;
         expr->right = AndExpression::parse(lex, env);
+        expr->type_ = env->factory.newIntegral(TYPE_INT, true);
         return expr;
     }
     else
@@ -544,6 +546,7 @@ Expression *ShiftExpression::parse(Lexer &lex, Environment *env)
         expr->op = lex.getNext().type;
         expr->left = e;
         expr->right = ShiftExpression::parse(lex, env);
+        expr->type_ = e->type();
         return expr;
     }
     else
@@ -778,24 +781,6 @@ Expression *PostfixExpression::parse(Lexer &lex, Environment *env,
         return target;
     }
 }
-void PostfixExpression::emit(const Environment *env, EEmitGoal goal) const
-    {
-        // PrimaryExpression *e = dynamic_cast<PrimaryExpression *>(target);
-        switch (op)
-        {
-            case POSTFIX_CALL:
-                // for (auto it = params.rbegin(); it != params.rend(); ++it)
-                //     (*it)->emit(env, false);
-                // // target->emit(env);
-                // Emit("call %s", e->symbol->name.toString().c_str());
-                // for (size_t i = 0; i < params.size(); ++i)
-                //     Emit("pop");
-                // break;
-            default:
-                SyntaxError("PostfixExpression: not implemented");
-                break;
-        }
-    }
 bool __isPrimaryExpression(TokenType t)
 {
     bool is = false;
@@ -836,8 +821,394 @@ Expression *PrimaryExpression::parse(Lexer &lex, Environment *env)
                             "' not found");
             p->type_ = p->symbol->type;
             break;
-        default: SyntaxErrorEx("Unsupported primary expression"); break;
+        case LP:
+            p = new PrimaryExpression();
+            p->t = lex.getNext();
+            p->expr = CommaExpression::parse(lex, env);
+            if (p->expr == nullptr)
+                SyntaxError("PrimaryExpression: expect expression");
+            EXPECT(RP);
+            p->type_ = p->expr->type();
+            break;
+        default:
+            break;
+    }
+    if (p == nullptr)
+    {
+        SyntaxErrorEx("Unsupported primary expression");
     }
     return p;
 }
 
+void SyntaxNode::emit(Environment *env, EEmitGoal goal) const
+{
+    Emit("<emit not implemented>");
+}
+// LabelStatement
+void CompoundStatement::emit(Environment *__not_used, EEmitGoal goal) const
+{
+    env->emit();
+    for (const SyntaxNode *stmt : stmts)
+    {
+        stmt->emit(env, FOR_NOTHING);
+    }
+}
+void ExpressionStatement::emit(Environment *env, EEmitGoal goal) const
+{
+    expr->emit(env, FOR_NOTHING);
+}
+void SelectionStatement::emit(Environment *env, EEmitGoal goal) const
+{
+    if (!stmt && !stmt2)
+    {
+        expr->emit(env, FOR_NOTHING);
+        return;
+    }
+    else
+    {
+        expr->emit(env, FOR_VALUE);
+        Emit("cmpq $0, %%rax");
+    }
+
+    StringRef lend = CreateLabel("Lend");
+    if (stmt == nullptr)
+    {
+        // assert( stmt2 != nullptr)
+        Emit("jne %.*s", lend.size(), lend.data());
+        stmt2->emit(env, FOR_NOTHING);
+    }
+    else if (stmt2 == nullptr)
+    {
+        Emit("je %.*s", lend.size(), lend.data());
+        stmt->emit(env, FOR_NOTHING);
+    }
+    else
+    {
+        StringRef lc = CreateLabel("Lc");
+        Emit("je %.*s", lc.size(), lc.data());
+        stmt->emit(env, FOR_NOTHING);
+        Emit("jmp %.*s", lend.size(), lend.data());
+        Emit("%.*s:", lc.size(), lc.data());
+        stmt2->emit(env, FOR_NOTHING);
+    }
+    Emit("%.*s:", lend.size(), lend.data());
+}
+void IterationStatement::emit(Environment *env, EEmitGoal goal) const
+{
+    StringRef head = CreateLabel("Lhead");
+    StringRef start = CreateLabel("Lstart");
+    StringRef end = CreateLabel("Lend");
+    env->pushLabel(start, end);
+    if (type == FOR_LOOP)
+    {
+        if (expr)
+            expr->emit(env, FOR_NOTHING);
+        Emit("%.*s:", head.size(), head.data());
+        if (expr2)
+        {
+            expr2->emit(env, FOR_VALUE);
+            Emit("cmpq $0, %%rax");
+            Emit("je %.*s", end.size(), end.data());
+        }
+        stmt->emit(env, FOR_NOTHING);
+        Emit("%.*s:", start.size(), start.data());
+        if (expr3)
+            expr3->emit(env, FOR_NOTHING);
+        Emit("jmp %.*s", head.size(), head.data());
+        Emit("%.*s:", end.size(), end.data());
+    }
+}
+void JumpStatement::emit(Environment *env, EEmitGoal goal) const
+{
+    if (type == JMP_RETURN)
+    {
+        if (expr)
+            expr->emit(env, FOR_VALUE);
+        Emit("leave");
+        Emit("ret");
+    }
+    else if (type == JMP_BREAK)
+    {
+        Emit("jmp %.*s", env->endLabel().size(), env->endLabel().data());
+    }
+    else if (type == JMP_CONTINUE)
+    {
+        Emit("jmp %.*s", env->startLabel().size(), env->startLabel().data());
+    }
+    else
+    {
+        SyntaxError("JumpStatement: not implemented");
+    }
+}
+void CommaExpression::emit(Environment *env, EEmitGoal goal) const
+{
+    if (next)
+    {
+        curr->emit(env, FOR_NOTHING);
+        next->emit(env, FOR_VALUE);
+    }
+    else
+        curr->emit(env, FOR_VALUE);
+
+    if (goal == FOR_ADDRESS)
+        SyntaxError("Can't get address of a rvalue");
+}
+void AssignExpression::emit(Environment *env, EEmitGoal goal) const
+{
+    // TODO: evaluate should be from left to right
+    source->emit(env, FOR_VALUE);
+    Emit("movq %%rax, %%rcx");
+    target->emit(env, FOR_ADDRESS);
+    Emit("movq %%rcx, (%%rax)");
+
+    if (goal == FOR_VALUE)
+        Emit("movq %%rcx, %%rax");
+}
+void CondExpression::emit(Environment *env, EEmitGoal goal) const
+{
+    StringRef l1 = CreateLabel("L1");
+    StringRef lend = CreateLabel("Lend");
+    cond->emit(env, FOR_VALUE);
+    Emit("cmpq $0, %%rax");
+    Emit("jz %.*s", l1.size(), l1.data());
+    left->emit(env, FOR_VALUE);
+    Emit("jmp %.*s", lend.size(), lend.data());
+    Emit("%.*s:", l1.size(), l1.data());
+    right->emit(env, FOR_VALUE);
+    Emit("%.*s:", lend.size(), lend.data());
+
+    if (goal == FOR_ADDRESS)
+        SyntaxError("Can't get address of a rvalue");
+}
+void OrExpression::emit(Environment *env, EEmitGoal goal) const
+{
+    left->emit(env, FOR_VALUE);
+    Emit("pushq %%rax");
+    right->emit(env, FOR_VALUE);
+    Emit("movq %%rax, %%rcx");
+    Emit("popq %%rax");
+
+    StringRef lfalse = CreateLabel("Lfalse");
+
+    Emit("orq %%rcx, %%rax");
+    Emit("cmpq $0, %%rax");
+    Emit("je %.*s", lfalse.size(), lfalse.data());
+
+    Emit("movq $1, %%rax");
+    Emit("%.*s:", lfalse.size(), lfalse.data());
+
+    if (goal == FOR_ADDRESS)
+        SyntaxError("Can't get address of a rvalue");
+}
+void AndExpression::emit(Environment *env, EEmitGoal goal) const
+{
+    left->emit(env, FOR_VALUE);
+    Emit("pushq %%rax");
+    right->emit(env, FOR_VALUE);
+    Emit("movq %%rax, %%rcx");
+    Emit("popq %%rax");
+
+    StringRef lfalse = CreateLabel("Lfalse");
+
+    Emit("cmpq $0, %%rax");
+    Emit("je %.*s", lfalse.size(), lfalse.data());
+    Emit("cmpq $0, %%rcx");
+    Emit("movq $0, %%rax");
+    Emit("je %.*s", lfalse.size(), lfalse.data());
+
+    Emit("movq $1, %%rax");
+    Emit("%.*s:", lfalse.size(), lfalse.data());
+
+    if (goal == FOR_ADDRESS)
+        SyntaxError("Can't get address of a rvalue");
+}
+void BitOrExpression::emit(Environment *env, EEmitGoal goal) const
+{
+    left->emit(env, FOR_VALUE);
+    Emit("pushq %%rax");
+    right->emit(env, FOR_VALUE);
+    Emit("movq %%rax, %%rcx");
+    Emit("popq %%rax");
+
+    Emit("orq %%rcx, %%rax");
+
+    if (goal == FOR_ADDRESS)
+        SyntaxError("Can't get address of a rvalue");
+}
+void BitXorExpression::emit(Environment *env, EEmitGoal goal) const
+{
+    left->emit(env, FOR_VALUE);
+    Emit("pushq %%rax");
+    right->emit(env, FOR_VALUE);
+    Emit("movq %%rax, %%rcx");
+    Emit("popq %%rax");
+
+    Emit("xorq %%rcx, %%rax");
+
+    if (goal == FOR_ADDRESS)
+        SyntaxError("Can't get address of a rvalue");
+}
+void BitAndExpression::emit(Environment *env, EEmitGoal goal) const
+{
+    left->emit(env, FOR_VALUE);
+    Emit("pushq %%rax");
+    right->emit(env, FOR_VALUE);
+    Emit("movq %%rax, %%rcx");
+    Emit("popq %%rax");
+
+    Emit("andq %%rcx, %%rax");
+
+    if (goal == FOR_ADDRESS)
+        SyntaxError("Can't get address of a rvalue");
+}
+// EqExpression
+void EqExpression::emit(Environment *env, EEmitGoal goal) const
+{
+    left->emit(env, FOR_VALUE);
+    Emit("pushq %%rax");
+    right->emit(env, FOR_VALUE);
+    Emit("movq %%rax, %%rcx");
+    Emit("popq %%rax");
+    Emit("cmp %%rcx, %%rax");
+
+    StringRef lfalse = CreateLabel("Lfalse");
+    StringRef lend = CreateLabel("Lend");
+    switch (op)
+    {
+        case REL_EQ: Emit("jne %.*s", lfalse.size(), lfalse.data()); break;
+        case REL_NE: Emit("je %.*s", lfalse.size(), lfalse.data()); break;
+        default: break;
+    }
+
+    Emit("movq $1, %%rax");
+    Emit("jmp %.*s", lend.size(), lend.data());
+    Emit("%.*s:", lfalse.size(), lfalse.data());
+    Emit("movq $0, %%rax");
+    Emit("%.*s:", lend.size(), lend.data());
+
+    if (goal == FOR_ADDRESS)
+        SyntaxError("Can't get address of a rvalue");
+}
+void RelExpression::emit(Environment *env, EEmitGoal goal) const
+{
+    left->emit(env, FOR_VALUE);
+    Emit("pushq %%rax");
+    right->emit(env, FOR_VALUE);
+    Emit("movq %%rax, %%rcx");
+    Emit("popq %%rax");
+    Emit("cmp %%rcx, %%rax");
+
+    StringRef lfalse = CreateLabel("Lfalse");
+    StringRef lend = CreateLabel("Lend");
+    // TODO: signed or unsigned?
+    switch (op)
+    {
+        case REL_LT: Emit("jge %.*s", lfalse.size(), lfalse.data()); break;
+        case REL_LE: Emit("jg %.*s", lfalse.size(), lfalse.data()); break;
+        case REL_GT: Emit("jle %.*s", lfalse.size(), lfalse.data()); break;
+        case REL_GE: Emit("jl %.*s", lfalse.size(), lfalse.data()); break;
+        default: break;
+    }
+
+    Emit("movq $1, %%rax");
+    Emit("jmp %.*s", lend.size(), lend.data());
+    Emit("%.*s:", lfalse.size(), lfalse.data());
+    Emit("movq $0, %%rax");
+    Emit("%.*s:", lend.size(), lend.data());
+
+    if (goal == FOR_ADDRESS)
+        SyntaxError("Can't get address of a rvalue");
+}
+void ShiftExpression::emit(Environment *env, EEmitGoal goal) const
+{
+    left->emit(env, FOR_VALUE);
+    Emit("pushq %%rax");
+    right->emit(env, FOR_VALUE);
+    Emit("movq %%rax, %%rcx");
+    Emit("popq %%rax");
+
+    if (op == BIT_SLEFT)
+        Emit("rol %%cl, %%rax");
+    else
+        Emit("ror %%cl, %%rax");
+
+    if (goal == FOR_ADDRESS)
+        SyntaxError("Can't get address of a rvalue");
+}
+void AddExpression::emit(Environment *env, EEmitGoal goal) const
+{
+    left->emit(env, FOR_VALUE);
+    Emit("pushq %%rax");
+    right->emit(env, FOR_VALUE);
+    Emit("movq %%rax, %%rcx");
+    Emit("popq %%rax");
+    if (op == OP_ADD)
+        Emit("addq %%rcx, %%rax");
+    else
+        Emit("subq %%rcx, %%rax");
+
+    if (goal == FOR_ADDRESS)
+        SyntaxError("Can't get address of a rvalue");
+}
+// MulExpression
+// CastExpression
+// UnaryExpression
+void PostfixExpression::emit(Environment *env, EEmitGoal goal) const
+{
+    PrimaryExpression *e = dynamic_cast<PrimaryExpression *>(target);
+    vector<StringRef> regs{StringRef("rdi"), StringRef("rsi"), StringRef("rdx"),
+                           StringRef("rcx"), StringRef("r8"),  StringRef("r9")};
+    int idx = 0;
+    switch (op)
+    {
+        case POSTFIX_CALL:
+            for (auto it = params.begin(); it != params.end(); ++it)
+            {
+                (*it)->emit(env, FOR_VALUE);
+                Emit("movq %%rax, %%%s", regs[idx++]);
+            }
+            Emit("call _%s", e->symbol->name.toString().c_str());
+            break;
+        default:
+            SyntaxError("PostfixExpression: not implemented");
+            break;
+    }
+}
+void PrimaryExpression::emit(Environment *env, EEmitGoal goal) const
+{
+    vector<StringRef> regs{StringRef("rdi"), StringRef("rsi"), StringRef("rdx"),
+                           StringRef("rcx"), StringRef("r8"),  StringRef("r9")};
+    switch (t.type)
+    {
+        case CONST_INT:
+            if (goal == FOR_VALUE)
+                Emit("movq $%d, %%rax", ival);
+            else if (goal == FOR_ADDRESS)
+                SyntaxError("Can't get address of a rvalue");
+            break;
+        case STRING:
+            // Emit("push str(\"%s\")", str->toString().data());
+            Emit("<unknown PrimaryExpression>");
+            break;
+        case SYMBOL:
+            if (goal == FOR_VALUE)
+            {
+                if (symbol->position > 0)
+                    Emit("movq %%%s, %%rax", regs[symbol->position - 1]);
+                else
+                    Emit("movq _%s(%%rip), %%rax", symbol->name.toString().data());
+            }
+            else if (goal == FOR_ADDRESS)
+            {
+                if (symbol->position > 0)
+                    SyntaxError("Can't get address of a register value");
+                else
+                    Emit("leaq _%s(%%rip), %%rax", symbol->name.toString().data());
+            }
+            break;
+        case LP:
+            expr->emit(env, goal);
+            break;
+        default: Emit("<unknown PrimaryExpression>"); break;
+    }
+}

@@ -11,6 +11,7 @@ class Environment : public TreeLike<Environment>
     static int idgen;
     int id;
     SymbolTable symbols;
+    vector<StringRef> slabels, elabels;
 
    public:
     TypeTable factory;
@@ -21,7 +22,12 @@ class Environment : public TreeLike<Environment>
     size_t allSymbolSize() const;
     void debugPrint(Lexer &lex) const;
 
-    void emit() const;
+    // code & label
+    void emit();
+    void pushLabel(StringRef start, StringRef end);
+    void popLabel();
+    StringRef startLabel() const;
+    StringRef endLabel() const;
 
     static void ParseLocalDeclaration(Lexer &lex, Environment *env);
     static void ParseGlobalDeclaration(Lexer &lex, Environment *env);
