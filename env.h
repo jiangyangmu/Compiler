@@ -10,12 +10,14 @@ class Environment : public TreeLike<Environment>
 {
     static int idgen;
     int id;
+    size_t paramcnt;
     SymbolTable symbols;
     vector<StringRef> slabels, elabels;
 
    public:
     TypeTable factory;
-    Environment() : id(idgen++) {}
+    Environment() : id(idgen++), paramcnt(0) {}
+    explicit Environment(size_t cnt) : id(idgen++), paramcnt(cnt) {}
 
     Symbol *find(ESymbolCategory category, StringRef name) const;
     void add(Symbol *s);

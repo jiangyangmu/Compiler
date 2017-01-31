@@ -254,6 +254,8 @@ void Environment::emit()
                     Emit("pushq %%rbp");
                     Emit("movq %%rsp, %%rbp");
                     Emit("subq $64, %%rsp");
+                    if (func->env->paramcnt >= 4)
+                        Emit("movq %%rcx, -8(%%rbp)");
                     func->body->emit(this, FOR_NOTHING);
                 }
                 else
@@ -267,13 +269,7 @@ void Environment::emit()
     }
     else // block scope
     {
-        int param = 0;
-        for (const Symbol *s : symbols.symbols)
-        {
-            if (s->category == SC_ID && s->position > 0)
-                ++param;
-        }
-        if (param > 6)
+        if (paramcnt > 6)
             SyntaxError("Not implemented.");
     }
 }
@@ -506,10 +502,6 @@ TypeBase *__parseFuncType(Lexer &lex, Environment *env)
     if (lex.peakNext().type != LP)
         return nullptr;
 
-    FuncType *f = new FuncType();
-    f->env = new Environment();
-    // f->env->setParent(env);
-
     // parse parameters
     vector<Symbol *> params;
     EXPECT(LP);
@@ -535,6 +527,10 @@ TypeBase *__parseFuncType(Lexer &lex, Environment *env)
         }
     }
     EXPECT(RP);
+
+    FuncType *f = new FuncType();
+    f->env = new Environment(params.size());
+    // f->env->setParent(env);
 
     // calculate parameter position
     // XXX: starting from 1

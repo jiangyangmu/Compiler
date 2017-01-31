@@ -1156,8 +1156,8 @@ void AddExpression::emit(Environment *env, EEmitGoal goal) const
 void PostfixExpression::emit(Environment *env, EEmitGoal goal) const
 {
     PrimaryExpression *e = dynamic_cast<PrimaryExpression *>(target);
-    vector<StringRef> regs{StringRef("rdi"), StringRef("rsi"), StringRef("rdx"),
-                           StringRef("rcx"), StringRef("r8"),  StringRef("r9")};
+    vector<StringRef> regs{StringRef("%rdi"), StringRef("%rsi"), StringRef("%rdx"),
+                           StringRef("%rcx"), StringRef("%r8"),  StringRef("%r9")};
     int idx = 0;
     switch (op)
     {
@@ -1165,7 +1165,7 @@ void PostfixExpression::emit(Environment *env, EEmitGoal goal) const
             for (auto it = params.begin(); it != params.end(); ++it)
             {
                 (*it)->emit(env, FOR_VALUE);
-                Emit("movq %%rax, %%%s", regs[idx++]);
+                Emit("movq %%rax, %s", regs[idx++]);
             }
             Emit("call _%s", e->symbol->name.toString().c_str());
             break;
@@ -1176,8 +1176,8 @@ void PostfixExpression::emit(Environment *env, EEmitGoal goal) const
 }
 void PrimaryExpression::emit(Environment *env, EEmitGoal goal) const
 {
-    vector<StringRef> regs{StringRef("rdi"), StringRef("rsi"), StringRef("rdx"),
-                           StringRef("rcx"), StringRef("r8"),  StringRef("r9")};
+    vector<StringRef> regs{StringRef("%rdi"), StringRef("%rsi"), StringRef("%rdx"),
+                           StringRef("-8(%rbp)"), StringRef("%r8"),  StringRef("%r9")};
     switch (t.type)
     {
         case CONST_INT:
@@ -1194,7 +1194,7 @@ void PrimaryExpression::emit(Environment *env, EEmitGoal goal) const
             if (goal == FOR_VALUE)
             {
                 if (symbol->position > 0)
-                    Emit("movq %%%s, %%rax", regs[symbol->position - 1]);
+                    Emit("movq %s, %%rax", regs[symbol->position - 1]);
                 else
                     Emit("movq _%s(%%rip), %%rax", symbol->name.toString().data());
             }
