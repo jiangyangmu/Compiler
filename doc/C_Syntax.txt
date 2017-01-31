@@ -1,6 +1,5 @@
 C Grammar
 
-1. 弄清 start
 
 =============== program(completed) ===============
 
