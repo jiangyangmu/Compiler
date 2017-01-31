@@ -522,6 +522,7 @@ class PrimaryExpression : public Expression
 
     Token t;
     union {
+        char cval;
         int ival;
         StringRef *str;
         Symbol *symbol;

@@ -156,9 +156,10 @@ struct Token
             case BIT_SLEFT: s = "<<"; break;
             case BIT_SRIGHT: s = ">>"; break;
 
+            case CONST_CHAR: s = "char"; break;
             case CONST_INT: s = "int"; break;
+	        //CONST_FLOAT,
             case STRING: s = "string"; break;
-	        //CONST_INT, CONST_CHAR, CONST_FLOAT, STRING,
             default: s = "unknown"; break;
         }
         return s;
@@ -248,9 +249,10 @@ struct Token
             case BIT_SLEFT: o << "<<"; break;
             case BIT_SRIGHT: o << ">>"; break;
 
+            case CONST_CHAR: o << "char('" << t.cval << "')"; break;
             case CONST_INT: o << "int(" << t.ival << ")"; break;
+	        //CONST_FLOAT,
             case STRING: o << "string(\"" << t.string_ << "\")"; break;
-	        //CONST_INT, CONST_CHAR, CONST_FLOAT, STRING,
             default: o << "unknown"; break;
         }
         return o;
@@ -386,9 +388,27 @@ class Lexer
                 str_begin = input.data();
                 str_end = str_begin;
                 while (*str_end != '"')
-                    ++str_end;
+                {
+                    if (*str_end == '\0')
+                        LexError("unmatched \"");
+                    else
+                        ++str_end;
+                }
                 t.string_ = StringRef(str_begin, str_end - str_begin);
                 input.pop(str_end - str_begin);
+                break;
+            case '\'':
+                // TODO: support '\' syntax
+                t.type = CONST_CHAR;
+                input.pop();
+                t.cval = input.peak();
+                if (t.cval == '\0')
+                    LexError("unmatched '");
+                else if (t.cval == '\'')
+                    LexError("invalid character constant, empty declaration");
+                input.pop();
+                if (input.peak() != '\'')
+                    LexError("expect '");
                 break;
             default:
                 break;
@@ -402,7 +422,7 @@ class Lexer
             return true;
         }
 
-        // TODO: handle constant
+        // TODO: handle float constant
         int len = _parse_int(input.data(), t.ival);
         if (len > 0)
         {

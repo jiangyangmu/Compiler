@@ -801,6 +801,12 @@ Expression *PrimaryExpression::parse(Lexer &lex, Environment *env)
     PrimaryExpression *p = nullptr;
     switch (lex.peakNext().type)
     {
+        case CONST_CHAR:
+            p = new PrimaryExpression();
+            p->t = lex.getNext();
+            p->cval = p->t.cval;
+            p->type_ = env->factory.newIntegral(TYPE_CHAR, false);
+            break;
         case CONST_INT:
             p = new PrimaryExpression();
             p->t = lex.getNext();
@@ -1182,6 +1188,12 @@ void PrimaryExpression::emit(Environment *env, EEmitGoal goal) const
     StringRef l;
     switch (t.type)
     {
+        case CONST_CHAR:
+            if (goal == FOR_VALUE)
+                Emit("movq $%d, %%rax", cval);
+            else if (goal == FOR_ADDRESS)
+                SyntaxError("Can't get address of a rvalue");
+            break;
         case CONST_INT:
             if (goal == FOR_VALUE)
                 Emit("movq $%d, %%rax", ival);
