@@ -406,6 +406,11 @@ class Lexer
                     LexError("unmatched '");
                 else if (t.cval == '\'')
                     LexError("invalid character constant, empty declaration");
+                else if (t.cval == '\\')
+                {
+                    input.pop();
+                    t.cval = input.peak() - '0';
+                }
                 input.pop();
                 if (input.peak() != '\'')
                     LexError("expect '");

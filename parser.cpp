@@ -68,6 +68,9 @@ bool IsUnaryOperator(TokenType t)
         case OP_MUL:
         case OP_ADD:
         case OP_SUB:
+        case OP_INC:
+        case OP_DEC:
+        case SIZEOF:
         case BOOL_NOT: is = true; break;
         default: break;
     }
@@ -316,6 +319,7 @@ SyntaxNode *IterationStatement::parse(Lexer &lex, Environment *env)
             {
                 SyntaxError("Expect ')'");
             }
+            EXPECT(STMT_END);
             break;
         case FOR:
             stmt->type = FOR_LOOP;
@@ -564,7 +568,7 @@ Expression *AddExpression::parse(Lexer &lex, Environment *env, Expression *left)
         expr->left = left;
         expr->right = MulExpression::parse(lex, env);
 
-        EXPECT_TYPE_WITH(left->type(), TOp_ADD);
+        EXPECT_TYPE_WITH(expr->left->type(), TOp_ADD);
         EXPECT_TYPE_WITH(expr->right->type(), TOp_ADD);
 
         expr->type_ = CommonType(expr->left->type(), expr->right->type());
@@ -633,6 +637,16 @@ Expression *UnaryExpression::parse(Lexer &lex, Environment *env)
             case OP_DEC:
                 expr->op = lex.getNext().type;
                 expr->expr = UnaryExpression::parse(lex, env);
+                assert( expr->expr != nullptr);
+                EXPECT_TYPE_WITH(expr->expr->type(), TOp_INC);
+                expr->type_ = expr->expr->type();
+                break;
+            case OP_MUL: // pointer
+                expr->op = lex.getNext().type;
+                expr->expr = CastExpression::parse(lex, env);
+                assert( expr->expr != nullptr);
+                EXPECT_TYPE_IS(expr->expr->type(), TC_POINTER);
+                expr->type_ = dynamic_cast<PointerType *>(expr->expr->type())->target();
                 break;
             case SIZEOF:
                 expr->op = lex.getNext().type;
@@ -799,6 +813,7 @@ Expression *PrimaryExpression::parse(Lexer &lex, Environment *env)
 {
     DebugParseTree(PrimaryExpression);
     PrimaryExpression *p = nullptr;
+    Expression *e = nullptr;
     switch (lex.peakNext().type)
     {
         case CONST_CHAR:
@@ -829,21 +844,19 @@ Expression *PrimaryExpression::parse(Lexer &lex, Environment *env)
             p->type_ = p->symbol->type;
             break;
         case LP:
-            p = new PrimaryExpression();
-            p->t = lex.getNext();
-            p->expr = CommaExpression::parse(lex, env);
-            if (p->expr == nullptr)
-                SyntaxError("PrimaryExpression: expect expression");
+            EXPECT(LP);
+            e = CommaExpression::parse(lex, env);
             EXPECT(RP);
-            p->type_ = p->expr->type();
             break;
         default:
             break;
     }
+
+    if (e != nullptr)
+        return e;
+
     if (p == nullptr)
-    {
         SyntaxErrorEx("Unsupported primary expression");
-    }
     return p;
 }
 
@@ -964,8 +977,9 @@ void AssignExpression::emit(Environment *env, EEmitGoal goal) const
 {
     // TODO: evaluate should be from left to right
     source->emit(env, FOR_VALUE);
-    Emit("movq %%rax, %%rcx");
+    Emit("pushq %%rax");
     target->emit(env, FOR_ADDRESS);
+    Emit("popq %%rcx");
     Emit("movq %%rcx, (%%rax)");
 
     if (goal == FOR_VALUE)
@@ -1160,6 +1174,34 @@ void AddExpression::emit(Environment *env, EEmitGoal goal) const
 // MulExpression
 // CastExpression
 // UnaryExpression
+void UnaryExpression::emit(Environment *env, EEmitGoal goal) const
+{
+    switch (op)
+    {
+        case OP_INC:
+        case OP_DEC:
+            expr->emit(env, FOR_ADDRESS);
+            Emit("movq (%%rax), %%rcx");
+            Emit("%s %%rcx", (op == OP_INC ? "inc" : "dec"));
+            Emit("movq %%rcx, (%%rax)");
+            if (goal == FOR_VALUE)
+            {
+                Emit("movq %%rcx, %%rax");
+            }
+            else if (goal == FOR_ADDRESS)
+                SyntaxError("Can't get address of a rvalue");
+            break;
+        case OP_MUL:
+            expr->emit(env, FOR_VALUE);
+            if (goal == FOR_VALUE)
+                Emit("movq (%%rax), %%rax");
+            // nothing to do if FOR_ADDRESS
+            break;
+        default:
+            SyntaxError("UnaryExpression: not implemented");
+            break;
+    }
+}
 void PostfixExpression::emit(Environment *env, EEmitGoal goal) const
 {
     PrimaryExpression *e = dynamic_cast<PrimaryExpression *>(target);
@@ -1168,6 +1210,20 @@ void PostfixExpression::emit(Environment *env, EEmitGoal goal) const
     int idx = 0;
     switch (op)
     {
+        case POSTFIX_INC:
+        case POSTFIX_DEC:
+            target->emit(env, FOR_ADDRESS);
+            Emit("movq (%%rax), %%rcx");
+            Emit("%s %%rcx", (op == POSTFIX_INC ? "inc" : "dec"));
+            Emit("movq %%rcx, (%%rax)");
+            if (goal == FOR_VALUE)
+            {
+                Emit("%s %%rcx", (op == POSTFIX_INC ? "dec" : "inc"));
+                Emit("movq %%rcx, %%rax");
+            }
+            else if (goal == FOR_ADDRESS)
+                SyntaxError("Can't get address of a rvalue");
+            break;
         case POSTFIX_CALL:
             for (auto it = params.begin(); it != params.end(); ++it)
             {
@@ -1184,7 +1240,7 @@ void PostfixExpression::emit(Environment *env, EEmitGoal goal) const
 void PrimaryExpression::emit(Environment *env, EEmitGoal goal) const
 {
     vector<StringRef> regs{StringRef("%rdi"), StringRef("%rsi"), StringRef("%rdx"),
-                           StringRef("-8(%rbp)"), StringRef("%r8"),  StringRef("%r9")};
+                           StringRef("-32(%rbp)"), StringRef("%r8"),  StringRef("%r9")};
     StringRef l;
     switch (t.type)
     {
@@ -1219,7 +1275,12 @@ void PrimaryExpression::emit(Environment *env, EEmitGoal goal) const
             else if (goal == FOR_ADDRESS)
             {
                 if (symbol->position > 0)
+                {
+                    // if (symbol->position != 4)
+                    //     Emit("movq %s, -%d(%%rbp)", regs[symbol->position - 1].data(), 8 * symbol->position);
+                    // Emit("leaq -%d(%%rbp), %%rax", 8 * symbol->position);
                     SyntaxError("Can't get address of a register value");
+                }
                 else
                     Emit("leaq _%s(%%rip), %%rax", symbol->name.toString().data());
             }

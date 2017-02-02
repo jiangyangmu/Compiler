@@ -43,6 +43,10 @@ class OperationMask
     {
         mask |= op;
     }
+    void removeOperation(ETypeOperations op)
+    {
+        mask &= ~op;
+    }
 
    public:
     bool hasOperation(ETypeOperations op) const
@@ -196,6 +200,7 @@ class TypeBase : public ListLike<TypeBase>, virtual public OperationMask
             case TC_STRUCT: return "struct";
             case TC_UNION: return "union";
             case TC_ENUM: return "enum";
+            case TC_VOID: return "void";
             default: break;
         }
         return "<null>";
@@ -232,6 +237,7 @@ class IntType : public TypeBase, public LValue<IntType>, public Scalar<IntType>
     int bytes;
     bool signed_;
 
+   protected:
     IntType() = default;
     IntType(const IntType &o)
     {
@@ -316,11 +322,15 @@ class FloatType : public TypeBase,
         return other.type() == TC_FLOAT;
     }
 };
-class PointerType : public TypeBase,
-                    public LValue<PointerType>,
-                    public Indexable
+class PointerType : public IntType, public Indexable
 {
    public:
+    PointerType()
+    {
+        removeOperation(TOp_MUL);
+        removeOperation(TOp_DIV);
+        removeOperation(TOp_MOD);
+    }
     TypeBase *target() const
     {
         assert(next() != nullptr);
@@ -343,8 +353,8 @@ class PointerType : public TypeBase,
     }
 };
 class ConstPointerType : public TypeBase,
-                    public Evaluable<PointerType>,
-                    public Indexable
+                         public Evaluable<PointerType>,
+                         public Indexable
 {
    public:
     TypeBase *target() const
@@ -456,7 +466,7 @@ class StructType : public TypeBase,
         }
         members.push_back(s);
     }
-    Symbol * getMember(StringRef name) const
+    Symbol *getMember(StringRef name) const
     {
         for (auto &m : members)
         {

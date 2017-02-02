@@ -135,16 +135,29 @@ class IterationStatement : public SyntaxNode
         string s;
         switch (type)
         {
-            case WHILE_LOOP: s += "while"; break;
-            case DO_LOOP: s += "do-while"; break;
-            case FOR_LOOP: s += "for"; break;
-            default: break;
+            case WHILE_LOOP:
+                s += "while>\n";
+                if (expr) s += expr->debugString();
+                s += "<\ndo>\n";
+                if (stmt) s += stmt->debugString();
+                break;
+            case DO_LOOP:
+                s += "do>\n";
+                if (stmt) s += stmt->debugString();
+                s += "<\nwhile>\n";
+                if (expr) s += expr->debugString();
+                break;
+            case FOR_LOOP:
+                s += "for>\n";
+                if (expr) s += expr->debugString();
+                if (expr2) s += expr2->debugString();
+                if (expr3) s += expr3->debugString();
+                if (stmt) s += stmt->debugString();
+                break;
+            default:
+                s += ">\n";
+                break;
         }
-        s += ">\n";
-        if (expr) s += expr->debugString();
-        if (expr2) s += expr2->debugString();
-        if (expr3) s += expr3->debugString();
-        if (stmt) s += stmt->debugString();
         s += "<\n";
         return s;
     }
@@ -454,6 +467,23 @@ class UnaryExpression : public Expression
 
    public:
     static Expression *parse(Lexer &lex, Environment *env);
+    virtual string debugString()
+    {
+        string s;
+        switch (op)
+        {
+            case OP_INC: s += "++\n"; break;
+            case OP_DEC: s += "--\n"; break;
+            case OP_MUL: s += "*\n"; break;
+            case SIZEOF: s += "sizeof\n"; break;
+            default: break;
+        }
+        s += ">\n";
+        if (expr) s += expr->debugString();
+        s += "<\n";
+        return s;
+    }
+    virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 // TODO: finish this!
 class PostfixExpression : public Expression
@@ -501,10 +531,10 @@ class PostfixExpression : public Expression
                 s += member.toString();
                 break;
             case POSTFIX_INC:
-                s += "++>\n";
+                s += "++(post)>\n";
                 break;
             case POSTFIX_DEC:
-                s += "-->\n";
+                s += "--(post)>\n";
                 break;
             default:
                 break;
@@ -543,7 +573,9 @@ class PrimaryExpression : public Expression
                 s += to_string(ival);
                 break;
             case STRING:
+                s += '"';
                 s += str->toString();
+                s += '"';
                 break;
             default:
                 break;

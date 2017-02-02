@@ -259,7 +259,7 @@ class ListLike
 #define SyntaxWarning(msg)                                      \
     do                                                          \
     {                                                           \
-        cout << "Warning: " << msg << " at " << __FILE__ << ':' \
+        cerr << "Warning: " << msg << " at " << __FILE__ << ':' \
              << to_string(__LINE__) << endl;                    \
     } while (0)
 
@@ -267,7 +267,7 @@ class ListLike
 #define SyntaxWarningEx(msg)                                         \
     do                                                               \
     {                                                                \
-        cout << "Warning: " << msg << " at " << __FILE__ << ':'      \
+        cerr << "Warning: " << msg << " at " << __FILE__ << ':'      \
              << to_string(__LINE__) << '\t' << "'" << lex.peakNext() \
              << "' at " << lex.peakNext().line << endl;              \
     } while (0)
@@ -278,31 +278,35 @@ class ListLike
 #define SyntaxError(msg)                                       \
     do                                                         \
     {                                                          \
-        cout << "Syntax: " << msg << " at " << __FILE__ << ':' \
+        cerr << "Syntax: " << msg << " at " << __FILE__ << ':' \
              << to_string(__LINE__) << endl;                   \
-        exit(1);                                               \
+        assert(false);                                         \
     } while (0)
 
+#ifdef HAS_LEXER
 #define SyntaxErrorEx(msg)                                           \
     do                                                               \
     {                                                                \
-        cout << "Syntax: " << msg << " at " << __FILE__ << ':'       \
+        cerr << "Syntax: " << msg << " at " << __FILE__ << ':'       \
              << to_string(__LINE__) << '\t' << "'" << lex.peakNext() \
              << "' at " << lex.peakNext().line << endl;              \
-        exit(1);                                                     \
+        assert(false);                                               \
     } while (0)
+#else
+#define SyntaxErrorEx(msg) SyntaxError(msg)
+#endif
 
 #define SyntaxErrorDebug(msg)                                     \
     do                                                            \
     {                                                             \
-        cout << "Syntax: " << msg << " at " << __FILE__ << ':'    \
+        cerr << "Syntax: " << msg << " at " << __FILE__ << ':'    \
              << to_string(__LINE__) << endl;                      \
         string s;                                                 \
         while (cin >> s && lex.hasNext())                         \
         {                                                         \
             if (s == "n")                                         \
             {                                                     \
-                cout << "Token " << lex.peakNext() << " at line " \
+                cerr << "Token " << lex.peakNext() << " at line " \
                      << lex.peakNext().line << endl;              \
                 lex.getNext();                                    \
             }                                                     \
@@ -311,7 +315,7 @@ class ListLike
                 break;                                            \
             }                                                     \
         }                                                         \
-        exit(1);                                                  \
+        assert(false);                                            \
     } while (0)
 
 #define EXPECT(token_type)                                                    \
@@ -319,48 +323,48 @@ class ListLike
     {                                                                         \
         if (!lex.hasNext() || lex.peakNext().type != (token_type))            \
         {                                                                     \
-            cout << "Syntax: Expect " << Token::DebugTokenType(token_type)    \
+            cerr << "Syntax: Expect " << Token::DebugTokenType(token_type)    \
                  << ", Actual "                                               \
                  << Token::DebugTokenType(lex.hasNext() ? lex.peakNext().type \
                                                         : NONE)               \
                  << " at " << __FILE__ << ':' << to_string(__LINE__) << endl; \
-            exit(1);                                                          \
+            assert(false);                                                    \
         }                                                                     \
         lex.getNext();                                                        \
     } while (0)
 
 #define EXPECT_GET(token_type)                                                \
     ((!lex.hasNext() || lex.peakNext().type != (token_type))                  \
-         ? (cout << "Syntax: Expect " << Token::DebugTokenType(token_type)    \
+         ? (cerr << "Syntax: Expect " << Token::DebugTokenType(token_type)    \
                  << ", Actual "                                               \
                  << Token::DebugTokenType(lex.hasNext() ? lex.peakNext().type \
                                                         : NONE)               \
                  << " at " << __FILE__ << ':' << to_string(__LINE__) << endl, \
-            exit(1), Token())                                                 \
+            assert(false), Token())                                           \
          : lex.getNext())
 
-#define EXPECT_TYPE_IS(ptr, type_)                                            \
-    do                                                                        \
-    {                                                                         \
-        if ((ptr) == nullptr || (ptr)->type() != (type_))                     \
+#define EXPECT_TYPE_IS(ptr, type_)                                          \
+    do                                                                      \
+    {                                                                       \
+        if ((ptr) == nullptr || (ptr)->type() != (type_))                   \
             SyntaxWarningEx("Expect '" + TypeBase::DebugTypeClass(type_) +    \
-                            "', but get '" + TypeBase::DebugType(ptr) + "'"); \
+                          "', but get '" + TypeBase::DebugType(ptr) + "'"); \
     } while (0)
 
-#define EXPECT_TYPE_WITH(ptr, op)                                 \
-    do                                                            \
-    {                                                             \
-        if ((ptr) == nullptr || !(ptr)->hasOperation(op))         \
+#define EXPECT_TYPE_WITH(ptr, op)                               \
+    do                                                          \
+    {                                                           \
+        if ((ptr) == nullptr || !(ptr)->hasOperation(op))       \
             SyntaxWarningEx("Type '" + TypeBase::DebugType(ptr) + \
-                            "' don't support " #op);              \
+                          "' don't support " #op);              \
     } while (0)
 
 #define LexError(msg)                                       \
     do                                                      \
     {                                                       \
-        cout << "Lex: " << msg << " at " << __FILE__ << ':' \
+        cerr << "Lex: " << msg << " at " << __FILE__ << ':' \
              << to_string(__LINE__) << endl;                \
-        exit(1);                                            \
+        assert(false);                                      \
     } while (0)
 
 #endif

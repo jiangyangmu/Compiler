@@ -115,13 +115,24 @@ TypeBase *IntegralPromotion(TypeBase *left, TypeBase *right)
         p = r;
 
     assert(p != nullptr);
-    SyntaxWarning("Promotion: " + l->toString() + " + " + r->toString() +
-                  " = " + p->toString());
+    // SyntaxWarning("Promotion: " + l->toString() + " + " + r->toString() +
+    //               " = " + p->toString());
 
     return left;
 }
 
 TypeBase *CommonType(TypeBase *left, TypeBase *right)
 {
+    if (left && left->type() == TC_POINTER)
+    {
+        // EXPECT_TYPE_IS(right, TC_INT);
+        return left;
+    }
+    if (right && right->type() == TC_POINTER)
+    {
+        // EXPECT_TYPE_IS(left, TC_INT);
+        return right;
+    }
+
     return IntegralPromotion(left, right);
 }

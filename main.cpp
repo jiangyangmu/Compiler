@@ -6,13 +6,39 @@
 #include <vector>
 using namespace std;
 
+#include <unistd.h>
+
 #include "lexer.h"
 #include "parser.h"
 #include "codegen.h"
 
+static bool lflag = false; // show Lexer output
+static bool vflag = false; // show Parser output
+
+void options(int &argc, char ** &argv)
+{
+    int ch;
+    while ((ch = getopt(argc, argv, "lv")) != -1) {
+        switch (ch) {
+            case 'l':
+                lflag = true;
+                break;
+            case 'v':
+                vflag = true;
+                break;
+            default:
+                break;
+        }
+    }
+    argc -= optind;
+    argv += optind;
+}
+
 int main(int argc, char *argv[])
 {
-    if (argc < 2)
+    options(argc, argv);
+
+    if (argc == 0)
     {
         cout << "No input file." << endl;
         return 1;
@@ -20,7 +46,7 @@ int main(int argc, char *argv[])
 
     Lexer lex;
     string line, source, print_source;
-    ifstream in(argv[1]);
+    ifstream in(argv[0]);
 
     source.reserve(4096);
     print_source.reserve(4096);
@@ -38,8 +64,11 @@ int main(int argc, char *argv[])
         source += '\n', print_source += '\n';
     }
 
-    // cout << "-------------- source --------------" << endl;
-    // cout << print_source << endl;
+    if (lflag || vflag)
+    {
+        cout << "-------------- source --------------" << endl;
+        cout << print_source << endl;
+    }
     // remove comment
     // bool incomment = false;
     const char *end = source.data() + source.size();
@@ -71,15 +100,23 @@ int main(int argc, char *argv[])
         else ++ptr;
     }
 
-    // cout << "-------------- lexer --------------" << endl;
+    if (lflag) cout << "-------------- lexer --------------" << endl;
     StringBuf sb(source.data(), source.size());
     lex.tokenize(sb);
-    // lex.debugPrint();
+    if (lflag)
+    {
+        lex.debugPrint();
+        return 0;
+    }
 
-    // cout << "-------------- parser --------------" << endl;
+    if (vflag) cout << "-------------- parser --------------" << endl;
     Parser p(lex);
     p.parse();
-    // p.debugPrint();
+    if (vflag)
+    {
+        p.debugPrint();
+        return 0;
+    }
 
     // cout << "-------------- code --------------" << endl;
     p.emit();

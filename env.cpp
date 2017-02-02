@@ -86,6 +86,7 @@ static string DebugTypeClass(ETypeClass tc)
         case TC_STRUCT: return "struct";
         case TC_UNION: return "union";
         case TC_ENUM: return "enum";
+        case TC_VOID: return "void";
         default: break;
     }
     return "<null>";
@@ -256,24 +257,30 @@ void Environment::emit()
             if (s->type->type() == TC_FUNC)
             {
                 FuncType *func = dynamic_cast<FuncType *>(s->type);
-                EmitDecl(".global _%s", s->name.toString().data());
                 if (func->body)
                 {
+                    EmitDecl(".global _%s", s->name.toString().data());
                     Emit("_%s:", s->name.toString().data());
                     Emit("pushq %%rbp");
                     Emit("movq %%rsp, %%rbp");
                     Emit("subq $64, %%rsp");
                     if (func->env->paramcnt >= 4)
-                        Emit("movq %%rcx, -8(%%rbp)");
+                        Emit("movq %%rcx, -32(%%rbp)");
                     func->body->emit(this, FOR_NOTHING);
                 }
                 else
+                    EmitDecl(".extern _%s", s->name.toString().data());
                     ;//SyntaxWarning("function '" + s->name.toString() + "' has no body.");
-                // TODO: support 'extern'
             }
-            else if (s->type->type() == TC_INT)
+            else switch (s->type->type())
             {
-                EmitData("_%s: .quad 0", s->name.toString().data());
+                case TC_INT:
+                case TC_POINTER:
+                    EmitData("_%s: .quad 0", s->name.toString().data());
+                    break;
+                default:
+                    SyntaxError("Environment: type code not implemented");
+                    break;
             }
         }
     }
@@ -667,7 +674,13 @@ TypeBase *__parseDeclarator(Lexer &lex, Environment *env, TypeBase *spec,
     if (spec == nullptr)
     {
         if (pointer == nullptr)
+        {
+            if (array_or_func == nullptr)
+            {
+                SyntaxErrorDebug("array_or_func is nullptr");
+            }
             return array_or_func->mergeAtHead(inner);
+        }
         else
             return pointer->mergeAtHead(array_or_func)->mergeAtHead(inner);
     }

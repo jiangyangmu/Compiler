@@ -4,10 +4,10 @@ TGR = ${HOME}/bin/jcc
 
 .Phony: all debug
 
-all : ${TGR}
-
 debug : ${SRC} ${HDR}
 	c++ -std=c++11 -Wall -pedantic -Wextra -Wno-unused-parameter -g -o ${TGR} ${SRC}
+
+all : ${TGR}
 
 ${TGR}: ${SRC} ${HDR}
 	c++ -std=c++11 -Wall -pedantic -Wextra -Wno-unused-parameter -o $@ ${SRC}
