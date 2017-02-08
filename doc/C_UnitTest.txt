@@ -1,0 +1,36 @@
+C Unit Test
+
+--------------------------------------------------
+Lexer
+
+Token recognition:
+    see test/demo_lex.txt
+    TODO: unit test
+
+--------------------------------------------------
+Parser
+
+Syntax tree generation:
+    TODO: need tree serializing.
+    TODO: unit test
+
+--------------------------------------------------
+Semantics
+
+Type definition:
+    TODO: finish serializing.
+    TODO: unit test
+
+Type compatability & convertion
+
+Type incompleteness
+
+Number System:
+    integral math
+    floating math
+    ...
+
+--------------------------------------------------
+Limititation
+
+see C_Limits.txt

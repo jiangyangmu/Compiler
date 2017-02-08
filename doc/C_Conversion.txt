@@ -1,103 +1,279 @@
 C 类型系统 之 类型转换
 
-主要功能：
-	类型A 转换到 类型B
-	类型A + 类型B 的公共类型 类型C
-
-Struct/Union/Enum 不可转换成其它类型
-
-------------------------------------------------------------------------
-Array & Pointer
-
-[Convertion]
-
-Array -> Pointer
-	assign address to pointer (even target-type is different, only warning)
-
-Array -> Array
-Pointer -> Array
-	not possible
-
-Pointer of A -> Pointer of B
-	replace target-type
-
-[Common Type]
-
-(Array, Pointer) => Pointer
-
-### Code ###
-
-array-to-pointer()
-	pointer.value = array.address
-pointer-to-pointer(from, to)
-	to.value = from.value
+Outline
+        * 代码实现
+        * C 对 "自动类型转换" 的支持？
+		* C 对 "主动类型转换" 的支持？
+        * void 类型
 
 ------------------------------------------------------------------------
-Integral & Floating & Enum-Constant
+代码实现
 
->>>>>>>>>>>>>>>>>>>>>
-TC_CHAR: char
-TC_UCHAR: unsigned char
-TC_SCHAR: signed char
-TC_SHORT: (signed) short (int)
-TC_USHORT: unsigned short (int)
-TC_INT: (signed) (int)
-TC_UINT: unsigned (int)
-TC_LONG: (signed) long (int)
-TC_ULONG: unsigned long (int)
-<<<<<<<<<<<<<<<<<<<<<
+TypeBase::Property = {const, volatile, lvalue, ...}
+TypeBase::Operations = {get-address, get-value, ...}
+NOTE: lvalue is bounded with some type operations
 
-Enum-Constant [is equal to] int
+// void expression:
+// > can't get value.
+// > can't do implicit or explicit conversion.
 
-[Signed and unsigned integers]
+int PointerType::alignment;
+bool isCompatibleTypes(TypeBase *t, TypeBase *u);
+bool isIncompleteType(TypeBase *t);
 
-unsigned A -> B
-	if B includes value -> value unchanged
-	else -> ?
+// ------------ Implicit Conversion ------------
 
-signed A -> unsigned B
-	value >= 0 && A <= B -> value unchanged
-	else ->
-		promote A to at least B,
-		value += (B.MAX + 1),
-		view value as unsigned B
+// 转成什么？ 已知输入类型，自动输出类型
+TypeBase * doUsualArithmeticConversion(TypeBase *op1, TypeBase *op2);
+TypeBase * doIntegerPromotion(TypeBase *t);
+TypeBase * doLvalueConversion(TypeBase *t);
+    non-array -> become a plain value, not a reference of object
+        XXX: for object, make sense. How about function?
+    array -> pointer
+    function -> pointer
+// 能不能转？ 已知输入类型，已知输出类型
+bool doImplicitConversion(TypeBase *from, TypeBase *to); // 派发
+bool doIntegerConversion(IntegerType *from, IntegerType *to);
+bool doPointerConversion(PointerType *from, PointerType *to);
+    (void *) <-> (any *)
+    (any *) -> (any * const)
+    (0) -> (any *)
+    * -> error
 
-A -> unsigned b (b < A)
+int getIntegerRank(IntegerType *t);
+// bool conversion: 似乎不是很需要
 
-[Floating and integral]
-floating -> integral
-	## fractional part is discarded. If integral part is too large, undefined behavior.
+// ------------ Explicit Conversion ------------
 
-integral -> floating
-	## choose the nearest value, lower or higher
+bool doExplicitConversion(IntegerType *from, IntegerType *to); // 派发
+    (pointer) <-> (integer)
+    (pointer of object or incomplete type) <-> (pointer of object or incomplete type)
+    (pointer of function) <-> (pointer of function)
+    * -> error
 
-[Floating]
-float -> double -> long double
-	## promotion loses nothing
-long double -> double -> float
-	## demotion choose the nearest value, lower or higher
+------------------------------------------------------------------------
+void 类型
 
-[Common Type]
+The (nonexistent) value of a void expression (an expression that has type void)
+shall not be used in any way, and implicit or explicit conversions (except to
+void ) shall not be applied to such an expression.
 
-(unsigned long int, Integral) => unsigned long int
+If an expression of any other type occurs in a context where a void expression
+is required, its value or designator is discarded.
 
-(long int, unsigned int)
-	=> long int (if long int big enough)
-	=> unsigned long int (otherwise)
+(A void expression is evaluated for its side effects.)
 
-(long int, Integral) => long int
+------------------------------------------------------------------------
+C 对 "自动类型转换" 的支持？
 
-(unsigned int, Integral) => unsigned int
-(int, Integral) => int
+    > Implicit conversion semantics
+      = 取值 + 值转换
+      = Value Transformation +
+        ( Compatible types
+        || Integer Promotions
+        || Boolean Conversion
+        || Integer Conversions
+        || Real floating-integer conversions
+        || Real floating point conversions
+        || Pointer conversions )
 
-### Code ###
+"自动类型转换" 的原子操作？
 
-common-type(Integral, Integral)
-common-type(Floating, Floating)
-common-type(Integral, Floating)
-common-type(Floating, Integral)
+    Compatible types => always no-op, do nothing
 
-integral-to-integral(Integral, Integral)
-integral-to-floating(Integral, Floating)
-floating-to-integral(Floating, Integral)
-floating-to-floating(Floating, Floating)
+    Integer Promotions => if 'int' is large enough -> use int
+                          else -> use unsigned int
+            apply when:
+                * in __Usual arithmetic conversions__
+                * in __Default argument promotions__
+                * as the operand of unary expression + and -
+                * as the operand of unary bitwise operator ~
+                * as both operands of shift expression << and >>
+
+            rank(integer) =>
+                * _Bool < signed/unsigned char < signed/unsigned short < signed/unsigned int < signed/unsigned long int < signed/unsigned long long int
+                * __int8 < char, __int16 < short, __int32 < int, __int64 < long int, __int128 > long long (!!!)
+                * enum-constant = rank( which_int_type(enum-constant) )
+                * otherwise, implementation defined.
+
+    Boolean Conversion => 1 if non-zero, 0 if zero
+
+    Integer Conversion => if target type has inclusive range, value unchanged
+                          then if target type is unsigned, calc result using unsigned-mod
+                               else (target is signed), implementation defined.
+
+    Pointer Conversions =>
+            (void *) can be implicitly converted to and from any pointer to object (not function)
+            const/volatile can be added
+            0 can be implicitly converted to any pointer type (object & function)
+                (this is NULL)
+
+
+    Real floating-integer Conversions => ...
+            From C89:
+                floating -> integral
+                    fractional part is discarded. If integral part is too large, undefined behavior.
+                integral -> floating
+                    choose the nearest value, lower or higher
+    Real floating point Conversions => ...
+            From C89:
+                float -> double -> long double
+                    promotion loses nothing
+                long double -> double -> float
+                    demotion choose the nearest value, lower or higher
+
+
+发生 "自动类型转换" 的时机，应该采取的行动？
+
+赋值之时：
+    > Conversion as if by assignment:
+        * assignment operator: ival = 1.0;
+        * scalar initialization: int i = 1UL;
+        * function-call parameter: foo(int i); foo('a');
+        * return statement: int foo() { return 'a'; }
+
+函数声明之时：
+    > Default argument promotions: (argument type not specified)
+        * a function without a prototype [old-style, 忽略]
+        * a variadic function
+      Rules:
+        Integral -> [Integer Promotions]
+        float -> double
+
+计算表达式之时：
+    > Usual arithmetic conversions:
+        * binary arithmetic: *, /, %, +, -
+        * relational operators: <, >, <=, >=, ==, !=
+        * binary bitwise arithmetic: &, ^, |,
+        * the conditional operator: ?:
+      Rules: apply from top to bottom
+        (long double, *) => long double
+        (double, *) => double
+        (float, *) => float
+        [Integer Promotions]
+        if same signedness => choose bigger integer
+        if unsigned has bigger integer => choose unsigned
+        if signed has bigger integer & can represent unsigned => choose signed
+        else (equal big integer, or signed not large enough) => choose unsigned with signed integer
+      Rules from C89:
+        (unsigned long int, Integral) => unsigned long int
+        (long int, unsigned int)
+            => long int (if long int big enough)
+            => unsigned long int (otherwise)
+        (long int, Integral) => long int
+        (unsigned int, Integral) => unsigned int
+        (int, Integral) => int
+
+取值之时：
+    > Value transformations:
+        * lvalue = an expression that designates an object
+        * modifiable lvalue = not array, not an incomplete type, not const-qualified,
+          struct/union without const-qualified member
+
+      Rules for Lvalue Conversion: (Non-array, properties loss)
+        any lvalue expression 'A' of non-array type, used in any context other than:
+            &(A) (if allowed)
+            ++A, A++, --A, A--
+            A.member
+            A = ..., A += ..., ..., A = ... = ...
+            sizeof(A)
+        undergoes lvalue conversion:
+            loses const/volatile/(C99)restrict-qualifiers
+            (C99)loses atomic properties
+            loses lvalue properties (the address may no longer be taken)
+        * If the lvalue has incomplete type, the behavior is undefined.
+        * If the lvalue designates an object of automatic storage duration whose address was
+          never taken and if that object was uninitialized (not declared with an initializer
+          and no assignment to it has been performed prior to use), the behavior is undefined.
+        惊人的事实：取值这个操作，其实是一个 lvalue conversion。
+
+      Rules for Array to Pointer: (No array-to-array or pointer-to-array)
+        any lvalue expression T of array type, when used in any context other than:
+            &(T)
+            sizeof(T)
+            T = "hello"
+        undergoes a conversion to the non-lvalue pointer to its first element.
+
+      Rules for Function to Pointer:
+        any function designator expression, when used in any context other than:
+            &(Foo)
+            sizeof(Foo)
+        undergoes a conversion to the non-lvalue pointer to the function designated by the expression.
+
+------------------------------------------------------------------------
+C 对 "主动类型转换" 的支持？
+
+    > All in implicit conversions, just do nothing.
+    > Pointers
+      Rules between Pointer and Integer:
+          implementation defined.
+      Rules between two Pointers of object or incomplete type:
+          depends on their alignment compatibility.
+      Rules between two Pointers of different function:
+          if two functions are compatible, no problem.
+          else, undefined.
+      Otherwise:
+          compile error.
+
+------------------------------------------------------------------------
+什么是 Compatible Types？
+
+In a C program, the declarations referring to the same object or function
+in different translation units do NOT have to use the same type. They only
+have to use sufficiently similar types, formally known as compatible types.
+
+If two declarations refer to the same object or function and do not use
+compatible types, the behavior of the program is undefined.
+
+
+The types T and U are compatible, if: (本质上就是，最多换换名字)
+    . they are the same type (same name or aliases introduced by a typedef)
+    . they are identically cvr-qualified versions of compatible unqualified types
+    . they are pointer types and are pointing to compatible types
+    . they are array types, and
+        . their element types are compatible, and
+        . if both have constant size, that size is the same. Note: arrays of
+          unknown bound are compatible with any array of compatible element type.
+          VLA is compatible with any array of compatible element type. (since C99)
+    . they are both structure/union/enumeration types, and
+        . (C99)if one is declared with a tag, the other must also be declared
+          with the same tag.
+        . if both are completed types, their members must correspond exactly in
+          number, be declared with compatible types, and have matching names.
+        . additionally, if they are enumerations, corresponding members must also
+          have the same values.
+        . additionally, if they are structures or unions,
+            . Corresponding members must be declared in the same order (structures only)
+            . Corresponding bit fields must have the same widths.
+    . one is an enumerated type and the other is that enumeration's underlying type
+    . they are function types, and
+        . their return types are compatible
+        . they both use parameter lists, the number of parameters (including the
+          use of the ellipsis) is the same, the corresponding parameters have
+          compatible types
+        . one is an old-style (parameter-less) definition, the other has a parameter
+          list, the parameter list does not use an ellipsis and each parameter is
+          compatible (after function parameter type adjustment) with the corresponding
+          old-style parameter after default argument promotions.
+        . one is an old-style (parameter-less) declaration, the other has a parameter
+          list, the parameter list does not use an ellipsis, and all parameters
+          (after function parameter type adjustment) are unaffected by default argument
+          promotions.
+    . the type char is not compatible with signed char and not compatible with unsigned char.
+
+------------------------------------------------------------------------
+什么是 Incomplete Types？
+
+An incomplete type is an object type that lacks sufficient information to
+determine the size of the objects of that type.
+
+An incomplete type may be completed at some point in the translation unit.
+
+The following types are incomplete:
+    . the type void.
+        cannot be completed.
+    . array type of unknown size.
+        completed by a later declaration that specifies the size.
+    . structure or union type of unknown content.
+        completed by a declaration of the same structure or union that defines
+        its content later in the same scope.

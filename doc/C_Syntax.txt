@@ -1,204 +1,221 @@
 C Grammar
 
 
-=============== program(completed) ===============
+================ Translation Unit ===============
 
-translation-unit		:= ( external-declaration )+
+translation-unit        := ( external-declaration )+
 
-external-declaration	:= function-definition || declaration					# so we can only declare function at global scope
+external-declaration    := function-definition || declaration                   # so we can only declare function at global scope
 
-function-definition		:= ( specifiers )? declarator compound-stmt
+================== Declaration ==================
 
-================ decl() ================
+function-definition     := ( specifiers )? declarator compound-stmt
 
-declaration				:= specifiers ( decl-init ( ',' decl-init )* )? ';'		# so int; is legal, though meaningless
+declaration             := specifiers ( decl-init ( ',' decl-init )* )? ';'     # so int; is legal, though meaningless
 
-specifiers				:= ( storage-specifier | type-specifier | type-qualifier )+
+================== Declarator ==================
 
-decl-init				:= declarator ( '=' init )?
+specifiers              := ( storage-specifier | type-specifier | type-qualifier )+
 
----------------------------------------
-
-# type => identifier OR (declarator) is [array of] [function returns] [pointer of] specifier
-# 这里解释了 C 不能返回 Array 的原因
-# C 里数组 如果作为函数返回类型，或者参数类型，统一转成指针
+decl-init               := declarator ( '=' init )?
 
 # FIRST => { '*' '(' identifier }
-declarator				:= ( pointer )? ( identifier || '(' declarator ')' ) ( ('[' ( constant-expr )? ']')* || ('(' param-list ')')? )
+declarator              := ( pointer )? ( identifier || '(' declarator ')' ) ( ('[' ( constant-expr )? ']')* || ('(' parameter-list ')')? )
 
-param-list				:= param-decl ( ',' param-decl )* ( ',' '...' )?
+# C 里数组 如果作为函数返回类型，或者参数类型，统一转成指针
 
-param-decl				:= specifiers declarator
-						|| specifiers ( abstract-decl )?
+-------------------------------------------------
 
-type-name				:= ( type-specifier | type-qualifier )+ ( abstract-decl )?
+parameter-list          := parameter-declaration ( ',' parameter-declaration )* ( ',' '...' )?
 
-abstract-decl			:= pointer												# abstract means 'no identifier'
-						|| [pointer] direct-abstract-decl
+parameter-declaration   := specifiers declarator                                    # 具名参数
+                        || specifiers ( abstract-declarator )?                      # 匿名参数
+
+abstract-declarator     := pointer
+                        || ( pointer )? direct-abstract-decl
+                            # 注意，这里 abstract-declarator 至少要有一个，要么 pointer，要么 direct-abstract-decl
+                            # 这样在下面的 direct-abstract-decl，我们才能区分前两条
 
 direct-abstract-decl
-						:= '(' abstract-decl ')'
-						|| [direct-abstract-decl] '[' ( constant-expr )? ']'
-						|| [direct-abstract-decl] '(' ( param-list )? ')'
+                        := '(' abstract-declarator ')'                              # if '(' + ( pointer or FIRST(direct-abstract-decl) )
+                        || [direct-abstract-decl] '(' ( parameter-list )? ')'       # if '(' + ( ')' or FIRST(parameter-list) )
+                        || [direct-abstract-decl] '[' ( constant-expr )? ']'
 
 ---------------------------------------
 
-init					:= assign-expr
-						|| '{' init-list (',')? '}'
+init                    := assign-expr
+                        || '{' init-list (',')? '}'
 
-init-list				:= init ( ',' init )*
+init-list               := init ( ',' init )*
 
 ---------------------------------------
 
-storage-specifier		:= typedef || extern || static || auto || register
+type-name               := ( type-specifier | type-qualifier )+ ( abstract-declarator )?
 
-type-qualifier			:= const || volatile
+storage-specifier       := typedef || extern || static || auto || register
 
-type-specifier			:= void || char || short || int || long || float || double || signed || unsigned
-						|| struct-or-union-specifier
-						|| enum-specifier
-						|| typedef-name
+type-qualifier          := const || volatile
 
-
-pointer					:= ( '*' [type-qualifier-list] )+
-
-identifier				:= [_a-zA-Z] [_a-zA-Z0-9]*
-
-type-qualifier-list		:= ( type-qualifier )+
-identifier-list			:= identifier ( ',' identifier )*
-
-constant				:= floating-constant
-						|| integer-constant
-						|| enumeration-constant
-						|| character-constant
-
-floating-constant		:= ...
-
-integer-constant		:= dec-const integer-suffix
-						|| oct-const integer-suffix
-						|| hex-const integer-suffix
-dec-const				:= [1-9][0-9]*
-oct-const				:= 0[0-7]*
-hex-const				:= 0[xX][0-9a-fA-F]+
-integer-suffix			:= [uU][lL] || [lL][uU]
+type-specifier          := void || char || short || int || long || float || double || signed || unsigned
+                        || struct-or-union-specifier
+                        || enum-specifier
+                        || typedef-name
 
 
-enumeration-constant	:= identifier
-character-constant		:= ...
+pointer                 := ( '*' [type-qualifier-list] )+
 
-string-literal			:= ( 'L' )? '"' ( s-char )* '"'
-s-char					:= <all but " \ new-line >
+identifier              := [_a-zA-Z] [_a-zA-Z0-9]*
 
-assign-op				:= = *= /= %= += -= <<= >>= &= ^= |=
+type-qualifier-list     := ( type-qualifier )+
+identifier-list         := identifier ( ',' identifier )*
 
-unary-op				:= & * + - ~ !
+constant                := floating-constant
+                        || integer-constant
+                        || enumeration-constant
+                        || character-constant
+
+floating-constant       := ...
+
+integer-constant        := dec-const integer-suffix
+                        || oct-const integer-suffix
+                        || hex-const integer-suffix
+dec-const               := [1-9][0-9]*
+oct-const               := 0[0-7]*
+hex-const               := 0[xX][0-9a-fA-F]+
+integer-suffix          := [uU][lL] || [lL][uU]
+
+
+enumeration-constant    := identifier
+character-constant      := ...
+
+string-literal          := ( 'L' )? '"' ( s-char )* '"'
+s-char                  := <all but " \ new-line >
+
+assign-op               := = *= /= %= += -= <<= >>= &= ^= |=
+
+unary-op                := & * + - ~ !
 
 =============== struct/union/enum ===============
 
 struct-or-union-specifier
-						:= struct-or-union (identifier)? '{' ( struct-declaration )+ '}'
-						   struct-or-union identifier
+                        := struct-or-union (identifier)? '{' ( struct-declaration )+ '}'
+                           struct-or-union identifier
 
-struct-or-union			:= struct || union
+struct-or-union         := struct || union
 
-struct-declaration		:= ( type-specifier || type-qualifier )+ struct-declarator (',' struct-declarator)* ';'
+struct-declaration      := ( type-specifier || type-qualifier )+ struct-declarator (',' struct-declarator)* ';'
 
-struct-declarator		:= declarator
-						|| (declarator)? ':' constant-expr				# bit-field! why declarator is optional?
+struct-declarator       := declarator
+                        || (declarator)? ':' constant-expr              # bit-field! why declarator is optional?
 
-enum-specifier			:= enum (identifier)? '{' enumerator ( ',' enumerator )* '}'
-						|| enum identifier
+enum-specifier          := enum (identifier)? '{' enumerator ( ',' enumerator )* '}'
+                        || enum identifier
 
-enumerator				:= enumeration-constant ( '=' constant-expression )?
+enumerator              := enumeration-constant ( '=' constant-expression )?
 
 =============== expr(completed) ===============
 
-expr					:= comma-expr
-comma-expr				:= assign-expr ( ',' assign-expr )*
+expr                    := comma-expr
+comma-expr              := assign-expr ( ',' assign-expr )*
 
-assign-expr				:= ( unary-expr assign-op )* cond-expr
+assign-expr             := ( unary-expr assign-op )* cond-expr
 
 # a ? b1 : b2 ? c1 : c2;
 # C 里 cond-expr 是 rvalue，C++ 里是 lvalue
-cond-expr				:= OR-expr ( '?' expr ':' cond-expr )?			# tricky here, why 'expr' and 'cond-expr' ??
+cond-expr               := OR-expr ( '?' expr ':' cond-expr )?          # tricky here, why 'expr' and 'cond-expr' ??
 
-OR-expr					:= AND-expr ( '||' logical-AND-expr )*
+OR-expr                 := AND-expr ( '||' logical-AND-expr )*
 
-AND-expr				:= bit-OR-expr ( '&&' bit-OR-expr )*
+AND-expr                := bit-OR-expr ( '&&' bit-OR-expr )*
 
-bit-OR-expr				:= bit-XOR-expr ( '|' bit-XOR-expr )*
+bit-OR-expr             := bit-XOR-expr ( '|' bit-XOR-expr )*
 
-bit-XOR-expr			:= bit-AND-expr ( '^' bit-AND-expr )*
+bit-XOR-expr            := bit-AND-expr ( '^' bit-AND-expr )*
 
-bit-AND-expr			:= eq-expr ( '&' eq-expr )*
+bit-AND-expr            := eq-expr ( '&' eq-expr )*
 
-eq-expr					:= rel-expr ( ('=='|'!=') rel-expr )*			# Note: a==b==c is legal, but irreasonable, eval from left to right
+eq-expr                 := rel-expr ( ('=='|'!=') rel-expr )*           # Note: a==b==c is legal, but irreasonable, eval from left to right
 
-rel-expr				:= shift-expr ( ('<'|'<='|'>'|'>=') shift-expr )*
+rel-expr                := shift-expr ( ('<'|'<='|'>'|'>=') shift-expr )*
 
-shift-expr				:= add-expr ( ('<<'|'>>') add-expr )*
+shift-expr              := add-expr ( ('<<'|'>>') add-expr )*
 
-add-expr				:= mul-expr ( ('+'|'-') mul-expr )*
+add-expr                := mul-expr ( ('+'|'-') mul-expr )*
 
-mul-expr				:= cast-expr ( ('*'|'/'|'%') cast-expr )*
+mul-expr                := cast-expr ( ('*'|'/'|'%') cast-expr )*
 
-cast-expr				:= ( '(' type-name ')' )* unary-expr
+cast-expr               := ( '(' type-name ')' )* unary-expr
 
 # prefix-expr
 # ++i 在 C 里是 rvalue，C++ 里是 lvalue
-unary-expr				:= postfix-expr
-						|| '++' unary-expr
-						|| '--' unary-expr
-						|| unary-op cast-expr
-						|| 'sizeof' unary-expr
-						|| 'sizeof' '(' type-name ')'
+unary-expr              := postfix-expr
+                        || '++' unary-expr
+                        || '--' unary-expr
+                        || unary-op cast-expr
+                        || 'sizeof' unary-expr
+                        || 'sizeof' '(' type-name ')'
 
-postfix-expr			:= primary-expr
-						|| postfix-expr '[' expr ']'
-						|| postfix-expr '(' [argument-expr-list] ')'
-						|| postfix-expr '.' identifier
-						|| postfix-expr '->' identifier
-						|| postfix-expr '++'
-						|| postfix-expr '--'
+postfix-expr            := primary-expr
+                        || postfix-expr '[' expr ']'
+                        || postfix-expr '(' [argument-expr-list] ')'
+                        || postfix-expr '.' identifier
+                        || postfix-expr '->' identifier
+                        || postfix-expr '++'
+                        || postfix-expr '--'
 
-primary-expr			:= identifier || constant || string-literal || '(' expr ')'
+primary-expr            := identifier || constant || string-literal || '(' expr ')'
 
-argument-expr-list		:= assign-expr ( ',' assign-expr )*
+argument-expr-list      := assign-expr ( ',' assign-expr )*
 
 # constant folding
-constant-expr			:= cond-expr
+constant-expr           := cond-expr
 
 
 =============== statement(completed) ===============
 
-stmt					:= labeled-stmt
-						|| compound-stmt
-						|| expression-stmt
-						|| selection-stmt
-						|| iteration-stmt
-						|| jump-stmt
+stmt                    := labeled-stmt
+                        || compound-stmt
+                        || expression-stmt
+                        || selection-stmt
+                        || iteration-stmt
+                        || jump-stmt
 
-						   # 注意这里，Label 是一个 identifier，不仅仅词法上符合，
-						   # 语法行为也符合，比如有 function-wise scope。
-						   # 而且，由于 Label: stmt 是一条语句，
-						   # 所以 Label 无法在全局域出现，只能在某个函数体内。
-labeled-stmt			:= identifier ':' stmt
-						|| 'case' constant-expr ':' stmt
-						|| 'default' ':' stmt
+                           # 注意这里，Label 是一个 identifier，不仅仅词法上符合，
+                           # 语法行为也符合，比如有 function-wise scope。
+                           # 而且，由于 Label: stmt 是一条语句，
+                           # 所以 Label 无法在全局域出现，只能在某个函数体内。
+labeled-stmt            := identifier ':' stmt
+                        || 'case' constant-expr ':' stmt
+                        || 'default' ':' stmt
 
-compound-stmt			:= '{' ( declaration )* ( stmt )* '}'
+compound-stmt           := '{' ( declaration )* ( stmt )* '}'
 
-expression-stmt			:= ( expr )? ';'
+expression-stmt         := ( expr )? ';'
 
-selection-stmt			:= 'if' '(' expr ')' stmt
-						|| 'if' '(' expr ')' stmt 'else' stmt			＃ dangling 'else'
-						|| 'switch' '(' expr ')' stmt
+selection-stmt          := 'if' '(' expr ')' stmt
+                        || 'if' '(' expr ')' stmt 'else' stmt           ＃ dangling 'else'
+                        || 'switch' '(' expr ')' stmt
 
-iteration-stmt			:= 'while' '(' expr ')' stmt
-						|| 'do' stmt 'while' '(' expr ')' ';'
-						|| 'for' '(' ( expr )? ';' ( expr )? ';' ( expr )? ')' stmt
+iteration-stmt          := 'while' '(' expr ')' stmt
+                        || 'do' stmt 'while' '(' expr ')' ';'
+                        || 'for' '(' ( expr )? ';' ( expr )? ';' ( expr )? ')' stmt
 
-jump-stmt				:= 'goto' identifier ';'
-						|| 'continue' ';'
-						|| 'break' ';'
-						|| 'return' ( expr )? ';'
+jump-stmt               := 'goto' identifier ';'
+                        || 'continue' ';'
+                        || 'break' ';'
+                        || 'return' ( expr )? ';'
+
+
+------------------------------------------------------------------------
+C 声明整数的 specifiers 有效组合
+
+TC_CHAR: char
+TC_UCHAR: unsigned char
+TC_SCHAR: signed char
+TC_SHORT: (signed) short (int)
+TC_USHORT: unsigned short (int)
+TC_INT: (signed) (int)
+TC_UINT: unsigned (int)
+TC_LONG: (signed) long (int)
+TC_ULONG: unsigned long (int)
+

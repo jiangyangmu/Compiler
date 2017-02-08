@@ -27,6 +27,7 @@ Q: 如何定义一个类型？如何定义一个类型的对象？
 类型定义系统
 
 type => identifier OR '(declarator)' is ( [array of] ||  [function returns] ) [pointer of] specifier
+（先里面，再右结合，再左结合。）
 
 
 类型定义语法中的优先级：
@@ -119,6 +120,48 @@ TODO:
 
 ---------------------------------------------
 Q：类型系统字符串化！
+
+work:
+    类型精确描述
+
+limits:
+    Max Object Size(e.g. array, struct) = size_t
+
+功效：
+    O(1) 类型匹配
+    O(1) 类型兼容度检测
+
+type => identifier OR '(declarator)' is ( [array of] ||  [function returns] ) [pointer of] specifier
+
+specifiers:
+    storage-specifier   := typedef || extern || static || auto || register
+        [ignore for now]
+    type-qualifier      := const || volatile
+        const -> 'C'
+    type-specifier      := void || char || short || int || long || float || double || signed || unsigned
+                        || struct-or-union-specifier
+                        || enum-specifier
+                        || typedef-name
+        void    -> 'v'
+        char    -> 'i1' || 'u1'
+        short   -> 'i2' || 'u2'
+        int     -> 'i4' || 'u4'
+        long    -> 'i8' || 'u8'
+        float   -> 'f4'
+        double  -> 'f8'
+        struct  -> 'S' <name> ('_' <mem>)* '$'
+        union   -> 'U' <name> ('_' <mem>)* '$'
+        enum    -> 'E' <name> '$'
+declarator:
+    ( pointer )? ( idenifier || '(' declarator ')' ) ( ('[' ( constant-expr )? ']')* || ('(' param-list ')')? )
+    pointer             := ( '*' [type-qualifier-list] )+
+        pointer -> ( 'P' ['C'] )+ <mem>
+        array   -> 'A' (<dim> '_')+ <mem> '$'
+        func    -> 'F' <ret> ('_' <param>)* '$'
+
+
+
+
 
 
 
