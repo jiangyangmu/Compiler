@@ -277,3 +277,4 @@ The following types are incomplete:
     . structure or union type of unknown content.
         completed by a declaration of the same structure or union that defines
         its content later in the same scope.
+

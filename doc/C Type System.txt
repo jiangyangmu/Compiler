@@ -1,25 +1,82 @@
 TYPE SYSTEM
 
+=============================================
+            符号系统是什么？
+            和名字有关的一切
+=============================================
 
-Q: 类型系统中不纯粹的东西？ 目前先不管
-    specifier
-        typedef -> 类型定义
-        _ -> 对象定义
-            extern -> ？？？约束
-            static -> 存储类型约束
-            const -> 语法约束
-            volatile -> 忽略
-            auto -> 忽略
-            register -> 忽略
+> 名字
+    对象的名称
+    类型的名称（struct TAG, typedef NAME）
 
-Q: 硬件对类型转换的支持？
+> 名字空间（namespace），有效区间（scope）
+    主空间划分（root namespace）：根据出现位置
+        A -> label name (语句开头)
+        B -> struct/union member (struct/union/enum 定义体内)
+        C -> struct/union/enum tag (struct/union/enum 后面)
+        D -> other(object, enum-constant, typedef-name) (除了前三个的地方)
+    子空间划分（namespace)：根据语法嵌套
+        A -> 不再分
+        B,C,D -> 树形细分
+    有效区间划分（scope）
+        A -> 享有整个空间
+        B,C,D -> 享有整个当前子空间，会被子子空间同名称对象屏蔽
 
+    * '语句块' 是一种能创建 树形namespace 的东西。
+    * label name 是唯一真正能跨越 树形namespace 的东西。
+    * 冲突：首先，在不同 namespace 的东西不会冲突。其次，同一 namespace 下，
+      也是有不同的空间布局的，scope 描述的就是在哪个空间哪个区段，只有在同一
+      空间，而且区段有交叠的时候，才会发生冲突。
+      所以，要发生冲突，一要在同一 namespace，二要在同一空间，三要区段有交叠。
+
+
+=============================================
+            对象系统是什么？
+            和内存有关的一切
+=============================================
+
+> 属性
+    大小
+
+> 状态
+    数值对象的值
+    聚合对象的值
+    函数对象的参数、值
+
+=============================================
+            类型系统是什么？
+            和行为有关的一切
+=============================================
+
+> 特征
+    类型描述（typedef 定义、对象使用）
+    匹配（相等？兼容？）
+
+> 行为
+    是否 incomplete
+    是否 lvalue
+    可进行的操作
+
+. 类型类别
+    数值
+    指针
+    数组
+    结构体
+    函数
+
+---------------------------------------------
+                问题集锦
+---------------------------------------------
+
+Q: 硬件对类型转换的支持？ [ok]
 Q: 作用域：如何管理全局变量？
     访问管理 和 局部变量是一样的。
     内存位置则固定为 全局区的一个 slot。
-
----------------------------------------------
 Q: enum 没有 forward-declaration，如何处理？
+Q: 左值（lvalue）是什么？ [ok]
+lvalue is an expression referring to an object.
+Q: "判断一个对象是否可以执行某个操作" 的机制？ [ok]
+Q: 如何管理函数的声明与定义？ [ok]
 
 ---------------------------------------------
 Q: 如何定义一个类型？如何定义一个类型的对象？
@@ -45,24 +102,10 @@ array > pointer         := T *a[3]      -> (T (* (a[3]) ))
 array > specifier       := T a[3]       -> (T (a[3]) )
 
 ---------------------------------------------
-Q: 左值（lvalue）是什么？
-
-lvalue is an expression referring to an object.
-
-lvalue 不是 Array，不是 incomplete-type，不是 const 的（如果是 struct/union，所有儿子都是 non-const）
-
-
----------------------------------------------
 [~~~~~running~~~~~]
 Q: "类型转换" 和 "类型提升" 的机制？
 
 见 C_Conversion.txt
-
----------------------------------------------
-Q: "判断一个对象是否可以执行某个操作" 的机制？
-
----------------------------------------------
-Q: 如何管理函数的声明与定义？
 
 ---------------------------------------------
 Q: 类型名的，变量名的，函数名的，符号空间冲突？
@@ -96,7 +139,7 @@ scope range
         global declarations
     block - until '}'
         func-definition-params, local declarations
-    function-prototype - until ';'
+    function-prototype - until ';' (意思是，函数声明里，给参数加名字没卵用)
         func-declaration-params
 
 [NAMESPACE]
@@ -143,7 +186,7 @@ specifiers:
                         || enum-specifier
                         || typedef-name
         void    -> 'v'
-        char    -> 'i1' || 'u1'
+        char    -> 'c'  || 'i1' || 'u1'
         short   -> 'i2' || 'u2'
         int     -> 'i4' || 'u4'
         long    -> 'i8' || 'u8'
@@ -153,11 +196,11 @@ specifiers:
         union   -> 'U' <name> ('_' <mem>)* '$'
         enum    -> 'E' <name> '$'
 declarator:
-    ( pointer )? ( idenifier || '(' declarator ')' ) ( ('[' ( constant-expr )? ']')* || ('(' param-list ')')? )
+    ( pointer )? ( idenifier || '(' declarator ')' ) ( ('[' ( constant-expr )? ']')* || ('(' ( param-list )? ')')? )
     pointer             := ( '*' [type-qualifier-list] )+
-        pointer -> ( 'P' ['C'] )+ <mem>
-        array   -> 'A' (<dim> '_')+ <mem> '$'
-        func    -> 'F' <ret> ('_' <param>)* '$'
+        pointer -> ( 'P' ['C'] )+
+        array   -> 'A' ('_' <dim>)+ '$'
+        func    -> 'F' ('_' <param>)* '$'
 
 
 

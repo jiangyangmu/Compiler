@@ -3,15 +3,21 @@ C Grammar
 
 ================ Translation Unit ===============
 
-translation-unit        := ( external-declaration )+
-
-external-declaration    := function-definition || declaration                   # so we can only declare function at global scope
+translation-unit        := ( function-definition || declaration )+
 
 ================== Declaration ==================
 
 function-definition     := ( specifiers )? declarator compound-stmt
 
-declaration             := specifiers ( decl-init ( ',' decl-init )* )? ';'     # so int; is legal, though meaningless
+declaration             := specifiers ( decl-init ( ',' decl-init )* )? ';'
+                            # so int; is legal, though meaningless
+
+# 如何判断是一个 function definition(F) 还是 declaration(D) ？
+    parse specifiers
+    if ';' -> D
+    parse declarator
+    if '{' -> F
+    else -> D
 
 ================== Declarator ==================
 
@@ -19,8 +25,19 @@ specifiers              := ( storage-specifier | type-specifier | type-qualifier
 
 decl-init               := declarator ( '=' init )?
 
-# FIRST => { '*' '(' identifier }
-declarator              := ( pointer )? ( identifier || '(' declarator ')' ) ( ('[' ( constant-expr )? ']')* || ('(' parameter-list ')')? )
+declarator = (pointer)? (identifier || '(' declarator ')') ()
+
+
+declarator              := ( pointer )?
+                           ( identifier || '(' declarator ')' )
+                           ( ('[' ( constant-expr )? ']')* || ('(' (parameter-list)? ')')? )
+                            # FIRST => { '*' '(' identifier }
+
+
+# 暂时忽略, 交给 declarator 处理，所以不支持 [] 这种 declarator
+abstract-declarator     := ( pointer )?
+                           ( '(' abstract-declarator ')' )?
+                           ( ('[' ( constant-expr )? ']')* || ('(' ( parameter-list )? ')')? )
 
 # C 里数组 如果作为函数返回类型，或者参数类型，统一转成指针
 
@@ -28,18 +45,7 @@ declarator              := ( pointer )? ( identifier || '(' declarator ')' ) ( (
 
 parameter-list          := parameter-declaration ( ',' parameter-declaration )* ( ',' '...' )?
 
-parameter-declaration   := specifiers declarator                                    # 具名参数
-                        || specifiers ( abstract-declarator )?                      # 匿名参数
-
-abstract-declarator     := pointer
-                        || ( pointer )? direct-abstract-decl
-                            # 注意，这里 abstract-declarator 至少要有一个，要么 pointer，要么 direct-abstract-decl
-                            # 这样在下面的 direct-abstract-decl，我们才能区分前两条
-
-direct-abstract-decl
-                        := '(' abstract-declarator ')'                              # if '(' + ( pointer or FIRST(direct-abstract-decl) )
-                        || [direct-abstract-decl] '(' ( parameter-list )? ')'       # if '(' + ( ')' or FIRST(parameter-list) )
-                        || [direct-abstract-decl] '[' ( constant-expr )? ']'
+parameter-declaration   := specifiers ( declarator || abstract-declarator )
 
 ---------------------------------------
 
@@ -50,7 +56,7 @@ init-list               := init ( ',' init )*
 
 ---------------------------------------
 
-type-name               := ( type-specifier | type-qualifier )+ ( abstract-declarator )?
+type-name               := ( type-specifier | type-qualifier )+ abstract-declarator
 
 storage-specifier       := typedef || extern || static || auto || register
 
@@ -207,8 +213,9 @@ jump-stmt               := 'goto' identifier ';'
 
 
 ------------------------------------------------------------------------
-C 声明整数的 specifiers 有效组合
+C 的 specifiers 有效组合
 
+TC_VOID: void
 TC_CHAR: char
 TC_UCHAR: unsigned char
 TC_SCHAR: signed char
@@ -218,4 +225,10 @@ TC_INT: (signed) (int)
 TC_UINT: unsigned (int)
 TC_LONG: (signed) long (int)
 TC_ULONG: unsigned long (int)
-
+TC_FLOAT: float
+TC_DOUBLE: double
+TC_LDOUBLE: long double
+TC_STRUCT: struct {}
+TC_UNION: union {}
+TC_ENUM: enum {}
+TC_TYPENAME: typedef
