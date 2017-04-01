@@ -1,5 +1,5 @@
 #SRC = $(wildcard [^_]*.cpp)
-SRC = env.cpp main.cpp
+SRC = env.cpp parser.cpp main.cpp
 HDR = $(wildcard *.h)
 TGR = ${HOME}/bin/jcc
 

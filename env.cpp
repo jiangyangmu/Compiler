@@ -2,11 +2,11 @@
 
 #include "env.h"
 
-// #include "parser.h"
+#include "parser.h"
 #include "symbol.h"
 
-#include <iostream>
 #include <cctype>
+#include <iostream>
 using namespace std;
 
 // ####### TypeBase ######
@@ -22,9 +22,14 @@ size_t TypeFactory::ArraySize(const TypeBase &t)
     {
         size *= tmp;
         tmp = 0;
-        do { ++p; } while (isdigit(*p));
-        if (*p == '\0') SyntaxError("ArraySize: unexpected EOF");
-        if (*p == '$') break;
+        do
+        {
+            ++p;
+        } while (isdigit(*p));
+        if (*p == '\0')
+            SyntaxError("ArraySize: unexpected EOF");
+        if (*p == '$')
+            break;
     }
     ++p;
     TypeBase *target = TypeFactory::newInstanceFromCStr(p, strlen(p));
@@ -45,15 +50,17 @@ size_t TypeFactory::StructSize(const TypeBase &t)
         ++p;
         for (q = p; *q != '_'; ++q)
         {
-            if (*q == '\0') SyntaxError("StructSize: unexpected EOF");
-            if (*q == '$') break;
+            if (*q == '\0')
+                SyntaxError("StructSize: unexpected EOF");
+            if (*q == '$')
+                break;
         }
         assert(q > p);
         TypeBase *target = TypeFactory::newInstanceFromCStr(p, (size_t)(q - p));
         size *= TypeBase::Sizeof(*target);
         p = q;
     }
-    assert( *p == '$' );
+    assert(*p == '$');
 
     return size;
 }
@@ -62,62 +69,72 @@ size_t TypeBase::Sizeof(const TypeBase &t)
     size_t size = 0;
     switch (t.type())
     {
-        case T_INT:
-            sscanf(t.desc.data() + 1, "%lu", &size);
-            break;
-        case T_POINTER:
-            size = sizeof(void *);
-            break;
+        case T_INT: sscanf(t.desc.data() + 1, "%lu", &size); break;
+        case T_POINTER: size = sizeof(void *); break;
         case T_FUNCTION:
-        // case T_LABEL:
+            // case T_LABEL:
             break;
-        case T_ARRAY:
-            size = TypeFactory::ArraySize(t);
-            break;
-        case T_STRUCT:
-            size = TypeFactory::StructSize(t);
-            break;
+        case T_ARRAY: size = TypeFactory::ArraySize(t); break;
+        case T_STRUCT: size = TypeFactory::StructSize(t); break;
+        case T_ENUM: size = sizeof(int); break;
         default:
             SyntaxError("TypeBase: not implemented. " + t.toString());
             break;
     }
     return size;
 }
-void TypeBase::ConstructObject(Object * &o, const TypeBase &t)
+void TypeBase::ConstructObject(Object *&o, const TypeBase &t)
 {
     if (t.isIncomplete())
-        SyntaxError("ConstructObject: can't construct object of incomplete type.");
+        SyntaxError(
+            "ConstructObject: can't construct object of incomplete type.");
+    size_t size = Sizeof(t);
     switch (t.type())
     {
-        case T_INT:
-            o = new IntegerObject(Sizeof(t));
-            break;
-        case T_FLOAT:
-            o = new FloatObject();
-            break;
-        case T_POINTER:
-            o = new PointerObject();
-            break;
-        case T_ARRAY:
-            o = new ArrayObject(Sizeof(t));
-            break;
+        case T_INT: o = new IntegerObject(size); break;
+        case T_FLOAT: o = new FloatObject(size); break;
+        case T_POINTER: o = new PointerObject(size); break;
+        case T_ARRAY: o = new ArrayObject(size); break;
         case T_FUNCTION:
             // function object is handled differently, do nothing here
             break;
-        case T_STRUCT:
-            o = new StructObject(Sizeof(t));
-            break;
-        case T_ENUM:
-            o = new EnumObject();
-            break;
+        case T_STRUCT: o = new StructObject(size); break;
+        case T_ENUM: o = new EnumObject(size); break;
         case T_NONE:
             SyntaxError("ConstructObject: null type has no object..");
             break;
-        default:
-            SyntaxError("ConstructObject: not implemented.");
-            break;
+        default: SyntaxError("ConstructObject: not implemented."); break;
     }
 }
+// base type interface
+bool TypeBase::hasOperation(ETypeOperations op) const
+{
+    const int f_int = TOp_ADD | TOp_SUB | TOp_INC | TOp_DEC | TOp_MUL |
+                      TOp_DIV | TOp_MOD | TOp_ASSIGN;
+    // const int f_float = TOp_ADD | TOp_SUB | TOp_INC | TOp_DEC | TOp_MUL |
+    // TOp_DIV | TOp_ASSIGN;
+    const int f_pointer = TOp_ADD | TOp_SUB | TOp_INC | TOp_DEC | TOp_EVAL |
+                          TOp_ADDR | TOp_ASSIGN | TOp_INDEX;
+
+    bool has = false;
+    switch (type())
+    {
+        case T_INT: has = f_int & op; break;
+        case T_POINTER: has = f_pointer & op; break;
+        default: break;
+    }
+    return has;
+}
+// concrete type interface
+const PointerType *TypeBase::asPointerType() const
+{
+    return static_cast<const PointerType *>(this);
+}
+const TypeBase *PointerType::target() const
+{
+    return TypeFactory::newInstanceFromCStr(desc.data(), desc.size());
+}
+
 vector<TypeBase *> TypeFactory::references;
 vector<Symbol *> SymbolFactory::references;
 
@@ -132,53 +149,6 @@ Symbol *SymbolTable::find(ESymbolCategory category, StringRef name) const
             return *s;
     }
     return nullptr;
-}
-void __debugPrint(string &&s)
-{
-    string tabs = "\t";
-    string line = "\t";
-    bool escape = false, empty = true;
-    for (char c : s)
-    {
-        if (c == '~')
-        {
-            escape = true;
-            continue;
-        }
-
-        if (!escape)
-        {
-            switch (c)
-            {
-                case '>': tabs += "  "; break;
-                case '<':
-                    tabs.pop_back();
-                    tabs.pop_back();
-                    break;
-                default: line.push_back(c); break;
-            }
-        }
-        else
-        {
-            line.push_back(c);
-            escape = false;
-        }
-        if (!line.empty())
-            empty = (empty && isspace(line.back()));
-
-        if (c == '\n')
-        {
-            if (!empty)
-                cout << line;
-            line = tabs;
-            empty = true;
-        }
-        else
-        {
-            if (empty && line.size() != tabs.size())
-                line = tabs;
-        }
-    }
 }
 void SymbolTable::debugPrint() const
 {
@@ -225,14 +195,14 @@ Symbol *Environment::recursiveFind(ESymbolNamespace space, StringRef name) const
 }
 void Environment::add(Symbol *s)
 {
-    assert( s != nullptr );
+    assert(s != nullptr);
     Symbol *origin = find(s->space, s->name);
     if (origin != nullptr)
     {
         // merge type
         TypeBase *t1 = origin->type;
         TypeBase *t2 = s->type;
-        assert( t1 && t2 );
+        assert(t1 && t2);
         if (!TypeFactory::MergeRight(*t1, *t2))
             SyntaxError("Symbol '" + s->name.toString() + "' already defined.");
 
@@ -331,23 +301,93 @@ StringRef Environment::endLabel() const
         SyntaxError("can't use 'break' here");
     return l;
 }
-void Environment::debugPrint() const
+
+// -------- debug  --------
+void __debugPrint(string &&s)
+{
+    string tabs = "  ";
+    string line = "  ";
+    bool escape = false, empty = true;
+    for (char c : s)
+    {
+        if (c == '~')
+        {
+            escape = true;
+            continue;
+        }
+
+        if (!escape)
+        {
+            switch (c)
+            {
+                case '>': tabs += "  "; break;
+                case '<':
+                    tabs.pop_back();
+                    tabs.pop_back();
+                    break;
+                default: line.push_back(c); break;
+            }
+        }
+        else
+        {
+            line.push_back(c);
+            escape = false;
+        }
+        if (!line.empty())
+            empty = (empty && isspace(line.back()));
+
+        if (c == '\n')
+        {
+            if (!empty)
+                cout << line;
+            line = tabs;
+            empty = true;
+        }
+        else
+        {
+            if (empty && line.size() != tabs.size())
+                line = tabs;
+        }
+    }
+}
+void Environment::debugPrint(int indent) const
 {
     for (Symbol *s : symbols)
     {
-        printf("%s %-12sType: %-33sObject: %s\n",
+        printf("%*s %-12sType: %-*sObject: %s\n", indent + 5,
                s->space == SC_ID ? "Name:"
                                  : (s->space == SC_TAG ? "Tag: " : "Labl:"),
-               s->name.toString().data(),
+               s->name.toString().data(), 33 - indent,
                s->type ? s->type->toString().data() : "<null>",
                s->obj
                    ? (s->obj->toString() + ", " + to_string(s->obj->size()) +
                       " bytes.")
                          .data()
                    : "<null>");
+        if (s->obj)
+        {
+            FuncObject *fo = dynamic_cast<FuncObject *>(s->obj);
+            if (fo)
+            {
+                if (fo->getFuncEnv())
+                    fo->getFuncEnv()->debugPrint(indent + 2);
+                if (fo->getFuncBody())
+                    __debugPrint(fo->getFuncBody()->debugString());
+            }
+        }
     }
-}
 
+    /*
+    int i = 1;
+    for (auto *child : getChildren())
+    {
+        printf(">> child [%d]\n", i);
+        child->debugPrint(indent + 4);
+        printf("<< child [%d]\n", i);
+        ++i;
+    }
+    */
+}
 
 // -------- declaration parsing --------
 // TODO: support declarator without name
@@ -381,7 +421,9 @@ bool __parseSpecifier(TypeBase &t, Lexer &lex, Environment *env)
         case TYPE_DOUBLE:
         case TYPE_FLOAT: __parseFloatingType(t, lex); break;
         case TYPE_ENUM: __parseEnumType(t, lex, env); break;
-        case TYPE_UNION: SyntaxError("Specifier: not implemented"); break;
+        case TYPE_UNION:
+            SyntaxError("Specifier: not implemented");
+            break;
         // case TYPE_UNION: __parseUnionType(t, lex, env); break;
         case TYPE_STRUCT: __parseStructType(t, lex, env); break;
         default: matched = false; break;
@@ -431,9 +473,7 @@ void __parseIntegralType(TypeBase &t, Lexer &lex)
             if (lex.peakNext().type == TYPE_INT)
                 lex.getNext();
             break;
-        default:
-            SyntaxWarning("Specifier: default 'int' type");
-            break;
+        default: SyntaxWarning("Specifier: default 'int' type"); break;
     }
 
     TypeFactory::Integer(t, is_signed, length);
@@ -496,7 +536,7 @@ bool __parseStructType(TypeBase &t, Lexer &lex, Environment *env)
     {
         TypeBase *tmp = TypeFactory::newInstance();
         *tmp = *st;
-        assert( tmp->isIncomplete() == true );
+        assert(tmp->isIncomplete() == true);
         TypeFactory::StructEnd(*tmp);
 
         Symbol *sym = SymbolFactory::newTag(tag, tmp);
@@ -517,7 +557,7 @@ bool __parseStructType(TypeBase &t, Lexer &lex, Environment *env)
                 StringRef id("<anonymous-struct-member>");
                 Symbol s;
                 __parseDeclarator(s, lex, env);
-                assert( s.type != nullptr );
+                assert(s.type != nullptr);
                 (*s.type) += spec;
                 TypeFactory::StructMember(*st, *s.type);
 
@@ -540,7 +580,7 @@ bool __parseStructType(TypeBase &t, Lexer &lex, Environment *env)
 
         // add completed tag to environment
         {
-            assert( st->isIncomplete() == false );
+            assert(st->isIncomplete() == false);
             Symbol *sym = SymbolFactory::newTag(tag, st);
             env->add(sym);
         }
@@ -619,7 +659,7 @@ bool __parseEnumType(TypeBase &t, Lexer &lex, Environment *env)
 
         // add completed tag to environment
         {
-            assert( st->isIncomplete() == false );
+            assert(st->isIncomplete() == false);
             Symbol *sym = SymbolFactory::newTag(tag, st);
             env->add(sym);
         }
@@ -635,7 +675,8 @@ bool __parseEnumType(TypeBase &t, Lexer &lex, Environment *env)
 }
 // bool __parseUnionType(TypeBase &t, Lexer &lex, Environment *env)
 
-void __parseParameterList(TypeBase &t, Lexer &lex, Environment *env, FuncObject * &func_obj);
+void __parseParameterList(TypeBase &t, Lexer &lex, Environment *env,
+                          FuncObject *&func_obj);
 // bool __parseDimensionList(TypeBase &t, Lexer &lex, ArrayObject * &array_obj);
 bool __parseDimensionList(TypeBase &t, Lexer &lex);
 bool __parsePointerList(TypeBase &t, Lexer &lex);
@@ -673,7 +714,7 @@ bool __parseDeclarator(Symbol &s, Lexer &lex, Environment *env)
     {
         if (s.type->type() == T_NONE)
         {
-            assert( s.obj == nullptr );
+            assert(s.obj == nullptr);
             FuncObject *obj = new FuncObject();
             __parseParameterList(tail, lex, env, obj);
             s.obj = obj;
@@ -689,7 +730,7 @@ bool __parseDeclarator(Symbol &s, Lexer &lex, Environment *env)
         __parseDimensionList(tail, lex);
     }
 
-    assert( s.type != nullptr );
+    assert(s.type != nullptr);
     (*s.type) += tail;
     (*s.type) += pointer;
 
@@ -697,11 +738,12 @@ bool __parseDeclarator(Symbol &s, Lexer &lex, Environment *env)
 }
 // 1. function signature (TypeBase)
 // 2. function parameters (vector<Symbol *>)
-void __parseParameterList(TypeBase &t, Lexer &lex, Environment *env, FuncObject * &func_obj)
+void __parseParameterList(TypeBase &t, Lexer &lex, Environment *env,
+                          FuncObject *&func_obj)
 {
     if (func_obj)
     {
-        func_obj->env = new Environment();
+        func_obj->setFuncEnv(new Environment());
         // func_obj->body = nullptr;
     }
 
@@ -712,12 +754,12 @@ void __parseParameterList(TypeBase &t, Lexer &lex, Environment *env, FuncObject 
         // parsing function parameters
         for (size_t loc = 0;; ++loc)
         {
-            assert( loc < 100 );
+            assert(loc < 100);
             Symbol s;
             TypeBase spec;
             __parseSpecifier(spec, lex, env);
             __parseDeclarator(s, lex, env);
-            assert( s.type != nullptr );
+            assert(s.type != nullptr);
             (*s.type) += spec;
 
             TypeFactory::FunctionParameter(t, *s.type);
@@ -726,7 +768,7 @@ void __parseParameterList(TypeBase &t, Lexer &lex, Environment *env, FuncObject 
             if (func_obj)
             {
                 func_obj->addParameter(s.name, loc);
-                func_obj->env->add(SymbolFactory::newInstance(s));
+                func_obj->getFuncEnv()->add(SymbolFactory::newInstance(s));
             }
 
             if (lex.peakNext().type == RP)
@@ -781,7 +823,6 @@ bool __parsePointerList(TypeBase &t, Lexer &lex)
     return true;
 }
 
-
 void __parseDeclaration(Lexer &lex, Environment *env, bool is_global)
 {
     TypeBase spec;
@@ -794,23 +835,24 @@ void __parseDeclaration(Lexer &lex, Environment *env, bool is_global)
     (*s->type) += spec;
 
     // parse declaration and add to env
-    if (lex.peakNext().type == BLK_BEGIN) // Function definition
+    if (lex.peakNext().type == BLK_BEGIN)  // Function definition
     {
         if (!is_global)
             SyntaxError("Function definition not allowed here.");
 
-        assert( s->name != "<anonymous-symbol>" );
-        assert( s->obj == nullptr );
+        assert(s->name != "<anonymous-symbol>");
+        assert(s->obj != nullptr);
         FuncObject *obj = dynamic_cast<FuncObject *>(s->obj);
-        assert( obj != nullptr );
-        obj->env->setParent(env);
+        assert(obj != nullptr);
+        obj->getFuncEnv()->setParent(env);
         // add func declaration before parsing its body
         env->add(s);
 
         // TODO: finish this
-        // s->obj->body = CompoundStatement::parse(lex, s->obj->env, true);
+        obj->setFuncBody(
+            CompoundStatement::parse(lex, obj->getFuncEnv(), true));
     }
-    else // Normal declaration
+    else  // Normal declaration
     {
         if (!has_specifier)
             SyntaxErrorDebug("Declaration: missing specifiers");

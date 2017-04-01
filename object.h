@@ -3,6 +3,7 @@
 #include "common.h"
 
 class Environment;
+class SyntaxNode;
 
 enum EObjectLocation
 {
@@ -49,6 +50,10 @@ class IntegerObject : public Object
 class FloatObject : public Object
 {
    public:
+    FloatObject(size_t size)
+    {
+        _size = size;
+    }
     virtual string toString() const
     {
         return "Float";
@@ -57,9 +62,9 @@ class FloatObject : public Object
 class PointerObject : public Object
 {
    public:
-    PointerObject()
+    PointerObject(size_t size)
     {
-        _size = 8;
+        _size = size;
     }
     virtual string toString() const
     {
@@ -105,9 +110,9 @@ class StructObject : public Object
 class EnumObject : public Object
 {
    public:
-    EnumObject()
+    EnumObject(size_t size)
     {
-        _size = sizeof(int);
+        _size = size;
     }
 };
 class FuncObject : public Object
@@ -119,19 +124,34 @@ class FuncObject : public Object
     };
 
     vector<ParamDesc> _params;
-    // SyntaxNode *_body;
+    SyntaxNode *_body;
+    Environment *_env;
 
    public:
-    Environment *env;
-
-   public:
-    FuncObject()
+    FuncObject() : _body(nullptr), _env(nullptr)
     {
+        _size = 0;
     }
     void addParameter(StringRef name, size_t location)
     {
         ParamDesc desc = {name, location};
         _params.push_back(desc);
+    }
+    SyntaxNode * getFuncBody()
+    {
+        return _body;
+    }
+    void setFuncBody(SyntaxNode *body)
+    {
+        _body = body;
+    }
+    Environment *getFuncEnv()
+    {
+        return _env;
+    }
+    void setFuncEnv(Environment *env)
+    {
+        _env = env;
     }
     virtual string toString() const
     {

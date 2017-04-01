@@ -20,12 +20,12 @@ class SyntaxNode : public CodeGenerator
 {
    public:
     virtual string debugString() { return "~<?~>"; }
-    virtual void emit(Environment *env, EEmitGoal goal) const;
+    // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 class Expression : public SyntaxNode
 {
    protected:
-    TypeBase *type_;
+    const TypeBase *type_;
    public:
     Expression() : type_(nullptr) {}
     const TypeBase * type() const { return type_; }
@@ -63,7 +63,7 @@ class CompoundStatement : public SyntaxNode
         s += "<\n}\n";
         return s;
     }
-    virtual void emit(Environment *__not_used, EEmitGoal goal) const;
+    // virtual void emit(Environment *__not_used, EEmitGoal goal) const;
 };
 // no instance, dispatch only
 class ExpressionStatement : public SyntaxNode
@@ -76,7 +76,7 @@ class ExpressionStatement : public SyntaxNode
     {
         return expr->debugString();
     }
-    virtual void emit(Environment *env, EEmitGoal goal) const;
+    // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 // TODO: implement switch
 class SelectionStatement : public SyntaxNode
@@ -108,7 +108,7 @@ class SelectionStatement : public SyntaxNode
         s += "<\n";
         return s;
     }
-    virtual void emit(Environment *env, EEmitGoal goal) const;
+    // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 class IterationStatement : public SyntaxNode
 {
@@ -153,7 +153,7 @@ class IterationStatement : public SyntaxNode
         s += "<\n";
         return s;
     }
-    virtual void emit(Environment *env, EEmitGoal goal) const;
+    // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 class JumpStatement : public SyntaxNode
 {
@@ -184,7 +184,7 @@ class JumpStatement : public SyntaxNode
         s += "<\n";
         return s;
     }
-    virtual void emit(Environment *env, EEmitGoal goal) const;
+    // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 
 class CommaExpression : public Expression
@@ -202,7 +202,7 @@ class CommaExpression : public Expression
         s += "<\n";
         return s;
     }
-    virtual void emit(Environment *env, EEmitGoal goal) const;
+    // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 // TODO: fix this class, only works for most cases for now
 class AssignExpression : public Expression
@@ -223,7 +223,7 @@ class AssignExpression : public Expression
         s += "<\n";
         return s;
     }
-    virtual void emit(Environment *env, EEmitGoal goal) const;
+    // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 class CondExpression : public Expression
 {
@@ -242,7 +242,7 @@ class CondExpression : public Expression
         s += "<\n";
         return s;
     }
-    virtual void emit(Environment *env, EEmitGoal goal) const;
+    // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 class OrExpression : public Expression
 {
@@ -258,7 +258,7 @@ class OrExpression : public Expression
         s += "<\n";
         return s;
     }
-    virtual void emit(Environment *env, EEmitGoal goal) const;
+    // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 class AndExpression : public Expression
 {
@@ -274,7 +274,7 @@ class AndExpression : public Expression
         s += "<\n";
         return s;
     }
-    virtual void emit(Environment *env, EEmitGoal goal) const;
+    // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 class BitOrExpression : public Expression
 {
@@ -290,7 +290,7 @@ class BitOrExpression : public Expression
         s += "<\n";
         return s;
     }
-    virtual void emit(Environment *env, EEmitGoal goal) const;
+    // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 class BitXorExpression : public Expression
 {
@@ -306,7 +306,7 @@ class BitXorExpression : public Expression
         s += "<\n";
         return s;
     }
-    virtual void emit(Environment *env, EEmitGoal goal) const;
+    // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 class BitAndExpression : public Expression
 {
@@ -322,7 +322,7 @@ class BitAndExpression : public Expression
         s += "<\n";
         return s;
     }
-    virtual void emit(Environment *env, EEmitGoal goal) const;
+    // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 class EqExpression : public Expression
 {
@@ -342,7 +342,7 @@ class EqExpression : public Expression
         s += "<\n";
         return s;
     }
-    virtual void emit(Environment *env, EEmitGoal goal) const;
+    // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 class RelExpression : public Expression
 {
@@ -368,7 +368,7 @@ class RelExpression : public Expression
         s += "<\n";
         return s;
     }
-    virtual void emit(Environment *env, EEmitGoal goal) const;
+    // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 class ShiftExpression : public Expression
 {
@@ -392,7 +392,7 @@ class ShiftExpression : public Expression
         s += "<\n";
         return s;
     }
-    virtual void emit(Environment *env, EEmitGoal goal) const;
+    // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 class AddExpression : public Expression
 {
@@ -417,7 +417,7 @@ class AddExpression : public Expression
         s += "<\n";
         return s;
     }
-    virtual void emit(Environment *env, EEmitGoal goal) const;
+    // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 class MulExpression : public Expression
 {
@@ -475,7 +475,7 @@ class UnaryExpression : public Expression
         s += "<\n";
         return s;
     }
-    virtual void emit(Environment *env, EEmitGoal goal) const;
+    // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 // TODO: finish this!
 class PostfixExpression : public Expression
@@ -535,7 +535,7 @@ class PostfixExpression : public Expression
         s += "<\n";
         return s;
     }
-    virtual void emit(Environment *env, EEmitGoal goal) const;
+    // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 // TODO: finish this!
 class PrimaryExpression : public Expression
@@ -575,7 +575,7 @@ class PrimaryExpression : public Expression
         s += '\n';
         return s;
     }
-    virtual void emit(Environment *env, EEmitGoal goal) const;
+    // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 class ConstExpression : public Expression
 {

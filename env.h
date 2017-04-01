@@ -20,7 +20,7 @@ class Environment : public TreeLike<Environment>
    public:
     Environment() : id(idgen++) {}
     // string toString() const;
-    void debugPrint() const;
+    void debugPrint(int indent = 0) const;
 
     // symbol, namespace, scope
     Symbol *find(ESymbolNamespace space, StringRef name) const;

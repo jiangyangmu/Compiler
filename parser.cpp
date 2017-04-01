@@ -148,10 +148,11 @@ string DebugIndentHelper::_indent;
 // cout << __dh.get() << #name " at Token " << lex.peakNext()
 //      << ", line " << lex.peakNext().line << endl;
 
-SyntaxNode *TypeName::parse(Lexer &lex, Environment *env)
-{
-    return nullptr;
-}
+// SyntaxNode *TypeName::parse(Lexer &lex, Environment *env)
+// {
+//     return nullptr;
+// }
+
 // no instance, only dispatch
 SyntaxNode *Statement::parse(Lexer &lex, Environment *env)
 {
@@ -206,6 +207,8 @@ SyntaxNode *CompoundStatement::parse(Lexer &lex, Environment *env,
         SyntaxError("Expecting '{'");
     }
 
+    // If it's the function body, reuse 'env'
+    // XXX: really need this?
     if (reuse_env)
         node->env = env;
     else
@@ -416,7 +419,7 @@ Expression *AssignExpression::parse(Lexer &lex, Environment *env)
     expr->source = AssignExpression::parse(lex, env);
 
     EXPECT_TYPE_WITH(target->type(), TOp_ASSIGN);
-    expr->type_ = Conversion::ByAssignment(target->type(), expr->source->type());
+    // expr->type_ = Conversion::ByAssignment(target->type(), expr->source->type());
 
     return expr;
 }
@@ -571,7 +574,7 @@ Expression *AddExpression::parse(Lexer &lex, Environment *env, Expression *left)
         EXPECT_TYPE_WITH(expr->left->type(), TOp_ADD);
         EXPECT_TYPE_WITH(expr->right->type(), TOp_ADD);
 
-        expr->type_ = CommonType(expr->left->type(), expr->right->type());
+        // expr->type_ = CommonType(expr->left->type(), expr->right->type());
 
         return parse(lex, env, expr);
     }
@@ -593,7 +596,7 @@ Expression *MulExpression::parse(Lexer &lex, Environment *env)
         EXPECT_TYPE_WITH(expr->left->type(), TOp_MUL);
         EXPECT_TYPE_WITH(expr->right->type(), TOp_MUL);
 
-        expr->type_ = CommonType(expr->left->type(), expr->right->type());
+        // expr->type_ = CommonType(expr->left->type(), expr->right->type());
 
         return expr;
     }
@@ -646,8 +649,8 @@ Expression *UnaryExpression::parse(Lexer &lex, Environment *env)
                 expr->op = lex.getNext().type;
                 expr->expr = CastExpression::parse(lex, env);
                 assert( expr->expr != nullptr);
-                EXPECT_TYPE_IS(expr->expr->type(), TC_POINTER);
-                expr->type_ = dynamic_cast<PointerType *>(expr->expr->type())->target();
+                EXPECT_TYPE_IS(expr->expr->type(), T_POINTER);
+                expr->type_ = expr->expr->type()->asPointerType()->target();
                 break;
             case SIZEOF:
                 expr->op = lex.getNext().type;
@@ -722,16 +725,16 @@ Expression *PostfixExpression::parse(Lexer &lex, Environment *env,
                 expr->index = CommaExpression::parse(lex, env);
                 if (expr->index == nullptr)
                     SyntaxError("Expect expression.");
-                EXPECT_TYPE_IS(expr->index->type(), TC_INT);
-                if (dynamic_cast<Indexable *>(expr->target->type()))
-                    expr->type_ =
-                        dynamic_cast<Indexable *>(expr->target->type())
-                            ->indexedType();
+                EXPECT_TYPE_IS(expr->index->type(), T_INT);
+                // if (dynamic_cast<Indexable *>(expr->target->type()))
+                //     expr->type_ =
+                //         dynamic_cast<Indexable *>(expr->target->type())
+                //             ->indexedType();
                 EXPECT(RSB);
                 break;
             case LP:
                 EXPECT(LP);
-                EXPECT_TYPE_IS(expr->target->type(), TC_FUNC);
+                EXPECT_TYPE_IS(expr->target->type(), T_FUNCTION);
                 // EXPECT_TYPE_WITH(expr->target->type(), TOp_CALL);
                 expr->op = POSTFIX_CALL;
                 if (lex.peakNext().type != RP)
@@ -746,8 +749,8 @@ Expression *PostfixExpression::parse(Lexer &lex, Environment *env,
                             break;
                     }
                 }
-                expr->type_ =
-                    dynamic_cast<FuncType *>(expr->target->type())->rtype();
+                // expr->type_ =
+                //     dynamic_cast<FuncType *>(expr->target->type())->rtype();
                 EXPECT(RP);
                 break;
             case REFER_TO:
@@ -758,15 +761,15 @@ Expression *PostfixExpression::parse(Lexer &lex, Environment *env,
                 break;
             case POINT_TO:
                 lex.getNext();
-                EXPECT_TYPE_IS(expr->target->type(), TC_POINTER);
+                EXPECT_TYPE_IS(expr->target->type(), T_POINTER);
                 EXPECT_TYPE_WITH(
-                    dynamic_cast<PointerType *>(expr->target->type())->target(),
+                    expr->target->type()->asPointerType()->target(),
                     TOp_OFFSET);
                 expr->op = POSTFIX_POINTER_OFFSET;
                 expr->member = EXPECT_GET(SYMBOL).symbol;
-                expr->type_ = dynamic_cast<StructType *>(expr->target->type())
-                                  ->getMember(expr->member)
-                                  ->type;
+                // expr->type_ = dynamic_cast<StructType *>(expr->target->type())
+                //                   ->getMember(expr->member)
+                //                   ->type;
                 break;
             case OP_INC:
                 lex.getNext();
@@ -823,19 +826,19 @@ Expression *PrimaryExpression::parse(Lexer &lex, Environment *env)
             p = new PrimaryExpression();
             p->t = lex.getNext();
             p->cval = p->t.cval;
-            p->type_ = env->factory.newIntegral(TYPE_CHAR, false);
+            // p->type_ = env->factory.newIntegral(TYPE_CHAR, false);
             break;
         case CONST_INT:
             p = new PrimaryExpression();
             p->t = lex.getNext();
             p->ival = p->t.ival;
-            p->type_ = env->factory.newIntegral(TYPE_INT, true);
+            // p->type_ = env->factory.newIntegral(TYPE_INT, true);
             break;
         case STRING:
             p = new PrimaryExpression();
             p->t = lex.getNext();
             p->str = &p->t.string_;
-            p->type_ = env->factory.newStringLiteral();
+            // p->type_ = env->factory.newStringLiteral();
             break;
         case SYMBOL:
             p = new PrimaryExpression();
@@ -863,6 +866,7 @@ Expression *PrimaryExpression::parse(Lexer &lex, Environment *env)
     return p;
 }
 
+/*
 void SyntaxNode::emit(Environment *env, EEmitGoal goal) const
 {
     Emit("<emit not implemented>");
@@ -1270,22 +1274,24 @@ void PrimaryExpression::emit(Environment *env, EEmitGoal goal) const
         case SYMBOL:
             if (goal == FOR_VALUE)
             {
-                if (symbol->position > 0)
-                    Emit("movq %s, %%rax", regs[symbol->position - 1]);
-                else
-                    Emit("movq _%s(%%rip), %%rax", symbol->name.toString().data());
+                // to compile, comment it for now
+                // if (symbol->position > 0)
+                //     Emit("movq %s, %%rax", regs[symbol->position - 1]);
+                // else
+                //     Emit("movq _%s(%%rip), %%rax", symbol->name.toString().data());
             }
             else if (goal == FOR_ADDRESS)
             {
-                if (symbol->position > 0)
-                {
-                    // if (symbol->position != 4)
-                    //     Emit("movq %s, -%d(%%rbp)", regs[symbol->position - 1].data(), 8 * symbol->position);
-                    // Emit("leaq -%d(%%rbp), %%rax", 8 * symbol->position);
-                    SyntaxError("Can't get address of a register value");
-                }
-                else
-                    Emit("leaq _%s(%%rip), %%rax", symbol->name.toString().data());
+                // to compile, comment it for now
+                // if (symbol->position > 0)
+                // {
+                //     // if (symbol->position != 4)
+                //     //     Emit("movq %s, -%d(%%rbp)", regs[symbol->position - 1].data(), 8 * symbol->position);
+                //     // Emit("leaq -%d(%%rbp), %%rax", 8 * symbol->position);
+                //     SyntaxError("Can't get address of a register value");
+                // }
+                // else
+                //     Emit("leaq _%s(%%rip), %%rax", symbol->name.toString().data());
             }
             break;
         case LP:
@@ -1294,3 +1300,4 @@ void PrimaryExpression::emit(Environment *env, EEmitGoal goal) const
         default: Emit("<unknown PrimaryExpression>"); break;
     }
 }
+*/

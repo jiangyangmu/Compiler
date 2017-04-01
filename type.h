@@ -36,6 +36,7 @@ enum ETypeClass
 };
 
 class TypeFactory;
+class PointerType;
 
 // Type: Everything about common behavior
 // 1. knows everything about type
@@ -44,6 +45,7 @@ class TypeBase
 {
     friend TypeFactory;
 
+   protected:
     // StringRef desc;  // complete type info description string
     string desc;
     bool complete;
@@ -96,12 +98,55 @@ class TypeBase
         return *this;
     }
 
+    const PointerType * asPointerType() const;
+
     string toString() const
     {
         return desc;
     }
     static size_t Sizeof(const TypeBase &);
     static void ConstructObject(Object *&, const TypeBase &);
+
+    // debug
+    static string DebugTypeClass(ETypeClass tc)
+    {
+        string s = "<unknown>";
+        switch (tc)
+        {
+            case T_NONE: s = "NONE"; break;
+            case T_INT: s = "INT"; break;
+            case T_FLOAT: s = "FLOAT"; break;
+            case T_POINTER: s = "POINTER"; break;
+            case T_ARRAY: s = "ARRAY"; break;
+            case T_STRUCT: s = "STRUCT"; break;
+            case T_ENUM: s = "ENUM"; break;
+            case T_FUNCTION: s = "FUNCTION"; break;
+            case T_LABEL: s = "LABEL"; break;
+            default: break;
+        }
+        return s;
+    }
+    static string DebugType(const TypeBase *t)
+    {
+        if (t == nullptr)
+            return "<nullptr>";
+        else
+            return DebugTypeClass(t->type());
+    }
+
+    // private:
+    //  NON_COPYABLE(TypeBase)
+};
+
+class PointerType : public TypeBase
+{
+    friend TypeBase;
+
+   public:
+    const TypeBase *target() const;
+
+   private:
+    NON_COPYABLE(PointerType)
 };
 
 // Type System
@@ -196,7 +241,7 @@ class TypeFactory
     }
     static void ArrayParameter(TypeBase &t, size_t len)
     {
-        t+= '_';
+        t += '_';
         t += to_string(len);
     }
     static void ArrayEnd(TypeBase &t)

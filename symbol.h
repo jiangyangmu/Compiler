@@ -60,7 +60,7 @@ class SymbolFactory
         {
             if (s->obj && (s->type == nullptr || s->type->isIncomplete()))
             {
-                SyntaxError("Object '" + s->name.toString() + "' is never completed.");
+                SyntaxWarning("Object '" + s->name.toString() + "' is never completed.");
             }
         }
     }
