@@ -58,6 +58,13 @@ init-list               := init ( ',' init )*
 
 type-name               := ( type-specifier | type-qualifier )+ abstract-declarator
 
+# register VS volatile
+# 'register' should be understood as a code quality check that the programmer is
+# not inadvertently destroying optimisation opportunities by taking the address
+# of the object.
+# 'volatile' indicates that accesses to (reads from and writes to) the object are
+# considered side effects and cannot be optimised away.
+
 storage-specifier       := typedef || extern || static || auto || register
 
 type-qualifier          := const || volatile

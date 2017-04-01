@@ -1,16 +1,9 @@
 #pragma once
 
-#include <climits>
-#include <vector>
-using namespace std;
-
-// #include "parser.h"
-// #include "env.h"
 #include "common.h"
-#include "symbol.h"
 
 class SyntaxNode;
-class Environment;
+class Object;
 
 enum ETypeOperations
 {
@@ -29,524 +22,237 @@ enum ETypeOperations
     TOp_CALL = (1 << 12)
 };
 
-class IntType;
-
-class OperationMask
-{
-    int mask;
-
-   protected:
-    OperationMask() : mask(0)
-    {
-    }
-    void addOperation(ETypeOperations op)
-    {
-        mask |= op;
-    }
-    void removeOperation(ETypeOperations op)
-    {
-        mask &= ~op;
-    }
-
-   public:
-    bool hasOperation(ETypeOperations op) const
-    {
-        return (mask & op);
-    }
-};
-template <typename T>
-class Additive : virtual public OperationMask
-{
-   public:
-    Additive<T>()
-    {
-        addOperation(TOp_ADD);
-        addOperation(TOp_SUB);
-        addOperation(TOp_INC);
-        addOperation(TOp_DEC);
-    }
-    virtual void add(T *){/* debug */};
-    virtual void sub(T *){/* debug */};
-    virtual void inc(T *){/* debug */};
-    virtual void dec(T *){/* debug */};
-};
-template <typename T>
-class Multiplicative : virtual public OperationMask
-{
-   public:
-    Multiplicative<T>()
-    {
-        addOperation(TOp_MUL);
-        addOperation(TOp_DIV);
-        addOperation(TOp_MOD);
-    }
-    virtual void mul(T *){/* debug */};
-    virtual void div(T *){/* debug */};
-    virtual void mod(T *){/* debug */};
-};
-template <typename T>  // r-value
-class Evaluable : virtual public OperationMask
-{
-   public:
-    Evaluable<T>()
-    {
-        addOperation(TOp_EVAL);
-    }
-    virtual T *eval()
-    { /* debug */
-        return nullptr;
-    };
-};
-template <typename T>  // l-value
-class Addressable : virtual public OperationMask
-{
-   public:
-    Addressable<T>()
-    {
-        addOperation(TOp_ADDR);
-    }
-    virtual void *addr()
-    { /* debug */
-        return nullptr;
-    };
-};
-template <typename T>  // l-value
-class Assignable : virtual public OperationMask
-{
-   public:
-    Assignable<T>()
-    {
-        addOperation(TOp_ASSIGN);
-    }
-    virtual void assign(T *){/* debug */};
-};
-class Indexable : virtual public OperationMask
-{
-   public:
-    Indexable()
-    {
-        addOperation(TOp_INDEX);
-    }
-    virtual void index(IntType *){/* debug */};
-    virtual TypeBase *indexedType() const
-    {
-        return nullptr;
-    }
-};
-template <typename T>  // struct member access
-class Offsetable : virtual public OperationMask
-{
-   public:
-    Offsetable<T>()
-    {
-        addOperation(TOp_OFFSET);
-    }
-    virtual void offset(StringRef){/* debug */};
-};
-class Callable : virtual public OperationMask
-{
-   public:
-    Callable()
-    {
-        addOperation(TOp_CALL);
-    }
-};
-
-// Group class
-template <typename T>
-class Scalar : public Additive<T>, public Multiplicative<T>
-{
-};
-template <typename T>
-class LValue : public Evaluable<T>, public Addressable<T>, public Assignable<T>
-{
-};
-template <typename T>
-class RValue : public Evaluable<T>, public Addressable<T>
-{
-};
-
-// Type Representation
 enum ETypeClass
 {
-    TC_VOID,
-    TC_INT,
-    TC_FLOAT,  // TC_DOUBLE
-    TC_POINTER,
-    TC_ARRAY,
-    TC_FUNC,
-    TC_STRUCT,
-    TC_UNION,
-    TC_ENUM
+    T_NONE,
+    T_INT,
+    T_FLOAT,
+    T_POINTER,
+    T_ARRAY,
+    T_STRUCT,
+    T_ENUM,
+    T_FUNCTION,
+    T_LABEL
 };
 
-class TypeBase : public ListLike<TypeBase>, virtual public OperationMask
+class TypeFactory;
+
+// Type: Everything about common behavior
+// 1. knows everything about type
+// 2. knows sizeof(object)
+class TypeBase
 {
+    friend TypeFactory;
+
+    // StringRef desc;  // complete type info description string
+    string desc;
+    bool complete;
+
    public:
-    // static TypeBase *merge(TypeBase *l, TypeBase *r);
-    // static TypeBase *convert(TypeBase *from, TypeBase *to);
-    virtual ETypeClass type() const = 0;
-    virtual long size() const = 0;
-    virtual bool equal(const TypeBase &other) const = 0;
-    static string DebugTypeClass(ETypeClass tc)
+    bool equal(const TypeBase &o) const
     {
-        switch (tc)
+        return desc == o.desc;
+    }
+    bool isIncomplete() const
+    {
+        return !complete;
+    }
+    // bool lvalue() const;
+    bool hasOperation(ETypeOperations op) const;
+    bool isCompatible(const TypeBase &o) const
+    {
+        return type() == o.type();
+    }
+    ETypeClass type() const
+    {
+        char c = desc.empty() ? '\0' : desc[0];
+        ETypeClass tc = T_NONE;
+        switch (c)
         {
-            case TC_INT: return "int";
-            case TC_FLOAT: return "float";
-            case TC_POINTER: return "pointer";
-            case TC_ARRAY: return "array";
-            case TC_FUNC: return "func";
-            case TC_STRUCT: return "struct";
-            case TC_UNION: return "union";
-            case TC_ENUM: return "enum";
-            case TC_VOID: return "void";
+            case 'i': tc = T_INT; break;
+            case 'f': tc = T_FLOAT; break;
+            case 'P': tc = T_POINTER; break;
+            case 'A': tc = T_ARRAY; break;
+            case 'F': tc = T_FUNCTION; break;
+            case 'S': tc = T_STRUCT; break;
+            case 'E': tc = T_ENUM; break;
             default: break;
         }
-        return "<null>";
+        return tc;
     }
-    static string DebugType(TypeBase *t)
+    TypeBase &operator+=(const char c)
     {
-        if (t == nullptr)
-            return "<nullptr>";
-        else
-            return DebugTypeClass(t->type());
+        desc += c;
+        return *this;
     }
-};
-class VoidType : public TypeBase
-{
-   public:
-    virtual ETypeClass type() const
+    TypeBase &operator+=(const string &s)
     {
-        return TC_VOID;
+        desc += s;
+        return *this;
     }
-    virtual long size() const
+    TypeBase &operator+=(const TypeBase &o)
     {
-        return 0;
-    }
-    virtual bool equal(const TypeBase &other) const
-    {
-        return other.type() == TC_VOID;
-    }
-};
-class IntType : public TypeBase, public LValue<IntType>, public Scalar<IntType>
-{
-    // NON_COPYABLE(IntType)
-    friend class TypeTable;
-
-    int bytes;
-    bool signed_;
-
-   protected:
-    IntType() = default;
-    IntType(const IntType &o)
-    {
-        bytes = o.bytes;
-        signed_ = o.signed_;
-    }
-    IntType(IntType &&o)
-    {
-        bytes = o.bytes;
-        signed_ = o.signed_;
-    }
-    IntType(int size, bool is_signed) : bytes(size), signed_(is_signed)
-    {
-        switch (size)
-        {
-            case 1:
-            case 2:
-            case 4:
-            case 8: break;
-            default:
-                SyntaxError("Invalid IntType bytes:" + to_string(size));
-                break;
-        }
+        desc += o.desc;
+        return *this;
     }
 
-   public:
-    bool isSigned() const
-    {
-        return signed_;
-    }
-    virtual ETypeClass type() const
-    {
-        return TC_INT;
-    }
-    virtual long size() const
-    {
-        return bytes;
-    }
-    virtual bool equal(const TypeBase &other) const
-    {
-        if (type() == other.type())
-        {
-            const IntType &ref = dynamic_cast<const IntType &>(other);
-            return bytes == ref.bytes && signed_ == ref.signed_;
-        }
-        return false;
-    }
     string toString() const
     {
-        string s;
-        if (!signed_)
-            s += "unsigned ";
-        switch (bytes)
-        {
-            case 1: s += "char"; break;
-            case 2: s += "short"; break;
-            case 4: s += "int"; break;
-            case 8: s += "long"; break;
-            default: break;
-        }
-        return s;
+        return desc;
     }
-};
-// TC_FLOAT: float
-// TC_DOUBLE: double
-// TC_LDOUBLE: long double
-class FloatType : public TypeBase,
-                  public LValue<FloatType>,
-                  public Scalar<FloatType>
-{
-   public:
-    virtual ETypeClass type() const
-    {
-        return TC_FLOAT;
-    }
-    virtual long size() const
-    {
-        return 4;
-    }
-    virtual bool equal(const TypeBase &other) const
-    {
-        return other.type() == TC_FLOAT;
-    }
-};
-class PointerType : public IntType, public Indexable
-{
-   public:
-    PointerType()
-    {
-        removeOperation(TOp_MUL);
-        removeOperation(TOp_DIV);
-        removeOperation(TOp_MOD);
-    }
-    TypeBase *target() const
-    {
-        assert(next() != nullptr);
-        return next();
-    }
-    virtual ETypeClass type() const
-    {
-        return TC_POINTER;
-    }
-    virtual long size() const
-    {
-        return sizeof(void *);
-    }
-    virtual bool equal(const TypeBase &other) const
-    {
-        if (other.type() != TC_POINTER)
-            return false;
-        const PointerType &o = dynamic_cast<const PointerType &>(other);
-        return target()->equal(*(o.target()));
-    }
-};
-class ConstPointerType : public TypeBase,
-                         public Evaluable<PointerType>,
-                         public Indexable
-{
-   public:
-    TypeBase *target() const
-    {
-        assert(next() != nullptr);
-        return next();
-    }
-    virtual ETypeClass type() const
-    {
-        return TC_POINTER;
-    }
-    virtual long size() const
-    {
-        return sizeof(void *);
-    }
-    virtual bool equal(const TypeBase &other) const
-    {
-        if (other.type() != TC_POINTER)
-            return false;
-        const PointerType &o = dynamic_cast<const PointerType &>(other);
-        return target()->equal(*(o.target()));
-    }
-};
-// Array is const-pointer, or an address constant
-class ArrayType : public TypeBase, public RValue<ArrayType>, public Indexable
-{
-   public:
-    vector<int> axis;
-    int dimen;
-    int length;
-
-    TypeBase *target() const
-    {
-        assert(next() != nullptr);
-        return next();
-    }
-    virtual ETypeClass type() const
-    {
-        return TC_ARRAY;
-    }
-    virtual long size() const
-    {
-        return length * target()->size();
-    }
-    virtual bool equal(const TypeBase &other) const
-    {
-        if (other.type() != TC_ARRAY)
-            return false;
-        const ArrayType &o = dynamic_cast<const ArrayType &>(other);
-        return length == o.length && target()->equal(*(o.target()));
-    }
-
-    // from Indexable
-    virtual TypeBase *indexedType() const
-    {
-        return target();
-    }
-};
-// Function is const-pointer, or an address constant
-class FuncType : public TypeBase, public RValue<FuncType>, public Callable
-{
-   public:
-    SyntaxNode *body;
-    Environment *env;
-
-    FuncType() : body(nullptr), env(nullptr)
-    {
-    }
-    TypeBase *rtype() const
-    {
-        assert(next() != nullptr);
-        return next();
-    }
-    virtual ETypeClass type() const
-    {
-        return TC_FUNC;
-    }
-    virtual long size() const
-    {
-        return 0;
-    }
-    virtual bool equal(const TypeBase &other) const
-    {
-        return other.type() == TC_FUNC;
-    }
-};
-class StructType : public TypeBase,
-                   public LValue<StructType>,
-                   public Offsetable<StructType>
-{
-    vector<struct Symbol *> members;
-
-   public:
-    void addMember(struct Symbol *s)
-    {
-        for (auto &m : members)
-        {
-            if (m->name == s->name)
-                SyntaxError("Duplicate member name in struct definition");
-        }
-        // calculate member location
-        // TODO: padding & alignment
-        if (members.empty())
-            s->addr = 0;
-        else
-        {
-            auto &last = members.back();
-            s->addr = last->addr + last->type->size();
-        }
-        members.push_back(s);
-    }
-    Symbol *getMember(StringRef name) const
-    {
-        for (auto &m : members)
-        {
-            if (m->name == name)
-                return m;
-        }
-        return nullptr;
-    }
-    virtual ETypeClass type() const
-    {
-        return TC_STRUCT;
-    }
-    virtual long size() const
-    {
-        return 4;
-    }
-    virtual bool equal(const TypeBase &other) const
-    {
-        return other.type() == TC_STRUCT;
-    }
-    void debugPrint()
-    {
-        for (Symbol *m : members)
-            cout << '\t' << (*m) << endl;
-    }
-};
-class UnionType : public TypeBase,
-                  public LValue<UnionType>,
-                  public Offsetable<StructType>
-{
-    // vector<Symbol> members;
-
-   public:
-    virtual ETypeClass type() const
-    {
-        return TC_UNION;
-    }
-    virtual long size() const
-    {
-        return 4;
-    }
-    virtual bool equal(const TypeBase &other) const
-    {
-        return other.type() == TC_UNION;
-    }
-};
-class EnumType : public TypeBase, public LValue<EnumType>
-{
-    // vector<Symbol> members;
-
-   public:
-    virtual ETypeClass type() const
-    {
-        return TC_ENUM;
-    }
-    virtual long size() const
-    {
-        return 4;
-    }
-    virtual bool equal(const TypeBase &other) const
-    {
-        return other.type() == TC_ENUM;
-    }
+    static size_t Sizeof(const TypeBase &);
+    static void ConstructObject(Object *&, const TypeBase &);
 };
 
 // Type System
-// parse & manage type tree
-class TypeTable
+class TypeFactory
 {
-    // ~~~~running~~~~: how to management function declaration & definition
+    static vector<TypeBase *> references;
 
    public:
-    TypeBase *newIntegral(TokenType type, bool is_signed);
-    TypeBase *newStringLiteral();
-    static const IntType &Char();
-    static const IntType &UChar();
-    static const IntType &Short();
-    static const IntType &UShort();
-    static const IntType &Int();
-    static const IntType &UInt();
-    static const IntType &Long();
-    static const IntType &ULong();
+    static TypeBase *newInstance()
+    {
+        TypeBase *t = new TypeBase();
+        t->complete = true;
+        references.push_back(t);
+        return t;
+    }
+    static TypeBase *newInstanceFromCStr(const char *s, size_t length)
+    {
+        assert(s != nullptr);
+        TypeBase *t = new TypeBase();
+        t->desc = string(s, length);
+        t->complete = true;
+        references.push_back(t);
+        return t;
+    }
+
+    // Merge types
+    static bool MergeRight(TypeBase &left, const TypeBase &right)
+    {
+        if (!left.isCompatible(right))
+        {
+            SyntaxWarning("Failed to merge type, not compatible");
+            return false;
+        }
+        if (!(left.isIncomplete() || right.isIncomplete()))
+        {
+            SyntaxWarning("Failed to merge type, duplicate definition");
+            return false;
+        }
+
+        if (left.isIncomplete())  // left=incomplete, right=complete/incomplete
+            left = right;
+        else  // left=complete, right=incomplete
+            ;
+
+        return true;
+    }
+
+    // Callback functions in building type
+    static void Void(TypeBase &t)
+    {
+        t += 'v';
+    }
+    static void Char(TypeBase &t)
+    {
+        t += 'c';
+    }
+    static void Integer(TypeBase &t, bool is_signed, size_t length)
+    {
+        assert(length <= 8);
+        t += is_signed ? 'i' : 'u';
+        t += (char)('0' + length);
+    }
+    static void Float(TypeBase &t, size_t length)
+    {
+        assert(length <= 8);
+        t += 'f';
+        t += (char)('0' + length);
+    }
+    static void Pointer(TypeBase &t, bool is_const)
+    {
+        t += 'P';
+        if (is_const)
+            t += 'C';
+    }
+    static void FunctionStart(TypeBase &t)
+    {
+        t += 'F';
+        t += '(';
+    }
+    static void FunctionParameter(TypeBase &t, const TypeBase &param)
+    {
+        t += param;
+        t += ',';
+    }
+    static void FunctionEnd(TypeBase &t)
+    {
+        t += ')';
+    }
+    static void ArrayStart(TypeBase &t)
+    {
+        t += 'A';
+    }
+    static void ArrayParameter(TypeBase &t, size_t len)
+    {
+        t+= '_';
+        t += to_string(len);
+    }
+    static void ArrayEnd(TypeBase &t)
+    {
+        t += '$';
+    }
+    static void StructStart(TypeBase &t)
+    {
+        t += 'S';
+        t.complete = false;
+    }
+    static void StructName(TypeBase &t, StringRef name)
+    {
+        // do nothing
+    }
+    static void StructBodyBegin(TypeBase &t)
+    {
+        t.complete = true;
+    }
+    static void StructMember(TypeBase &t, const TypeBase &member)
+    {
+        t += '_';
+        t += member;
+        t.complete = t.complete && member.complete;
+    }
+    static void StructBodyEnd(TypeBase &t)
+    {
+    }
+    static void StructEnd(TypeBase &t)
+    {
+        t += '$';
+    }
+    static void EnumStart(TypeBase &t)
+    {
+        t += 'E';
+        t.complete = false;
+    }
+    static void EnumName(TypeBase &t, StringRef name)
+    {
+        t += name.toString();
+    }
+    static void EnumBodyBegin(TypeBase &t)
+    {
+        // t += '{';
+        t.complete = true;
+    }
+    static void EnumBodyEnd(TypeBase &t)
+    {
+        // t += '}';
+    }
+    static void EnumEnd(TypeBase &t)
+    {
+        t += '$';
+    }
+
+    // Helpers for information extraction
+    static size_t ArraySize(const TypeBase &t);
+    static size_t StructSize(const TypeBase &t);
 };

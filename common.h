@@ -45,10 +45,17 @@ class StringBuf
     {
         delete[] begin;
     }
-    char peak(size_t offset = 0)
+    char peak(size_t offset = 0) const
     {
         if (now + offset < end)
             return now[offset];
+        else
+            return '\0';
+    }
+    char pop1()
+    {
+        if (now < end)
+            return *(now++);
         else
             return '\0';
     }
@@ -60,15 +67,15 @@ class StringBuf
         else
             now = now2;
     }
-    bool empty()
+    bool empty() const
     {
         return now == end;
     }
-    size_t size()
+    size_t size() const
     {
         return end - now;
     }
-    const char *data()
+    const char *data() const
     {
         return now;
     }
@@ -157,6 +164,14 @@ class StringRef
     friend bool operator==(const char *s1, const StringRef &s2)
     {
         return s2 == s1;
+    }
+    friend bool operator!=(const StringRef &s1, const char *s2)
+    {
+        return !(s1 == s2);
+    }
+    friend bool operator!=(const char *s1, const StringRef &s2)
+    {
+        return !(s2 == s1);
     }
     friend ostream &operator<<(ostream &o, const StringRef &s)
     {
@@ -343,20 +358,20 @@ class ListLike
             assert(false), Token())                                           \
          : lex.getNext())
 
-#define EXPECT_TYPE_IS(ptr, type_)                                          \
-    do                                                                      \
-    {                                                                       \
-        if ((ptr) == nullptr || (ptr)->type() != (type_))                   \
+#define EXPECT_TYPE_IS(ptr, type_)                                            \
+    do                                                                        \
+    {                                                                         \
+        if ((ptr) == nullptr || (ptr)->type() != (type_))                     \
             SyntaxWarningEx("Expect '" + TypeBase::DebugTypeClass(type_) +    \
-                          "', but get '" + TypeBase::DebugType(ptr) + "'"); \
+                            "', but get '" + TypeBase::DebugType(ptr) + "'"); \
     } while (0)
 
-#define EXPECT_TYPE_WITH(ptr, op)                               \
-    do                                                          \
-    {                                                           \
-        if ((ptr) == nullptr || !(ptr)->hasOperation(op))       \
+#define EXPECT_TYPE_WITH(ptr, op)                                 \
+    do                                                            \
+    {                                                             \
+        if ((ptr) == nullptr || !(ptr)->hasOperation(op))         \
             SyntaxWarningEx("Type '" + TypeBase::DebugType(ptr) + \
-                          "' don't support " #op);              \
+                            "' don't support " #op);              \
     } while (0)
 
 #define LexError(msg)                                       \

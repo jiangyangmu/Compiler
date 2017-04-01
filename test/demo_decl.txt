@@ -1,4 +1,5 @@
 int gival;
+int gf0();
 int gfunc(int param1, int param2);
 int giarr[3];
 enum EFirstEnum { HAHA, XIXI };
@@ -42,3 +43,41 @@ int main()
 
     // enum EFirstEnum fe;
 }
+
+// ------------- struct declaration -------------
+
+// self-referential
+struct tnode {
+    int count;
+    struct tnode *left, *right;
+};
+
+// within typedef
+typedef struct tnode TNODE;
+struct tnode {
+    int count;
+    TNODE *left, *right;
+};
+TNODE s, *sp;
+
+// mutually-referential
+struct s1 { struct s2 *s2p; /*...*/ }; /* D1 */
+struct s2 { struct s1 *s1p; /*...*/ }; /* D2 */
+
+// mutually-referential: not intended usage
+struct s1 {
+    struct s2 *s2p; // can be completed by same layer 's2'
+    struct s2 {int i}; // completes 's2', so this 's2' IS NOT 's2' defined below!!!
+};
+struct s2 {
+    struct s1 *s1p;
+};
+// to fix it
+struct s2;
+struct s1 {
+    struct s2 *s2p; // must completed by outer-layer 's2'
+    struct s2 {int i}; // can't complete
+};
+struct s2 {
+    struct s1 *s1p;
+};

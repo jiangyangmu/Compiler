@@ -1,57 +1,67 @@
 #pragma once
 
 #include "lexer.h"
+#include "type.h"
+#include "object.h"
 
 class TypeBase;
 
-// Symbol Representation
-// id: name, type, addr
-// enum-const: name, type, value
-// label: name, addr
-// tag: name, type
-enum ESymbolCategory
+enum ESymbolNamespace
 {
-    SC_ID,
-    SC_ENUM_CONST,
+    SC_ID, // object, enum-constant, typedef-name
     SC_LABEL,
-    SC_TAG
+    SC_TAG,
 };
 
-#include <iostream>
-
+// Symbol: Everything about name, namespace
 struct Symbol
 {
-    ESymbolCategory category;
+    ESymbolNamespace space;
     StringRef name;
     TypeBase *type;
-    union {
-        long addr; // struct offset
-        long value; // enum value
-        long position; // parameter position
-    };
-    friend std::ostream &operator<<(std::ostream &o, const Symbol &s);
+    Object *obj; // if type is incomplete, obj == nullptr
+
+    // friend std::ostream &operator<<(std::ostream &o, const Symbol &s);
+    Symbol() : type(nullptr), obj(nullptr) {}
 };
 
-// Symbol System
-// 1. label <-> location
-// 2. tag <-> struct/union/enum
-// 3. id <-> object/enum-constant
-class SymbolTable
+class SymbolFactory
 {
-    friend class Environment;
-
-    vector<Symbol *> symbols;
-    size_t size_;
-
+    static vector<Symbol *> references;
+    static Symbol * get()
+    {
+        references.push_back(new Symbol());
+        return references.back();
+    }
    public:
-    SymbolTable() : size_(0)
+    static Symbol *newInstance()
     {
+        Symbol *s = get();
+        s->type = TypeFactory::newInstance();
+        return s;
     }
-    void add(Symbol *t);
-    Symbol *find(ESymbolCategory category, StringRef name) const;
-    size_t size() const
+    static Symbol *newInstance(const Symbol &t)
     {
-        return size_;
+        Symbol *s = get();
+        (*s) = t;
+        return s;
     }
-    void debugPrint(Lexer &lex) const;
+    static Symbol *newTag(StringRef name, TypeBase *type)
+    {
+        Symbol *s = get();
+        s->space = SC_TAG;
+        s->name = name;
+        s->type = type;
+        return s;
+    }
+    static void check()
+    {
+        for (Symbol *s : references)
+        {
+            if (s->obj && (s->type == nullptr || s->type->isIncomplete()))
+            {
+                SyntaxError("Object '" + s->name.toString() + "' is never completed.");
+            }
+        }
+    }
 };

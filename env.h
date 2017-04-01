@@ -4,27 +4,30 @@
 #include "lexer.h"
 #include "symbol.h"
 #include "type.h"
-#include "codegen.h"
+// #include "codegen.h"
 
+// Environment do:
+// 1. manage symbol, namespace, scope
+// 2. manage location for break/continue
+// Environment = Tree of Declarations
 class Environment : public TreeLike<Environment>
 {
     static int idgen;
     int id;
-    size_t paramcnt;
-    SymbolTable symbols;
+    vector<Symbol *> symbols;
     vector<StringRef> slabels, elabels;
 
    public:
-    TypeTable factory;
-    Environment() : id(idgen++), paramcnt(0) {}
-    explicit Environment(size_t cnt) : id(idgen++), paramcnt(cnt) {}
+    Environment() : id(idgen++) {}
+    // string toString() const;
+    void debugPrint() const;
 
-    Symbol *find(ESymbolCategory category, StringRef name) const;
+    // symbol, namespace, scope
+    Symbol *find(ESymbolNamespace space, StringRef name) const;
+    Symbol *recursiveFind(ESymbolNamespace space, StringRef name) const;
     void add(Symbol *s);
-    size_t allSymbolSize() const;
-    void debugPrint(Lexer &lex) const;
 
-    // code & label
+    // code generation
     void emit();
     void pushLabel(StringRef start, StringRef end);
     void popLabel();
@@ -33,5 +36,5 @@ class Environment : public TreeLike<Environment>
 
     static void ParseLocalDeclaration(Lexer &lex, Environment *env);
     static void ParseGlobalDeclaration(Lexer &lex, Environment *env);
-    static TypeBase *ParseTypename(Lexer &lex, Environment *env);
+    // static TypeBase *ParseTypename(Lexer &lex, Environment *env);
 };

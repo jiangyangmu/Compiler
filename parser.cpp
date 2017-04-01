@@ -416,10 +416,11 @@ Expression *AssignExpression::parse(Lexer &lex, Environment *env)
     expr->source = AssignExpression::parse(lex, env);
 
     EXPECT_TYPE_WITH(target->type(), TOp_ASSIGN);
-    expr->type_ = target->type();
+    expr->type_ = Conversion::ByAssignment(target->type(), expr->source->type());
 
     return expr;
 }
+// binary expression <- Usual Arithmatic Conversion
 Expression *CondExpression::parse(Lexer &lex, Environment *env)
 {
     DebugParseTree(CondExpression);
@@ -464,7 +465,6 @@ Expression *AndExpression::parse(Lexer &lex, Environment *env)
         AndExpression *expr = new AndExpression();
         expr->left = e;
         expr->right = AndExpression::parse(lex, env);
-        expr->type_ = env->factory.newIntegral(TYPE_INT, true);
         return expr;
     }
     else
@@ -600,7 +600,7 @@ Expression *MulExpression::parse(Lexer &lex, Environment *env)
     else
         return e;
 }
-// TODO: implement this
+// Explicit Type Conversion
 Expression *CastExpression::parse(Lexer &lex, Environment *env)
 {
     // cast or unary
@@ -625,6 +625,7 @@ Expression *CastExpression::parse(Lexer &lex, Environment *env)
         return UnaryExpression::parse(lex, env);
     }
 }
+// unary expression <- Value Transformation
 Expression *UnaryExpression::parse(Lexer &lex, Environment *env)
 {
     DebugParseTree(UnaryExpression);
@@ -699,6 +700,7 @@ bool __isPostfixOperator(TokenType t)
     }
     return is;
 }
+// unary expression <- Value Transformation
 Expression *PostfixExpression::parse(Lexer &lex, Environment *env,
                                      Expression *target)
 {
@@ -809,6 +811,7 @@ bool __isPrimaryExpression(TokenType t)
     }
     return is;
 }
+// unary expression <- Value Transformation
 Expression *PrimaryExpression::parse(Lexer &lex, Environment *env)
 {
     DebugParseTree(PrimaryExpression);

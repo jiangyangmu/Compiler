@@ -132,7 +132,7 @@ C 对 "自动类型转换" 的支持？
         * function-call parameter: foo(int i); foo('a');
         * return statement: int foo() { return 'a'; }
 
-函数声明之时：
+函数声明之时：[忽略]
     > Default argument promotions: (argument type not specified)
         * a function without a prototype [old-style, 忽略]
         * a variadic function

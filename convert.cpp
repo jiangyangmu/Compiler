@@ -85,33 +85,33 @@ TypeBase *IntegralPromotion(TypeBase *left, TypeBase *right)
     IntType *p = nullptr;
 
     // unsigned long int, * => unsigned long int
-    if (l->equal(TypeTable::ULong()))
+    if (l->equal(TypeFactory::ULong()))
         p = l;
-    else if (r->equal(TypeTable::ULong()))
+    else if (r->equal(TypeFactory::ULong()))
         p = r;
 
     // long int, unsigned int => long int (or unsigned long int)
-    else if (l->equal(TypeTable::Long()) && r->equal(TypeTable::UInt()))
+    else if (l->equal(TypeFactory::Long()) && r->equal(TypeFactory::UInt()))
         p = l;
-    else if (r->equal(TypeTable::Long()) && l->equal(TypeTable::UInt()))
+    else if (r->equal(TypeFactory::Long()) && l->equal(TypeFactory::UInt()))
         p = r;
 
     // long int, *(not unsigned int) => long int
-    else if (l->equal(TypeTable::Long()))
+    else if (l->equal(TypeFactory::Long()))
         p = l;
-    else if (r->equal(TypeTable::Long()))
+    else if (r->equal(TypeFactory::Long()))
         p = r;
 
     // unsigned int, * => unsigned int
-    else if (l->equal(TypeTable::UInt()))
+    else if (l->equal(TypeFactory::UInt()))
         p = l;
-    else if (r->equal(TypeTable::UInt()))
+    else if (r->equal(TypeFactory::UInt()))
         p = r;
 
     // int, * => int
-    else if (l->equal(TypeTable::Int()))
+    else if (l->equal(TypeFactory::Int()))
         p = l;
-    else if (r->equal(TypeTable::Int()))
+    else if (r->equal(TypeFactory::Int()))
         p = r;
 
     assert(p != nullptr);
@@ -121,7 +121,18 @@ TypeBase *IntegralPromotion(TypeBase *left, TypeBase *right)
     return left;
 }
 
-TypeBase *CommonType(TypeBase *left, TypeBase *right)
+/*
+  Rules:
+    (long double, *) => long double
+    (double, *) => double
+    (float, *) => float
+    [Integer Promotions]
+    if same signedness => choose bigger integer
+    if unsigned has bigger integer => choose unsigned
+    if signed has bigger integer & can represent unsigned => choose signed
+    else (equal big integer, or signed not large enough) => choose unsigned with signed integer
+*/
+TypeBase * UsualArithmeticConversion(TypeBase *left, TypeBase *right)
 {
     if (left && left->type() == TC_POINTER)
     {

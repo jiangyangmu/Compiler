@@ -18,7 +18,7 @@ int tmod_ok(int i1, int i2);
 // void enum_to_int(EnumType *et, IntType *it);
 // void int_to_enum(IntType *it, EnumType *et);
 
-TypeBase *CommonType(TypeBase *left, TypeBase *right);
+TypeBase * UsualArithmeticConversion(TypeBase *left, TypeBase *right);
 // void promotion(IntType, FloatType);
 // void promotion(FloatType, IntType);
 // void promotion(FloatType, FloatType);
@@ -28,3 +28,4 @@ TypeBase *CommonType(TypeBase *left, TypeBase *right);
 
 // void float_to_float(FloatType, FloatType);
 // void float_to_int(FloatType, IntType);
+

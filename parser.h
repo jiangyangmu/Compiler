@@ -28,15 +28,7 @@ class Expression : public SyntaxNode
     TypeBase *type_;
    public:
     Expression() : type_(nullptr) {}
-    // Expression(TypeBase *t) type_(t) { assert(type_ != nullptr); }
-    virtual TypeBase *type() const { return type_; }
-};
-
-// TODO: implement 'abstract-decl' part
-class TypeName : public SyntaxNode
-{
-   public:
-    static SyntaxNode *parse(Lexer &lex, Environment *env);
+    const TypeBase * type() const { return type_; }
 };
 
 // no instance, only dispatch
@@ -603,10 +595,8 @@ class Parser
     void parse()
     {
         Environment::ParseGlobalDeclaration(lex, &env);
-    }
-    void debugPrint() const
-    {
-        env.debugPrint(lex);
+        env.debugPrint();
+        SymbolFactory::check();
     }
     void emit()
     {
