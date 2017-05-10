@@ -176,53 +176,330 @@ TODO:
 ---------------------------------------------
 Q：类型系统字符串化！
 
-work:
-    类型精确描述
+    work:
+        类型精确描述
 
-limits:
-    Max Object Size(e.g. array, struct) = size_t
+    limits:
+        Max Object Size(e.g. array, struct) = size_t
 
-功效：
-    O(1) 类型匹配
-    O(1) 类型兼容度检测
+    功效：
+        O(1) 类型匹配
+        O(1) 类型兼容度检测
 
-type => identifier OR '(declarator)' is ( [array of] ||  [function returns] ) [pointer of] specifier
+    type => identifier OR '(declarator)' is ( [array of] ||  [function returns] ) [pointer of] specifier
 
-specifiers:
-    storage-specifier   := typedef || extern || static || auto || register
-        [ignore for now]
-    type-qualifier      := const || volatile
-        const -> 'C'
-    type-specifier      := void || char || short || int || long || float || double || signed || unsigned
-                        || struct-or-union-specifier
-                        || enum-specifier
-                        || typedef-name
-        void    -> 'v'
-        char    -> 'c'  || 'i1' || 'u1'
-        short   -> 'i2' || 'u2'
-        int     -> 'i4' || 'u4'
-        long    -> 'i8' || 'u8'
-        float   -> 'f4'
-        double  -> 'f8'
-        struct  -> 'S' <name> ('_' <mem>)* '$'
-                    or
-                   'S' ('_' <mem>)* '$'
-        union   -> 'U' <name> ('_' <mem>)* '$'
-                    or
-                   'U' ('_' <mem>)* '$'
-        enum    -> 'E' <name> '$'
+    specifiers:
+        storage-specifier   := typedef || extern || static || auto || register
+            [ignore for now]
+        type-qualifier      := const || volatile
+            const -> 'C'
+        type-specifier      := void || char || short || int || long || float || double || signed || unsigned
+                            || struct-or-union-specifier
+                            || enum-specifier
+                            || typedef-name
+            void    -> 'v'
+            char    -> 'c'  || 'i1' || 'u1'
+            short   -> 'i2' || 'u2'
+            int     -> 'i4' || 'u4'
+            long    -> 'i8' || 'u8'
+            float   -> 'f4'
+            double  -> 'f8'
+            struct  -> 'S' <name> ('_' <mem>)* '$'
+                        or
+                       'S' ('_' <mem>)* '$'
+            union   -> 'U' <name> ('_' <mem>)* '$'
+                        or
+                       'U' ('_' <mem>)* '$'
+            enum    -> 'E' <name> '$'
 
-declarator:
-    ( pointer )? ( idenifier || '(' declarator ')' ) ( ('[' ( constant-expr )? ']')* || ('(' ( param-list )? ')')? )
-    pointer             := ( '*' [type-qualifier-list] )+
-        pointer -> ( 'P' ['C'] )+
-        array   -> 'A' ('_' <dim>)+ '$'
-        func    -> 'F' ('_' <param>)* '$'
+    declarator:
+        ( pointer )? ( idenifier || '(' declarator ')' ) ( ('[' ( constant-expr )? ']')* || ('(' ( param-list )? ')')? )
+        pointer             := ( '*' [type-qualifier-list] )+
+            pointer -> ( 'P' ['C'] )+
+            array   -> 'A' ('_' <dim>)+ '$'
+            func    -> 'F' ('_' <param>)* '$'
+
+    ### 实现 ###
+
+        // declaration parsing
+        lex => Symbol (used by env)
+        // statement parsing
+        lex => SyntaxNode (used by function obj)
+        // expression parsing
+        lex => SyntaxNode (used by function obj)
+
+---------------------------------------------
+Q: 类型系统问题总结？
+
+    要处理的问题：
+        > 如何描述各个类型？ 需要知道长什么样
+            primitive, typedef, pointer, array, struct/union, enum, function
+            completeness
+
+        > 如何描述各个类型的引用？ 只想知道联系方式 [typedef/pointer/array/struct/union/function]
+        > 如何处理 Incompleteness？ [typedef/pointer/array/struct/union/function]
+        > 如何处理自引用结构？递归定义？ [struct/union/function]
+            引入指针：\1, \2, ...
+
+        > 类型的 scope?
+            树形嵌套
+
+    实现：
+        > 检索一个类型是否已经记录的过程？
+        > 一个类型被添加的过程？
+        > 将上述过程嵌入 Declarator？
+
+    方案：
+
+    [类型节点树缺点] - debug 不方便。
+    [纯文本形式的缺点] - 重复信息，过早要求类型细节，实现通用的引用机制需要引入额外复杂度。
+    [文本+索引]
+        # primitives have their own id
+            0:<null>:"<null>"
+            1:void:"void"
+            2:int:"i4"
+            3:short:"i2"
+            ...
+        # pointer, array, struct/union, function open a new id
+            14:int *p:"P\2"
+            15:int **p:"P\14"
+            16:int ***p:"P\15"
+
+            17:int ia[3]:"A3\2"
+            18:int ib[]:"A*\2"
+
+            19:struct A {int i;}:"S\2"
+            20:struct B { struct A a; }:"S\19"
+
+            21:struct A func(struct B):"F\19\20"
+            22:struct A (*[3])(struct B):
+        # struct self pointer (self-loop)
+            23:struct S { struct S *p; }:"SP\23"
+        # pointer to function return self (two-node-loop)
+            24:struct S func(int):"F\25\2"
+            25:struct S { struct S (*p)(int); }:"SP\24"
+
+        pointer ->
+            type += 'P'
+            parse()
+            type += '\'lasttype();
+        array ->
+            type += 'A'<size>
+            parse()
+            type += '\'lasttype();
+        parse_struct ->
+            lex.get(); // struct
+            tag = lex.get();
+            addType(struct, tag);
+            lex.get(); // {
+            while not end: parse();
+            lex.get(); // }
+
+        int getTypeId(...)
+            primitive -> simple
+            array -> know when created
+            struct/union -> by tag
+            function -> by name
+        string getTypeString(...)
+            struct A func(int);
+                Symbol-id: "func", Type: "F_\19_\2$"
+
+---------------------------------------------
+Q: 拆解复杂对象
+
+    typedef: ...
+        Completeness: equal to target type completeness
+        String: T<type>
+
+        typedef int Integer;
+            Symbol-id: "Integer", Type: "Ti4"
+        typedef int Array[];
+            Symbol-id: "Integer", Type: "TA_*_i4$"
+        typedef struct Unknown SA[];
+            Symbol-id: "SA", Type: "TSUnknown$"
+        typedef int *IP;
+            Symbol-id: "IP", Type: "TP_i4$"
+        typedef int (*FP)(void);
+            Symbol-id: "FP", Type: "TPF_i4$"
+        typedef int F(void);
+            Symbol-id: "F", Type: "TF_i4$"
+
+    指针 T *name
+        Completeness: always
+        String: P<element_type>
+
+        int * p;
+            Symbol-id: "p", Type: "Pi4", T_POINTER, Object: 64 bits
+        int (*p)[3];
+            Symbol-id: "p", Type: "PA_3_i4$", T_POINTER, Object: 64 bits
+        struct BB * p;
+            Symbol-id: "p", Type: "PSBB$", T_POINTER, Object: 64 bits
+        struct A (*p)(struct B b, int c[3], int d[][4]);
+            Symbol-id: "p", Type: "PF_SA$_SB$_Pi4_PA_4_i4$$", T_POINTER, Object: 64 bits
+
+        typedef int IP2[2];
+        IP2 * p;
+            Symbol-id: "p", Type: "PA_2_i4$", T_POINTER, Object: 64 bits
+
+    数组 T name[N]
+        Constrains: N is non-negative constant expr (what's the meaning of 'int a[0];' ?)
+                    T must be complete
+        Completeness: T is complete && N exists
+        String: A_<element_count>_<element_type>$
+
+        int a[3];
+            Symbol-id: "a", Type: "A_3_i4$", T_ARRAY, Object: 12 bytes
+        int a[];
+            Symbol-id: "a", Type: "A_*_i4$", T_ARRAY, incomplete, Object: 12 bytes
+
+    结构体 struct Tag { M1 a; M2 b; ... };
+        Constrains: M1 is complete, M2 is complete, ...
+        Completeness: after '}'
+        String: S<tag>$
+
+        struct A { int x; int y; } inst;
+            Symbol-tag: "A", Type: "S_i4_i4$"
+            Symbol-id: "inst", Type: "SA$", T_STRUCT, Object: 8 bytes,
+                                                           {"x":<offset>, "y":<offset>},
+                                                           [env]{"x":"i4", "y":"i4"}
+        struct Node { struct Node *p; };
+            Symbol-tag: "Node", Type: "S_PSNode$$"
+        struct Node { struct Node (*fp)(int); };
+            Symbol-tag: "Node", Type: "S_PF_SNode$_i4$$"
+
+        Query [
+                member 'a' exists? check struct_obj->members[?]
+                member 'a' type? check struct_obj->env->symbols[?]->type (cause duplicate information)
+              ]
+
+    枚举 enum Tag { E1, E2, ... };
+        Completeness: after '}'
+        String: E<tag>$
+
+        enum AEnum { HAHA, XIXI } e;
+            Symbol-tag: "AEnum", Type: "EAEnum$"
+            Symbol-id-enum_const: "HAHA", Type: "EAEnum$"
+            Symbol-id-enum_const: "XIXI", Type: "EAEnum$"
+            Symbol-id: "e", Type: "EAEnum$", T_ENUM, Object: 4 bytes
+        Query [
+                enum-const 'XIXI' type? check env->symbols[?]->type
+              ]
+
+    函数 R name(T1 a, T2 b, ...) { ... }
+        Constrains: R is complete, T1 is complete, T2 is complete WHEN in definition before '{'
+                    R is not array/function type
+                    Array parameter decays to pointer. (still must be a valid array declaration)
+                    Struct/Union/Enum tag declared as parameter are in file scope.
+        Completeness: after '}'
+        String: F_<return_type>_<param1>_<param2>...$
+
+        long add(int a, int b) { return a + b; }
+            Symbol-id: "add", Type: "F_i4_i4_i4$", T_FUNCTION, Object: 0 bytes,
+                                                                 [storage]{"a":<location>, "b":<location>},
+                                                                 [env]{"a":"i4", "b":"i4"},
+                                                                 <Syntax-Tree>
+                                                                 Object: null if no body
+        Query [
+                parameter 'a' exists? check env->symbols (cause duplicate information)
+                parameter 'a' type? check env->symbols[?]->type
+                parameter 'a' location? env->symbols[?]->obj->findParam("a")->location
+              ]
+
+    标记 L: ...
+        Symbol-label: "L", Type: "L", T_LABEL, Object: 0 bytes, bool:defined
+
+* 计算对象大小的知识放在哪？ type
+* 匿名 tag 如何处理？
+
+Type 系统的结构是固定的、预先定义好的，编译器只负责识别。
 
 
+---------------------------------------------
+Q: 类型的 Completeness ?
 
+    > 三大类型:
+        . object types
+        . function types
+        . incomplete types (objects but lack information needed to determine their sizes)
 
+    > sizeof 的使用
+        The sizeof operator shall not be applied to an expression
+        that has function type or an incomplete type, to the
+        parenthesized name of such a type, or to an lvalue that
+        designates a bit-field object.
 
+    > 怎样的类型算 complete 的？
+        [ primitive ]
+            Always complete.
+        [ struct/union ]
+            <incomplete>
+            If a type specifier of the form
+                struct-or-union identifier
+            occurs prior to the declaration that defines the content,
+            the structure or union is an incomplete type.
+            It declares a tag that specifies a type that may be used
+            only when the size of an object of the specified type is
+            not needed.
+
+            (It is not needed, for example, when a typedef name is
+            declared to be a specifier for a structure or union, or
+            when a pointer to or a function returning a structure or
+            union is being declared. The specification shall be
+            complete before such a function is called or defined.)
+                struct A {
+                    struct A (*fp)(int); // valid
+                    struct A *p; // valid
+                };
+
+                struct A;
+                struct A func(int i); // valid
+                struct A func(int i) // error: incomplete result type 'struct A' in function definition
+                {}
+                int[] func(int i) // error: function cannot return array type 'int []'
+                int[3] func(int i) // error: function cannot return array type 'int [3]'
+            <example>
+            A declaration of the form
+                struct-or-union identifier ;
+            specifies a structure or union type and declares a tag,
+            both visible only within the scope in which the declaration
+            occurs. It specifies a new type distinct from any type
+            with the same tag in an enclosing scope (if any).
+
+            <complete>
+            If the type is to be completed, another declaration of
+            the tag in the same scope (but not in an enclosed block,
+            which declares a new type known only within that block)
+            shall define the content.
+            <example>
+            A type specifier of the form
+                struct-or-union {  struct-declaration-list }
+                enum {  enumerator-list }
+            specifies a new structure, union, or enumerated type,
+            within the translation unit, that can only be referred
+            to by the declaration of which it is a part.
+
+            A structure or union shall not contain a member with
+            incomplete or function type. Hence it shall not contain
+            an instance of itself (but may contain a pointer to an
+            instance of itself).
+        [ array ]
+            An array type of unknown size is an incomplete type.
+            It is completed, for an identifier of that type, by
+            specifying the size in a later declaration (with
+            internal or external linkage).
+        [ pointer ]
+            Always complete.
+        [ function ]
+            Complete after function body is defined.
+        [ enum ]
+        [ void ]
+            Always in-complete!
+
+    * A pointer to void shall have the same representation and alignment
+      requirements as a pointer to a character type.
+
+---------------------------------------------
+Q: 什么时候我们需要知道类型的大小？
 
 
 
