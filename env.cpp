@@ -10,10 +10,13 @@
 using namespace std;
 
 // ####### TypeBase ######
-size_t TypeFactory::ArraySize(const TypeBase &t)
+// sizeof
+size_t TypeFactory::ArraySize(const TypeBase &t, const Environment *env)
 {
     if (t.type() != T_ARRAY)
         SyntaxError("ArraySize: expect array type.");
+    if (t.desc[2] == '*')
+        SyntaxError("ArraySize: incomplete array type.");
 
     size_t size = 1;
     size_t tmp = 0;
@@ -33,17 +36,47 @@ size_t TypeFactory::ArraySize(const TypeBase &t)
     }
     ++p;
     TypeBase *target = TypeFactory::newInstanceFromCStr(p, strlen(p));
-    size *= TypeBase::Sizeof(*target);
+    size *= TypeFactory::Sizeof(*target, env);
 
     return size;
 }
-size_t TypeFactory::StructSize(const TypeBase &t)
+size_t TypeFactory::StructSize(const TypeBase &t, const Environment *env)
 {
     if (t.type() != T_STRUCT)
         SyntaxError("StructSize: expect array type.");
 
-    size_t size = 1;
-    const char *p = t.desc.data() + 1;
+    // find tag
+    Symbol *sym = nullptr;
+    {
+        const char *name_begin = t.desc.data() + 1;
+        const char *name_end = name_begin;
+        while (true)
+        {
+            if (*name_end == '\0')
+                SyntaxError("StructSize: unexpected EOF");
+            if (*name_end == '$')
+                break;
+            ++name_end;
+        }
+        StringRef tag(name_begin, name_end - name_begin);
+        if (tag.empty())
+            SyntaxError("StructSize: empty struct tag");
+        sym = env->recursiveFind(SC_TAG, tag);
+        if (sym == nullptr)
+            SyntaxError("StructSize: tag '" + tag.toString() + "' not defined");
+    }
+    assert( sym != nullptr );
+    assert( sym->type != nullptr );
+
+    if (sym->type->isIncomplete())
+    {
+        SyntaxWarning("StructSize: incomplete type '" + sym->type->toString() + "'");
+        return 0;
+    }
+
+    // read size info
+    size_t size = 0;
+    const char *p = sym->type->desc.data() + 1;
     const char *q;
     while (*p == '_')
     {
@@ -57,15 +90,18 @@ size_t TypeFactory::StructSize(const TypeBase &t)
         }
         assert(q > p);
         TypeBase *target = TypeFactory::newInstanceFromCStr(p, (size_t)(q - p));
-        size *= TypeBase::Sizeof(*target);
+        size += TypeFactory::Sizeof(*target, env);
         p = q;
     }
     assert(*p == '$');
 
     return size;
 }
-size_t TypeBase::Sizeof(const TypeBase &t)
+size_t TypeFactory::Sizeof(const TypeBase &t, const Environment *env)
 {
+    if (t.isIncomplete())
+        SyntaxError(
+            "Sizeof: can't get size of incomplete type.");
     size_t size = 0;
     switch (t.type())
     {
@@ -74,32 +110,28 @@ size_t TypeBase::Sizeof(const TypeBase &t)
         case T_FUNCTION:
             // case T_LABEL:
             break;
-        case T_ARRAY: size = TypeFactory::ArraySize(t); break;
-        case T_STRUCT: size = TypeFactory::StructSize(t); break;
+        case T_ARRAY: size = TypeFactory::ArraySize(t, env); break;
+        case T_STRUCT: size = TypeFactory::StructSize(t, env); break;
         case T_ENUM: size = sizeof(int); break;
         default:
-            SyntaxError("TypeBase: not implemented. " + t.toString());
+            SyntaxError("Sizeof: not implemented. " + t.toString());
             break;
     }
     return size;
 }
-void TypeBase::ConstructObject(Object *&o, const TypeBase &t)
+void TypeFactory::ConstructObject(Object *&o, const TypeBase &t, const Environment *env)
 {
-    if (t.isIncomplete())
-        SyntaxError(
-            "ConstructObject: can't construct object of incomplete type.");
-    size_t size = Sizeof(t);
     switch (t.type())
     {
-        case T_INT: o = new IntegerObject(size); break;
-        case T_FLOAT: o = new FloatObject(size); break;
-        case T_POINTER: o = new PointerObject(size); break;
-        case T_ARRAY: o = new ArrayObject(size); break;
+        case T_INT: o = new IntegerObject(Sizeof(t, env)); break;
+        case T_FLOAT: o = new FloatObject(Sizeof(t, env)); break;
+        case T_POINTER: o = new PointerObject(Sizeof(t, env)); break;
+        case T_ARRAY: o = new ArrayObject(&t, env); break;
         case T_FUNCTION:
             // function object is handled differently, do nothing here
             break;
-        case T_STRUCT: o = new StructObject(size); break;
-        case T_ENUM: o = new EnumObject(size); break;
+        case T_STRUCT: o = new StructObject(&t, env); break;
+        case T_ENUM: o = new EnumObject(Sizeof(t, env)); break;
         case T_NONE:
             SyntaxError("ConstructObject: null type has no object..");
             break;
@@ -138,6 +170,16 @@ const TypeBase *PointerType::target() const
 vector<TypeBase *> TypeFactory::references;
 vector<Symbol *> SymbolFactory::references;
 
+size_t Object::size()
+{
+    if (_need_read)
+    {
+        _size = TypeFactory::Sizeof(*_type, _env);
+        assert(_env != nullptr);
+        _need_read = false;
+    }
+    return _size;
+}
 // -------- symbol management -------
 
 /*
@@ -521,32 +563,36 @@ bool __parseStructType(TypeBase &t, Lexer &lex, Environment *env)
     }
     */
 
-    TypeBase *st = TypeFactory::newInstance();
-    TypeFactory::StructStart(*st);
-
-    // tag
     StringRef tag("<anonymous-struct>");
     {
         if (lex.peakNext().type == SYMBOL)
             tag = lex.getNext().symbol;
-        TypeFactory::StructName(*st, tag);
+    }
+
+    // add tag reference to type
+    {
+        TypeBase *ref = TypeFactory::newInstance();
+        TypeFactory::StructStart(*ref);
+        TypeFactory::StructName(*ref, tag);
+        TypeFactory::StructEnd(*ref);
+        t += *ref;
     }
 
     // add tag to environment temporarily
     {
         TypeBase *tmp = TypeFactory::newInstance();
-        *tmp = *st;
-        assert(tmp->isIncomplete() == true);
+        TypeFactory::StructStart(*tmp);
         TypeFactory::StructEnd(*tmp);
-
         Symbol *sym = SymbolFactory::newTag(tag, tmp);
         env->add(sym);
     }
 
-    // struct members
+    // the real struct
     if (lex.peakNext().type == BLK_BEGIN)
     {
         EXPECT(BLK_BEGIN);
+        TypeBase *st = TypeFactory::newInstance();
+        TypeFactory::StructStart(*st);
         TypeFactory::StructBodyBegin(*st);
         while (true)
         {
@@ -585,12 +631,6 @@ bool __parseStructType(TypeBase &t, Lexer &lex, Environment *env)
             env->add(sym);
         }
     }
-    else
-    {
-        TypeFactory::StructEnd(*st);
-    }
-
-    t += *st;
 
     return true;
 }
@@ -866,7 +906,7 @@ void __parseDeclaration(Lexer &lex, Environment *env, bool is_global)
             }
 
             // Function object is handled differently, see above
-            TypeBase::ConstructObject(s->obj, *(s->type));
+            TypeFactory::ConstructObject(s->obj, *(s->type), env);
             env->add(s);
 
             if (lex.peakNext().type == OP_COMMA)

@@ -4,6 +4,7 @@
 
 class SyntaxNode;
 class Object;
+class Environment;
 
 enum ETypeOperations
 {
@@ -104,8 +105,6 @@ class TypeBase
     {
         return desc;
     }
-    static size_t Sizeof(const TypeBase &);
-    static void ConstructObject(Object *&, const TypeBase &);
 
     // debug
     static string DebugTypeClass(ETypeClass tc)
@@ -256,6 +255,7 @@ class TypeFactory
     static void StructName(TypeBase &t, StringRef name)
     {
         // do nothing
+        t += name.toString();
     }
     static void StructBodyBegin(TypeBase &t)
     {
@@ -298,6 +298,8 @@ class TypeFactory
     }
 
     // Helpers for information extraction
-    static size_t ArraySize(const TypeBase &t);
-    static size_t StructSize(const TypeBase &t);
+    static size_t ArraySize(const TypeBase &t, const Environment *env);
+    static size_t StructSize(const TypeBase &t, const Environment *env);
+    static size_t Sizeof(const TypeBase &t, const Environment *env);
+    static void ConstructObject(Object *&o, const TypeBase &t, const Environment *env);
 };

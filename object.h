@@ -20,11 +20,20 @@ class Object
     size_t _size;
     EObjectLocation _loc;
 
-   public:
-    size_t size() const
+    // lazy evaluate size
+    bool _need_read;
+    const TypeBase *_type;
+    const Environment *_env;
+
+    Object(size_t size, bool need_read = false, const TypeBase *type = nullptr,
+           const Environment *env = nullptr)
+        : _size(size), _need_read(need_read), _type(type), _env(env)
     {
-        return _size;
     }
+
+   public:
+    size_t size();
+    // size_t size() const
     virtual EObjectLocation location() const
     {
         return OBJ_LOC_NONE;
@@ -38,9 +47,8 @@ class Object
 class IntegerObject : public Object
 {
    public:
-    IntegerObject(size_t size)
+    IntegerObject(size_t size) : Object(size)
     {
-        _size = size;
     }
     virtual string toString() const
     {
@@ -50,9 +58,8 @@ class IntegerObject : public Object
 class FloatObject : public Object
 {
    public:
-    FloatObject(size_t size)
+    FloatObject(size_t size) : Object(size)
     {
-        _size = size;
     }
     virtual string toString() const
     {
@@ -62,9 +69,8 @@ class FloatObject : public Object
 class PointerObject : public Object
 {
    public:
-    PointerObject(size_t size)
+    PointerObject(size_t size) : Object(size)
     {
-        _size = size;
     }
     virtual string toString() const
     {
@@ -76,9 +82,9 @@ class ArrayObject : public Object
     vector<size_t> _dim;
 
    public:
-    ArrayObject(size_t size)
+    ArrayObject(const TypeBase *type, const Environment *env)
+        : Object(0, true, type, env)
     {
-        _size = size;
     }
     virtual string toString() const
     {
@@ -97,9 +103,9 @@ class StructObject : public Object
     // Environment *_member_env;
 
    public:
-    StructObject(size_t size)
+    StructObject(const TypeBase *type, const Environment *env)
+        : Object(0, true, type, env)
     {
-        _size = size;
     }
     virtual string toString() const
     {
@@ -110,9 +116,8 @@ class StructObject : public Object
 class EnumObject : public Object
 {
    public:
-    EnumObject(size_t size)
+    EnumObject(size_t size) : Object(size)
     {
-        _size = size;
     }
 };
 class FuncObject : public Object
@@ -125,19 +130,18 @@ class FuncObject : public Object
 
     vector<ParamDesc> _params;
     SyntaxNode *_body;
-    Environment *_env;
+    Environment *_body_env;
 
    public:
-    FuncObject() : _body(nullptr), _env(nullptr)
+    FuncObject() : Object(0), _body(nullptr), _body_env(nullptr)
     {
-        _size = 0;
     }
     void addParameter(StringRef name, size_t location)
     {
         ParamDesc desc = {name, location};
         _params.push_back(desc);
     }
-    SyntaxNode * getFuncBody()
+    SyntaxNode *getFuncBody()
     {
         return _body;
     }
@@ -147,11 +151,11 @@ class FuncObject : public Object
     }
     Environment *getFuncEnv()
     {
-        return _env;
+        return _body_env;
     }
     void setFuncEnv(Environment *env)
     {
-        _env = env;
+        _body_env = env;
     }
     virtual string toString() const
     {
