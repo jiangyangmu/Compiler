@@ -126,28 +126,6 @@ bool IsExpression(TokenType t)
     return is;
 }
 
-class DebugIndentHelper
-{
-   public:
-    static string _indent;
-    DebugIndentHelper()
-    {
-        _indent += "  ";
-    }
-    ~DebugIndentHelper()
-    {
-        _indent.pop_back();
-        _indent.pop_back();
-    }
-};
-string DebugIndentHelper::_indent;
-// #define DebugParseTree(name)                             \
-//     cout << DebugIndentHelper::_indent << #name << endl; \
-//     DebugIndentHelper __dh
-#define DebugParseTree(name)
-// cout << __dh.get() << #name " at Token " << lex.peakNext()
-//      << ", line " << lex.peakNext().line << endl;
-
 // SyntaxNode *TypeName::parse(Lexer &lex, Environment *env)
 // {
 //     return nullptr;
@@ -156,7 +134,6 @@ string DebugIndentHelper::_indent;
 // no instance, only dispatch
 SyntaxNode *Statement::parse(Lexer &lex, Environment *env)
 {
-    // DebugParseTree(Statement);
     SyntaxNode *node = nullptr;
     switch (lex.peakNext().type)
     {
@@ -192,14 +169,12 @@ SyntaxNode *Statement::parse(Lexer &lex, Environment *env)
 // TODO: implement this
 SyntaxNode *LabelStatement::parse(Lexer &lex, Environment *env)
 {
-    DebugParseTree(LabelStatement);
     SyntaxError("Unsupported feature: Label Statement");
     return nullptr;
 }
 SyntaxNode *CompoundStatement::parse(Lexer &lex, Environment *env,
                                      bool reuse_env)
 {
-    DebugParseTree(CompoundStatement);
     CompoundStatement *node = new CompoundStatement();
 
     if (lex.getNext().type != BLK_BEGIN)
@@ -235,7 +210,6 @@ SyntaxNode *CompoundStatement::parse(Lexer &lex, Environment *env,
 }
 SyntaxNode *ExpressionStatement::parse(Lexer &lex, Environment *env)
 {
-    DebugParseTree(ExpressionStatement);
     ExpressionStatement *stmt = nullptr;
     if (lex.peakNext().type != STMT_END)
     {
@@ -248,7 +222,6 @@ SyntaxNode *ExpressionStatement::parse(Lexer &lex, Environment *env)
 }
 SyntaxNode *SelectionStatement::parse(Lexer &lex, Environment *env)
 {
-    DebugParseTree(SelectionStatement);
     SelectionStatement *stmt = new SelectionStatement();
     stmt->stmt2 = nullptr;
     switch (lex.getNext().type)
@@ -289,7 +262,6 @@ SyntaxNode *SelectionStatement::parse(Lexer &lex, Environment *env)
 }
 SyntaxNode *IterationStatement::parse(Lexer &lex, Environment *env)
 {
-    DebugParseTree(IterationStatement);
     IterationStatement *stmt = new IterationStatement();
     switch (lex.getNext().type)
     {
@@ -350,7 +322,6 @@ SyntaxNode *IterationStatement::parse(Lexer &lex, Environment *env)
 }
 SyntaxNode *JumpStatement::parse(Lexer &lex, Environment *env)
 {
-    DebugParseTree(JumpStatement);
     JumpStatement *stmt = new JumpStatement();
     stmt->expr = nullptr;
     stmt->id = 0;
@@ -380,7 +351,6 @@ SyntaxNode *JumpStatement::parse(Lexer &lex, Environment *env)
 
 Expression *CommaExpression::parse(Lexer &lex, Environment *env)
 {
-    DebugParseTree(CommaExpression);
     if (!IsExpression(lex.peakNext().type))
         SyntaxErrorDebug("Expect expression");
 
@@ -403,7 +373,6 @@ Expression *CommaExpression::parse(Lexer &lex, Environment *env)
 // TODO: solve ambiguity, evaluate order
 Expression *AssignExpression::parse(Lexer &lex, Environment *env)
 {
-    DebugParseTree(AssignExpression);
     AssignExpression *expr = nullptr;
 
     // condition or unary?
@@ -419,14 +388,17 @@ Expression *AssignExpression::parse(Lexer &lex, Environment *env)
     expr->source = AssignExpression::parse(lex, env);
 
     EXPECT_TYPE_WITH(target->type(), TOp_ASSIGN);
-    // expr->type_ = Conversion::ByAssignment(target->type(), expr->source->type());
+    if (!target->type()->equal(*expr->source->type()))
+    {
+        // [Type] insert Castexpression
+    }
+    expr->type_ = target->type();
 
     return expr;
 }
 // binary expression <- Usual Arithmatic Conversion
 Expression *CondExpression::parse(Lexer &lex, Environment *env)
 {
-    DebugParseTree(CondExpression);
     Expression *e = OrExpression::parse(lex, env);
     if (lex.peakNext().type == OP_QMARK)
     {
@@ -436,6 +408,8 @@ Expression *CondExpression::parse(Lexer &lex, Environment *env)
         expr->left = CommaExpression::parse(lex, env);
         EXPECT(OP_COLON);
         expr->right = CondExpression::parse(lex, env);
+        // [Type] expr->type_ = TypeConversion::Common(a, b);
+        // [Type] insert Castexpression if type not equal
         return expr;
     }
     else
@@ -445,7 +419,6 @@ Expression *CondExpression::parse(Lexer &lex, Environment *env)
 }
 Expression *OrExpression::parse(Lexer &lex, Environment *env)
 {
-    DebugParseTree(OrExpression);
     Expression *e = AndExpression::parse(lex, env);
     if (lex.peakNext().type == BOOL_OR)
     {
@@ -453,6 +426,7 @@ Expression *OrExpression::parse(Lexer &lex, Environment *env)
         OrExpression *expr = new OrExpression();
         expr->left = e;
         expr->right = OrExpression::parse(lex, env);
+        // [Type] convert result to bool
         return expr;
     }
     else
@@ -460,7 +434,6 @@ Expression *OrExpression::parse(Lexer &lex, Environment *env)
 }
 Expression *AndExpression::parse(Lexer &lex, Environment *env)
 {
-    DebugParseTree(AndExpression);
     Expression *e = BitOrExpression::parse(lex, env);
     if (lex.peakNext().type == BOOL_AND)
     {
@@ -468,6 +441,7 @@ Expression *AndExpression::parse(Lexer &lex, Environment *env)
         AndExpression *expr = new AndExpression();
         expr->left = e;
         expr->right = AndExpression::parse(lex, env);
+        // [Type] convert result to bool
         return expr;
     }
     else
@@ -482,6 +456,7 @@ Expression *BitOrExpression::parse(Lexer &lex, Environment *env)
         BitOrExpression *expr = new BitOrExpression();
         expr->left = e;
         expr->right = BitOrExpression::parse(lex, env);
+        // [Type] integer promotion?
         return expr;
     }
     else
@@ -496,6 +471,7 @@ Expression *BitXorExpression::parse(Lexer &lex, Environment *env)
         BitXorExpression *expr = new BitXorExpression();
         expr->left = e;
         expr->right = BitXorExpression::parse(lex, env);
+        // [Type] integer promotion?
         return expr;
     }
     else
@@ -510,6 +486,7 @@ Expression *BitAndExpression::parse(Lexer &lex, Environment *env)
         BitAndExpression *expr = new BitAndExpression();
         expr->left = e;
         expr->right = BitAndExpression::parse(lex, env);
+        // [Type] integer promotion?
         return expr;
     }
     else
@@ -524,6 +501,7 @@ Expression *EqExpression::parse(Lexer &lex, Environment *env)
         expr->op = lex.getNext().type;
         expr->left = e;
         expr->right = EqExpression::parse(lex, env);
+        // [Type] convert to bool?
         return expr;
     }
     else
@@ -539,6 +517,7 @@ Expression *RelExpression::parse(Lexer &lex, Environment *env)
         expr->op = lex.getNext().type;
         expr->left = e;
         expr->right = RelExpression::parse(lex, env);
+        // [Type] convert to bool?
         return expr;
     }
     else
@@ -553,6 +532,7 @@ Expression *ShiftExpression::parse(Lexer &lex, Environment *env)
         expr->op = lex.getNext().type;
         expr->left = e;
         expr->right = ShiftExpression::parse(lex, env);
+        // [Type] integer promotion?
         expr->type_ = e->type();
         return expr;
     }
@@ -561,7 +541,6 @@ Expression *ShiftExpression::parse(Lexer &lex, Environment *env)
 }
 Expression *AddExpression::parse(Lexer &lex, Environment *env, Expression *left)
 {
-    DebugParseTree(AddExpression);
     if (left == nullptr)
         left = MulExpression::parse(lex, env);
     if (lex.peakNext().type == OP_ADD || lex.peakNext().type == OP_SUB)
@@ -571,10 +550,13 @@ Expression *AddExpression::parse(Lexer &lex, Environment *env, Expression *left)
         expr->left = left;
         expr->right = MulExpression::parse(lex, env);
 
+        // [Type] integer promotion?
+
         EXPECT_TYPE_WITH(expr->left->type(), TOp_ADD);
         EXPECT_TYPE_WITH(expr->right->type(), TOp_ADD);
 
-        // expr->type_ = CommonType(expr->left->type(), expr->right->type());
+        // expr->type_ = TypeConversion::Common(expr->left->type(), expr->right->type());
+        expr->type_ = expr->left->type();
 
         return parse(lex, env, expr);
     }
@@ -583,7 +565,6 @@ Expression *AddExpression::parse(Lexer &lex, Environment *env, Expression *left)
 }
 Expression *MulExpression::parse(Lexer &lex, Environment *env)
 {
-    DebugParseTree(MulExpression);
     Expression *e = CastExpression::parse(lex, env);
     if (lex.peakNext().type == OP_MUL || lex.peakNext().type == OP_DIV ||
         lex.peakNext().type == OP_MOD)
@@ -593,10 +574,12 @@ Expression *MulExpression::parse(Lexer &lex, Environment *env)
         expr->left = e;
         expr->right = MulExpression::parse(lex, env);
 
+        // [Type] integer promotion?
+
         EXPECT_TYPE_WITH(expr->left->type(), TOp_MUL);
         EXPECT_TYPE_WITH(expr->right->type(), TOp_MUL);
 
-        // expr->type_ = CommonType(expr->left->type(), expr->right->type());
+        // expr->type_ = TypeConversion::Common(expr->left->type(), expr->right->type());
 
         return expr;
     }
@@ -631,7 +614,6 @@ Expression *CastExpression::parse(Lexer &lex, Environment *env)
 // unary expression <- Value Transformation
 Expression *UnaryExpression::parse(Lexer &lex, Environment *env)
 {
-    DebugParseTree(UnaryExpression);
     if (IsUnaryOperator(lex.peakNext().type))
     {
         UnaryExpression *expr = new UnaryExpression();
@@ -707,7 +689,6 @@ bool __isPostfixOperator(TokenType t)
 Expression *PostfixExpression::parse(Lexer &lex, Environment *env,
                                      Expression *target)
 {
-    DebugParseTree(PostfixExpression);
     if (__isPostfixOperator(lex.peakNext().type))
     {
         PostfixExpression *expr = new PostfixExpression();
@@ -817,7 +798,6 @@ bool __isPrimaryExpression(TokenType t)
 // unary expression <- Value Transformation
 Expression *PrimaryExpression::parse(Lexer &lex, Environment *env)
 {
-    DebugParseTree(PrimaryExpression);
     PrimaryExpression *p = nullptr;
     Expression *e = nullptr;
     switch (lex.peakNext().type)

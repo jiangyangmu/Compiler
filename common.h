@@ -112,6 +112,11 @@ class StringRef
         begin = end = nullptr;
     }
 
+    bool empty() const
+    {
+        return begin == end;
+    }
+
     size_t size() const
     {
         return end - begin;
