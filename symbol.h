@@ -34,6 +34,10 @@ class SymbolFactory
         return references.back();
     }
    public:
+    static size_t size()
+    {
+        return references.size();
+    }
     static Symbol *newInstance()
     {
         Symbol *s = get();
@@ -56,12 +60,12 @@ class SymbolFactory
     }
     static void check()
     {
-        for (Symbol *s : references)
-        {
-            if (s->obj && (s->type == nullptr || s->type->isIncomplete()))
-            {
-                SyntaxWarning("Object '" + s->name.toString() + "' is never completed.");
-            }
-        }
+        // for (Symbol *s : references)
+        // {
+        //     if (s->obj && (s->type == nullptr || s->type->isIncomplete()))
+        //     {
+        //         SyntaxWarning("Object '" + s->name.toString() + "' is never completed.");
+        //     }
+        // }
     }
 };

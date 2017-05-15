@@ -26,6 +26,8 @@ enum ETypeOperations
 enum ETypeClass
 {
     T_NONE,
+    T_VOID,
+    T_CHAR,
     T_INT,
     T_FLOAT,
     T_POINTER,
@@ -37,7 +39,13 @@ enum ETypeClass
 };
 
 class TypeFactory;
+class IntegerType;
+class FloatingType;
 class PointerType;
+class ArrayType;
+class FunctionType;
+class StructType;
+class EnumType;
 
 // Type: Everything about common behavior
 // 1. knows everything about type
@@ -45,65 +53,49 @@ class PointerType;
 class TypeBase
 {
     friend TypeFactory;
+    friend StructType;
+    friend EnumType;
 
    protected:
-    // StringRef desc;  // complete type info description string
-    string desc;
-    bool complete;
+    ETypeClass _headtype, _tailtype;
+    bool _complete;
+    string _desc;  // complete type info description string
+
+    TypeBase(ETypeClass type, bool complete)
+        : _headtype(type), _tailtype(type), _complete(complete)
+    {
+    }
 
    public:
     bool equal(const TypeBase &o) const
     {
-        return desc == o.desc;
+        return _desc == o._desc;
     }
-    bool isIncomplete() const
+    ETypeClass type() const
     {
-        return !complete;
+        return _headtype;
     }
+    ETypeClass tailType() const
+    {
+        return _tailtype;
+    }
+
     // bool lvalue() const;
     bool hasOperation(ETypeOperations op) const;
     bool isCompatible(const TypeBase &o) const
     {
         return type() == o.type();
     }
-    ETypeClass type() const
-    {
-        char c = desc.empty() ? '\0' : desc[0];
-        ETypeClass tc = T_NONE;
-        switch (c)
-        {
-            case 'i': tc = T_INT; break;
-            case 'f': tc = T_FLOAT; break;
-            case 'P': tc = T_POINTER; break;
-            case 'A': tc = T_ARRAY; break;
-            case 'F': tc = T_FUNCTION; break;
-            case 'S': tc = T_STRUCT; break;
-            case 'E': tc = T_ENUM; break;
-            default: break;
-        }
-        return tc;
-    }
-    TypeBase &operator+=(const char c)
-    {
-        desc += c;
-        return *this;
-    }
-    TypeBase &operator+=(const string &s)
-    {
-        desc += s;
-        return *this;
-    }
-    TypeBase &operator+=(const TypeBase &o)
-    {
-        desc += o.desc;
-        return *this;
-    }
 
-    const PointerType * asPointerType() const;
+    bool isIncomplete(const Environment *env) const;
+    bool isIncompleteSimple() const
+    {
+        return !_complete;
+    }
 
     string toString() const
     {
-        return desc;
+        return _desc;
     }
 
     // debug
@@ -113,6 +105,8 @@ class TypeBase
         switch (tc)
         {
             case T_NONE: s = "NONE"; break;
+            case T_VOID: s = "VOID"; break;
+            case T_CHAR: s = "CHAR"; break;
             case T_INT: s = "INT"; break;
             case T_FLOAT: s = "FLOAT"; break;
             case T_POINTER: s = "POINTER"; break;
@@ -132,20 +126,58 @@ class TypeBase
         else
             return DebugTypeClass(t->type());
     }
-
-    // private:
-    //  NON_COPYABLE(TypeBase)
 };
 
+class VoidType : public TypeBase
+{
+    friend TypeBase;
+    friend TypeFactory;
+};
+class CharType : public TypeBase
+{
+    friend TypeBase;
+    friend TypeFactory;
+};
+class IntegerType : public TypeBase
+{
+    friend TypeBase;
+    friend TypeFactory;
+};
+class FloatingType : public TypeBase
+{
+    friend TypeBase;
+    friend TypeFactory;
+};
 class PointerType : public TypeBase
 {
     friend TypeBase;
+    friend TypeFactory;
+};
+class ArrayType : public TypeBase
+{
+    friend TypeBase;
+    friend TypeFactory;
+};
+class FunctionType : public TypeBase
+{
+    friend TypeBase;
+    friend TypeFactory;
+};
+class StructType : public TypeBase
+{
+    friend TypeBase;
+    friend TypeFactory;
 
-   public:
-    const TypeBase *target() const;
+    bool isIncomplete(const Environment *env) const;
+    const TypeBase *getDefinition(const Environment *env) const;
+};
+class EnumType : public TypeBase
+{
+    friend TypeBase;
+    friend TypeFactory;
 
-   private:
-    NON_COPYABLE(PointerType)
+    bool isIncomplete(const Environment *env) const;
+    const TypeBase *getDefinition(const Environment *env) const;
 };
 
 // Type System
@@ -154,152 +186,343 @@ class TypeFactory
     static vector<TypeBase *> references;
 
    public:
+    static size_t size()
+    {
+        return references.size();
+    }
+    static ETypeClass TypeFromChar(char c)
+    {
+        ETypeClass t = T_NONE;
+        switch (c)
+        {
+            case 'v': t = T_VOID; break;
+            case 'c': t = T_CHAR; break;
+            case 'i': t = T_INT; break;
+            case 'f': t = T_FLOAT; break;
+            case 'P': t = T_POINTER; break;
+            case 'F': t = T_FUNCTION; break;
+            case 'A': t = T_ARRAY; break;
+            case 'E': t = T_ENUM; break;
+            case 'S': t = T_STRUCT; break;
+            default: break;
+        }
+        return t;
+    }
     static TypeBase *newInstance()
     {
-        TypeBase *t = new TypeBase();
-        t->complete = true;
+        TypeBase *t = new TypeBase(T_NONE, true);
         references.push_back(t);
         return t;
     }
     static TypeBase *newInstanceFromCStr(const char *s, size_t length)
     {
         assert(s != nullptr);
-        TypeBase *t = new TypeBase();
-        t->desc = string(s, length);
-        t->complete = true;
+        TypeBase *t = new TypeBase(T_NONE, true);
+        t->_desc = string(s, length);
         references.push_back(t);
         return t;
     }
+    // used by TypeFactory::Sizeof()
+    static TypeBase *ReadType(const char *&s, const Environment *env)
+    {
+        TypeBase *t = nullptr;
+        size_t i;
+        int ret;
+        const char *p;
+        switch (TypeFromChar(*s))
+        {
+            case T_VOID:
+                t = Void();
+                ++s;
+                break;
+            case T_CHAR:
+                t = Char();
+                ++s;
+                break;
+            case T_INT:
+                t = Integer(*(s + 1) - '0', *s == 'i');
+                s += 2;
+                break;
+            case T_FLOAT:
+                t = Float(*(s + 1) - '0');
+                s += 2;
+                break;
+            case T_POINTER:
+                t = Pointer(*(s + 1) == 'C');
+                s += (*(s + 1) == 'C') ? 2 : 1;
+                AppendRight(*t, *ReadType(s, env), env);
+                break;
+            case T_ARRAY:
+                ++s;
+                if (*s == '*')
+                    t = ArrayIncomplete();
+                else
+                {
+                    ret = sscanf(s, "%lu", &i);
+                    assert(ret > 0);
+                    while (isdigit(*s))
+                        ++s;
+                    t = Array(i);
+                }
+                AppendRight(*t, *ReadType(s, env), env);
+                break;
+            case T_FUNCTION:
+                while (*s != '\0' && *s != '$')
+                    ++s;
+                if (*s == '$')
+                    ++s;
+                t = Function();
+                AppendRight(*t, *ReadType(s, env), env);
+                break;
+            case T_STRUCT:
+                ++s;
+                for (p = s; *p != '$'; ++p)
+                {
+                }
+                t = StructTag(StringRef(s, p - s));
+                s = p + 1;
+                break;
+            case T_ENUM:
+                ++s;
+                for (p = s; *p != '$'; ++p)
+                {
+                }
+                t = EnumTag(StringRef(s, p - s));
+                s = p + 1;
+                break;
+            default:
+                SyntaxError("ReadType: unknown type. " +
+                            StringRef(s, strlen(s)).toString());
+                break;
+        }
+        return t;
+    }
 
-    // Merge types
-    static bool MergeRight(TypeBase &left, const TypeBase &right)
+    // Merge definitions: struct, enum
+    // TODO: array, union, function
+    static bool MergeDefinition(TypeBase &left, const TypeBase &right)
     {
         if (!left.isCompatible(right))
         {
             SyntaxWarning("Failed to merge type, not compatible");
             return false;
         }
-        if (!(left.isIncomplete() || right.isIncomplete()))
+        if (left._complete && right._complete)
         {
             SyntaxWarning("Failed to merge type, duplicate definition");
             return false;
         }
-
-        if (left.isIncomplete())  // left=incomplete, right=complete/incomplete
+        // left=incomplete, right=complete/incomplete
+        if (right._complete)
             left = right;
         else  // left=complete, right=incomplete
             ;
 
         return true;
     }
+    // Append types (pointer to, array of, function return)
+    static void AppendRight(TypeBase &left, const TypeBase &right,
+                            const Environment *env)
+    {
+        switch (left.tailType())
+        {
+            case T_INT:
+            case T_FLOAT:
+            case T_STRUCT:
+            case T_ENUM:
+                SyntaxError("TypeFactory: " +
+                            TypeBase::DebugTypeClass(left.tailType()) +
+                            " is not derived type");
+                break;
+            case T_POINTER:
+            case T_FUNCTION:
+                left._desc += right._desc;
+                left._tailtype = right._tailtype;
+                break;
+            case T_ARRAY:
+                if (right.isIncomplete(env))
+                    SyntaxError("ArrayType: element type is incomplete.");
+                left._desc += right._desc;
+                left._tailtype = right._tailtype;
+                break;
+            case T_NONE: left = right; break;
+            default:
+                SyntaxError("TypeFactory: append unknown type: " +
+                            left.toString());
+                break;
+        }
+    }
 
-    // Callback functions in building type
-    static void Void(TypeBase &t)
+    // Type create: only create type object here
+    static TypeBase *Void()
     {
-        t += 'v';
+        TypeBase *t = new TypeBase(T_VOID, false);
+        t->_desc += 'v';
+        references.push_back(t);
+        return t;
     }
-    static void Char(TypeBase &t)
+    static TypeBase *Char()
     {
-        t += 'c';
+        TypeBase *t = new TypeBase(T_CHAR, true);
+        t->_desc += 'c';
+        references.push_back(t);
+        return t;
     }
-    static void Integer(TypeBase &t, bool is_signed, size_t length)
+    static TypeBase *Integer(size_t length, bool is_signed)
     {
+        TypeBase *t = new TypeBase(T_INT, true);
         assert(length <= 8);
-        t += is_signed ? 'i' : 'u';
-        t += (char)('0' + length);
+        t->_desc += is_signed ? 'i' : 'u';
+        t->_desc += (char)('0' + length);
+        references.push_back(t);
+        return t;
     }
-    static void Float(TypeBase &t, size_t length)
+    static TypeBase *Float(size_t length)
     {
+        TypeBase *t = new TypeBase(T_FLOAT, true);
         assert(length <= 8);
-        t += 'f';
-        t += (char)('0' + length);
+        t->_desc += 'f';
+        t->_desc += (char)('0' + length);
+        references.push_back(t);
+        return t;
     }
-    static void Pointer(TypeBase &t, bool is_const)
+    // AppendRight(): pointer to
+    static TypeBase *Pointer(bool is_const)
     {
-        t += 'P';
+        TypeBase *t = new TypeBase(T_POINTER, true);
+        t->_desc += 'P';
         if (is_const)
-            t += 'C';
+            t->_desc += 'C';
+        references.push_back(t);
+        return t;
     }
-    static void FunctionStart(TypeBase &t)
+    // AppendRight(): array of
+    static TypeBase *Array(size_t length)
     {
-        t += 'F';
-        t += '(';
+        TypeBase *t = new TypeBase(T_ARRAY, true);
+        t->_desc += 'A';
+        t->_desc += to_string(length);
+        references.push_back(t);
+        return t;
     }
-    static void FunctionParameter(TypeBase &t, const TypeBase &param)
+    static TypeBase *ArrayIncomplete()
     {
-        t += param;
-        t += ',';
+        TypeBase *t = new TypeBase(T_ARRAY, false);
+        t->_desc += 'A';
+        t->_desc += '*';
+        references.push_back(t);
+        return t;
     }
-    static void FunctionEnd(TypeBase &t)
+    // AppendRight(): function return
+    // TODO: declaration & definition constrains
+    static TypeBase *Function()
     {
-        t += ')';
+        TypeBase *t = new TypeBase(T_FUNCTION, false);
+        t->_desc += 'F';
+        t->_desc += '$';
+        references.push_back(t);
+        return t;
     }
-    static void ArrayStart(TypeBase &t)
+    static void FunctionBegin(TypeBase *t)
     {
-        t += 'A';
+        t->_desc.clear();
+        t->_desc += 'F';
     }
-    static void ArrayParameter(TypeBase &t, size_t len)
+    static void FunctionParameter(TypeBase *t, const TypeBase &param)
     {
-        t += '_';
-        t += to_string(len);
+        t->_desc += param._desc;
     }
-    static void ArrayEnd(TypeBase &t)
+    static void FunctionEnd(TypeBase *t)
     {
-        t += '$';
+        t->_desc += '$';
     }
-    static void StructStart(TypeBase &t)
-    {
-        t += 'S';
-        t.complete = false;
-    }
-    static void StructName(TypeBase &t, StringRef name)
-    {
-        // do nothing
-        t += name.toString();
-    }
-    static void StructBodyBegin(TypeBase &t)
-    {
-        t.complete = true;
-    }
-    static void StructMember(TypeBase &t, const TypeBase &member)
-    {
-        t += '_';
-        t += member;
-        t.complete = t.complete && member.complete;
-    }
-    static void StructBodyEnd(TypeBase &t)
+    static void FunctionBodyBegin(TypeBase *t)
     {
     }
-    static void StructEnd(TypeBase &t)
+    static void FunctionBodyEnd(TypeBase *t)
     {
-        t += '$';
+        t->_complete = true;
     }
-    static void EnumStart(TypeBase &t)
+    static void FunctionCheck(TypeBase *t, const Environment *env, StringRef name)
     {
-        t += 'E';
-        t.complete = false;
+        assert(t && t->type() == T_FUNCTION);
+        const char *s = t->_desc.data() + 1;
+        while (*s != '$')
+        {
+            assert(*s != '\0');
+            TypeBase *param = ReadType(s, env);
+            if (param->isIncomplete(env))
+                SyntaxError("function '" + name.toString() + "' has incomplete parameter type: " + param->toString());
+        }
+        ++s;
+        assert(*s != '\0');
+        TypeBase *ret = ReadType(s, env);
+        if (ret->isIncomplete(env) && ret->type() != T_VOID)
+            SyntaxError("function '" + name.toString() + "' has incomplete return type: " + ret->toString());
     }
-    static void EnumName(TypeBase &t, StringRef name)
+    static TypeBase *StructTag(StringRef tag)
     {
-        t += name.toString();
+        TypeBase *t =
+            new TypeBase(T_STRUCT, false);  // update when call incomplete()
+        t->_desc += 'S';
+        t->_desc += tag.toString();
+        t->_desc += '$';
+        references.push_back(t);
+        return t;
     }
-    static void EnumBodyBegin(TypeBase &t)
+    static TypeBase *Struct()
     {
-        // t += '{';
-        t.complete = true;
+        TypeBase *t = new TypeBase(T_STRUCT, false);
+        references.push_back(t);
+        return t;
     }
-    static void EnumBodyEnd(TypeBase &t)
+    static void StructBegin(TypeBase *t)
     {
-        // t += '}';
+        t->_desc += 'S';
     }
-    static void EnumEnd(TypeBase &t)
+    static void StructBodyBegin(TypeBase *t)
     {
-        t += '$';
+    }
+    static void StructMember(TypeBase *t, const TypeBase &member,
+                             const Environment *env)
+    {
+        if (member.isIncomplete(env))
+            SyntaxError("StructType: member type is incomplete.");
+        t->_desc += member._desc;
+    }
+    static void StructBodyEnd(TypeBase *t)
+    {
+        t->_complete = true;
+    }
+    static void StructEnd(TypeBase *t)
+    {
+        t->_desc += '$';
+    }
+
+    static TypeBase *EnumTag(StringRef tag)
+    {
+        TypeBase *t =
+            new TypeBase(T_ENUM, false);  // update when call incomplete()
+        t->_desc += 'E';
+        t->_desc += tag.toString();
+        t->_desc += '$';
+        references.push_back(t);
+        return t;
+    }
+    static TypeBase *Enum(StringRef tag)
+    {
+        TypeBase *t = new TypeBase(T_ENUM, true);
+        t->_desc += 'E';
+        t->_desc += tag.toString();
+        t->_desc += '$';
+        references.push_back(t);
+        return t;
     }
 
     // Helpers for information extraction
     static size_t ArraySize(const TypeBase &t, const Environment *env);
     static size_t StructSize(const TypeBase &t, const Environment *env);
     static size_t Sizeof(const TypeBase &t, const Environment *env);
-    static void ConstructObject(Object *&o, const TypeBase &t, const Environment *env);
+    static void ConstructObject(Object *&o, const TypeBase &t,
+                                const Environment *env);
 };

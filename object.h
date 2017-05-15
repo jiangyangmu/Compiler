@@ -159,7 +159,7 @@ class FuncObject : public Object
     }
     virtual string toString() const
     {
-        return "function";
+        return "Function";
     }
 };
 

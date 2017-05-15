@@ -632,7 +632,7 @@ Expression *UnaryExpression::parse(Lexer &lex, Environment *env)
                 expr->expr = CastExpression::parse(lex, env);
                 assert( expr->expr != nullptr);
                 EXPECT_TYPE_IS(expr->expr->type(), T_POINTER);
-                expr->type_ = expr->expr->type()->asPointerType()->target();
+                // expr->type_ = expr->expr->type()->asPointerType()->target();
                 break;
             case SIZEOF:
                 expr->op = lex.getNext().type;
@@ -743,9 +743,9 @@ Expression *PostfixExpression::parse(Lexer &lex, Environment *env,
             case POINT_TO:
                 lex.getNext();
                 EXPECT_TYPE_IS(expr->target->type(), T_POINTER);
-                EXPECT_TYPE_WITH(
-                    expr->target->type()->asPointerType()->target(),
-                    TOp_OFFSET);
+                // EXPECT_TYPE_WITH(
+                //     expr->target->type()->asPointerType()->target(),
+                //     TOp_OFFSET);
                 expr->op = POSTFIX_POINTER_OFFSET;
                 expr->member = EXPECT_GET(SYMBOL).symbol;
                 // expr->type_ = dynamic_cast<StructType *>(expr->target->type())
