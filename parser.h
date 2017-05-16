@@ -2,6 +2,7 @@
 
 #include <iostream>
 #include <stack>
+#include <cstdint>
 using namespace std;
 
 #include "lexer.h"
@@ -56,6 +57,7 @@ class CompoundStatement : public SyntaxNode
     virtual string debugString()
     {
         string s = "{>\n";
+        if (env) s += "@" + to_string((uintptr_t)env) + "\n";
         for (SyntaxNode *stmt: stmts)
         {
             s += stmt->debugString();

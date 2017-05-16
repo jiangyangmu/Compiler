@@ -87,7 +87,7 @@ class TypeBase
         return type() == o.type();
     }
 
-    bool isIncomplete(const Environment *env) const;
+    bool isIncomplete(const Environment *env, bool recursive = true) const;
     bool isIncompleteSimple() const
     {
         return !_complete;
@@ -168,16 +168,18 @@ class StructType : public TypeBase
     friend TypeBase;
     friend TypeFactory;
 
-    bool isIncomplete(const Environment *env) const;
-    const TypeBase *getDefinition(const Environment *env) const;
+    bool isIncomplete(const Environment *env, bool recursive = true) const;
+    const TypeBase *getDefinition(const Environment *env, bool recursive) const;
+    StringRef getTag() const;
 };
 class EnumType : public TypeBase
 {
     friend TypeBase;
     friend TypeFactory;
 
-    bool isIncomplete(const Environment *env) const;
-    const TypeBase *getDefinition(const Environment *env) const;
+    bool isIncomplete(const Environment *env, bool recursive = true) const;
+    const TypeBase *getDefinition(const Environment *env, bool recursive) const;
+    StringRef getTag() const;
 };
 
 // Type System

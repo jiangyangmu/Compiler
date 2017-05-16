@@ -99,7 +99,7 @@ class StructObject : public Object
         size_t offset;
     };
 
-    vector<MemberDesc> _members;
+    // vector<MemberDesc> _members;
     // Environment *_member_env;
 
    public:
@@ -109,7 +109,7 @@ class StructObject : public Object
     }
     virtual string toString() const
     {
-        return "struct";
+        return "Struct";
     }
 };
 // Union object
@@ -155,6 +155,7 @@ class FuncObject : public Object
     }
     void setFuncEnv(Environment *env)
     {
+        assert(_body_env == nullptr);
         _body_env = env;
     }
     virtual string toString() const

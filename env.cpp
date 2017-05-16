@@ -38,7 +38,8 @@ size_t TypeFactory::StructSize(const TypeBase &t, const Environment *env)
     if (t.type() != T_STRUCT)
         SyntaxError("StructSize: expect struct type.");
 
-    const TypeBase *def = ((const StructType &)t).getDefinition(env);
+    // TODO: recursive search here?
+    const TypeBase *def = ((const StructType &)t).getDefinition(env, true);
     assert(def != nullptr);
     if (!def->_complete)
         SyntaxError("StructSize: get size of incomplete struct: " +
@@ -93,12 +94,13 @@ void TypeFactory::ConstructObject(Object *&o, const TypeBase &t, const Environme
         case T_INT: o = new IntegerObject(Sizeof(t, env)); break;
         case T_FLOAT: o = new FloatObject(Sizeof(t, env)); break;
         case T_POINTER: o = new PointerObject(Sizeof(t, env)); break;
+        case T_ENUM: o = new EnumObject(Sizeof(t, env)); break;
+        // lazy evaluation
         case T_ARRAY: o = new ArrayObject(&t, env); break;
+        case T_STRUCT: o = new StructObject(&t, env); break;
         case T_FUNCTION:
             // function object is handled differently, do nothing here
             break;
-        case T_STRUCT: o = new StructObject(&t, env); break;
-        case T_ENUM: o = new EnumObject(Sizeof(t, env)); break;
         case T_NONE:
             SyntaxError("ConstructObject: null type has no object..");
             break;
@@ -106,7 +108,7 @@ void TypeFactory::ConstructObject(Object *&o, const TypeBase &t, const Environme
     }
 }
 // incomplete
-bool TypeBase::isIncomplete(const Environment *env) const
+bool TypeBase::isIncomplete(const Environment *env, bool recursive) const
 {
     bool is = true;
     switch (type())
@@ -118,22 +120,22 @@ bool TypeBase::isIncomplete(const Environment *env) const
         case T_POINTER:
         case T_ARRAY:
         case T_FUNCTION: is = !_complete; break;
-        case T_STRUCT: is = ((const StructType *)this)->isIncomplete(env); break;
-        case T_ENUM: is = ((const EnumType *)this)->isIncomplete(env); break;
+        case T_STRUCT: is = ((const StructType *)this)->isIncomplete(env, recursive); break;
+        case T_ENUM: is = ((const EnumType *)this)->isIncomplete(env, recursive); break;
         default: SyntaxError("isIncomplete: unknown type: " + _desc); break;
     }
     return is;
 }
 // must be tag, not definition
-bool StructType::isIncomplete(const Environment *env) const
+bool StructType::isIncomplete(const Environment *env, bool recursive) const
 {
     // Completeness of members are ensured during struct construction.
-    const TypeBase *def = getDefinition(env);
+    const TypeBase *def = getDefinition(env, recursive);
     return def && !def->_complete;
 }
-bool EnumType::isIncomplete(const Environment *env) const
+bool EnumType::isIncomplete(const Environment *env, bool recursive) const
 {
-    const TypeBase *def = getDefinition(env);
+    const TypeBase *def = getDefinition(env, recursive);
     return def && !def->_complete;
 }
 
@@ -157,26 +159,34 @@ bool TypeBase::hasOperation(ETypeOperations op) const
     return has;
 }
 // concrete type interface
-const TypeBase *StructType::getDefinition(const Environment *env) const
+StringRef StructType::getTag() const
 {
-    assert(env != nullptr);
     assert(_desc.size() >= 2);
-
     StringRef tag(_desc.data() + 1, _desc.size() - 2);
     assert(!tag.empty());
-
-    Symbol * sym = env->recursiveFindDefinition(tag);
+    return tag;
+}
+StringRef EnumType::getTag() const
+{
+    assert(_desc.size() >= 2);
+    StringRef tag(_desc.data() + 1, _desc.size() - 2);
+    assert(!tag.empty());
+    return tag;
+}
+const TypeBase *StructType::getDefinition(const Environment *env,
+                                          bool recursive) const
+{
+    assert(env != nullptr);
+    Symbol *sym = recursive ? env->recursiveFindDefinition(getTag())
+                            : env->findDefinition(getTag());
     return sym ? sym->type : nullptr;
 }
-const TypeBase *EnumType::getDefinition(const Environment *env) const
+const TypeBase *EnumType::getDefinition(const Environment *env,
+                                        bool recursive) const
 {
     assert(env != nullptr);
-    assert(_desc.size() >= 2);
-
-    StringRef tag(_desc.data() + 1, _desc.size() - 2);
-    assert(!tag.empty());
-
-    Symbol * sym = env->recursiveFindDefinition(tag);
+    Symbol *sym = recursive ? env->recursiveFindDefinition(getTag())
+                            : env->findDefinition(getTag());
     return sym ? sym->type : nullptr;
 }
 
@@ -250,6 +260,10 @@ Symbol *Environment::recursiveFind(ESymbolNamespace space, StringRef name) const
         return s;
     else
         return parent() ? parent()->recursiveFind(space, name) : nullptr;
+}
+Symbol *Environment::findDefinition(StringRef name) const
+{
+    return find(SC_TAG, name);
 }
 Symbol *Environment::recursiveFindDefinition(StringRef name) const
 {
@@ -380,8 +394,26 @@ void __debugPrint(string &&s)
     string tabs = "  ";
     string line = "  ";
     bool escape = false, empty = true;
+    bool printenv = false;
+    uintptr_t env = 0;
     for (char c : s)
     {
+        if (printenv)
+        {
+            if (c != '\n')
+            {
+                env *= 10;
+                env += c - '0';
+            }
+            else
+            {
+                ((const Environment *)env)->debugPrint(tabs.size());
+                printenv = false;
+                env = 0;
+            }
+            continue;
+        }
+
         if (c == '~')
         {
             escape = true;
@@ -397,6 +429,7 @@ void __debugPrint(string &&s)
                     tabs.pop_back();
                     tabs.pop_back();
                     break;
+                case '@': printenv = true; break;
                 default: line.push_back(c); break;
             }
         }
@@ -445,8 +478,8 @@ void Environment::debugPrint(int indent) const
             FuncObject *fo = dynamic_cast<FuncObject *>(s->obj);
             if (fo)
             {
-                if (fo->getFuncEnv())
-                    fo->getFuncEnv()->debugPrint(indent + 2);
+                // if (fo->getFuncEnv())
+                //     fo->getFuncEnv()->debugPrint(indent + 2);
                 if (fo->getFuncBody())
                     __debugPrint(fo->getFuncBody()->debugString());
             }
@@ -746,7 +779,9 @@ TypeBase *__parseParameterList(Lexer &lex, Environment *env,
 {
     if (func_obj)
     {
-        func_obj->setFuncEnv(new Environment());
+        Environment *func_env = new Environment();
+        func_env->setParent(env);
+        func_obj->setFuncEnv(func_env);
         // func_obj->body = nullptr;
     }
 
@@ -880,9 +915,17 @@ void __parseDeclaration(Lexer &lex, Environment *env, bool is_global)
                 break;
             }
 
-            // Function object is handled differently, see above
-            TypeFactory::ConstructObject(s->obj, *(s->type), env);
-            env->add(s);
+            // create objects (function object is handled differently, see above)
+            {
+                // use outer layer env if inner layer env doesn't has definition
+                Environment *obj_env = env;
+                while (s->type->isIncomplete(obj_env, false) && obj_env->parent())
+                {
+                    obj_env = obj_env->parent();
+                }
+                TypeFactory::ConstructObject(s->obj, *(s->type), obj_env);
+                env->add(s);
+            }
 
             if (lex.peakNext().type == OP_COMMA)
             {
