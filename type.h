@@ -293,7 +293,7 @@ class TypeFactory
                 s = p + 1;
                 break;
             default:
-                SyntaxError("ReadType: unknown type. " +
+                SyntaxError("ReadType: unknown type: " +
                             StringRef(s, strlen(s)).toString());
                 break;
         }
@@ -415,8 +415,24 @@ class TypeFactory
         references.push_back(t);
         return t;
     }
+    // array to pointer
+    static TypeBase *ArrayDecay(TypeBase *t)
+    {
+        assert(t->type() == T_ARRAY);
+        TypeBase *decay = Pointer(false);
+        const char *s = t->_desc.data() + 1;
+        if (*s == '*')
+            ++s;
+        else
+        {
+            while (isdigit(*s))
+                ++s;
+        }
+        AppendRight(*decay, *ReadType(s, nullptr), nullptr);
+        references.push_back(decay);
+        return decay;
+    }
     // AppendRight(): function return
-    // TODO: declaration & definition constrains
     static TypeBase *Function()
     {
         TypeBase *t = new TypeBase(T_FUNCTION, false);
@@ -445,7 +461,7 @@ class TypeFactory
     {
         t->_complete = true;
     }
-    static void FunctionCheck(TypeBase *t, const Environment *env, StringRef name)
+    static void FunctionDeclarationCheck(TypeBase *t, const Environment *env, StringRef name)
     {
         assert(t && t->type() == T_FUNCTION);
         const char *s = t->_desc.data() + 1;
@@ -461,6 +477,8 @@ class TypeFactory
         TypeBase *ret = ReadType(s, env);
         if (ret->isIncomplete(env) && ret->type() != T_VOID)
             SyntaxError("function '" + name.toString() + "' has incomplete return type: " + ret->toString());
+        if (ret->type() == T_FUNCTION || ret->type() == T_ARRAY)
+            SyntaxError("function '" + name.toString() + "' has invalid return type: " + ret->toString());
     }
     static TypeBase *StructTag(StringRef tag)
     {

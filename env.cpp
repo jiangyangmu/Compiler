@@ -208,42 +208,6 @@ size_t Object::size()
 
 // -------- symbol management -------
 
-/*
-Symbol *SymbolTable::find(ESymbolCategory category, StringRef name) const
-{
-    for (auto s = symbols.begin(); s != symbols.end(); ++s)
-    {
-        if ((*s)->category == category && (*s)->name == name)
-            return *s;
-    }
-    return nullptr;
-}
-void SymbolTable::debugPrint() const
-{
-    cout << "[Symbol Table] " << symbols.size() << " symbols" << endl;
-    for (const Symbol *s : symbols)
-    {
-        cout << "  " << (*s) << endl;
-        if (s->type)
-        {
-            switch (s->type->type())
-            {
-                case T_STRUCT:
-                    dynamic_cast<StructType *>(s->type)->debugPrint();
-                    break;
-                case T_FUNC:
-                    if (dynamic_cast<FuncType *>(s->type)->body)
-                        // cout << "\t{ ... }" << endl;
-                        __debugPrint(dynamic_cast<FuncType *>(s->type)
-                                         ->body->debugString());
-                    break;
-                default: break;
-            }
-        }
-    }
-}
-*/
-
 Symbol *Environment::find(ESymbolNamespace space, StringRef name) const
 {
     for (Symbol *s : symbols)
@@ -799,6 +763,8 @@ TypeBase *__parseParameterList(Lexer &lex, Environment *env,
             __parseDeclarator(s, lex, env);
             assert(s.type != nullptr);
             TypeFactory::AppendRight(*s.type, *spec, env);
+            if (s.type->type() == T_ARRAY)
+                s.type = TypeFactory::ArrayDecay(s.type);
 
             TypeFactory::FunctionParameter(f, *s.type);
 
@@ -889,7 +855,7 @@ void __parseDeclaration(Lexer &lex, Environment *env, bool is_global)
         assert(s->name != "<anonymous-symbol>");
 
         // check function return type & parameter type
-        TypeFactory::FunctionCheck(s->type, env, s->name);
+        TypeFactory::FunctionDeclarationCheck(s->type, env, s->name);
 
         assert(s->obj != nullptr);
         FuncObject *obj = dynamic_cast<FuncObject *>(s->obj);
