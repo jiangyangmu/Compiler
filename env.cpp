@@ -70,7 +70,9 @@ size_t TypeFactory::Sizeof(const TypeBase &t, const Environment *env)
         case T_CHAR: size = sizeof(char); break;
         case T_INT: sscanf(t._desc.data() + 1, "%lu", &size); break;
         case T_POINTER: size = sizeof(void *); break;
-        case T_ENUM: size = sizeof(int); break;
+        case T_ENUM:
+            size = sizeof(int);
+            break;
         // internal node
         case T_ARRAY: size = TypeFactory::ArraySize(t, env); break;
         case T_STRUCT: size = TypeFactory::StructSize(t, env); break;
@@ -79,11 +81,13 @@ size_t TypeFactory::Sizeof(const TypeBase &t, const Environment *env)
             break;
         case T_FUNCTION:
             // case T_LABEL:
-            SyntaxError("Sizeof: can't get size of function type. " + t.toString());
+            SyntaxError("Sizeof: can't get size of function type. " +
+                        t.toString());
             break;
-        default:
-            SyntaxError("Sizeof: not implemented. " + t.toString());
-            break;
+        case T_TYPEDEF:
+        // typedef will unbox automatically, should not
+        // appear here.
+        default: SyntaxError("Sizeof: not implemented. " + t.toString()); break;
     }
     return size;
 }
@@ -91,6 +95,7 @@ void TypeFactory::ConstructObject(Object *&o, const TypeBase &t, const Environme
 {
     switch (t.type())
     {
+        case T_CHAR:
         case T_INT: o = new IntegerObject(Sizeof(t, env)); break;
         case T_FLOAT: o = new FloatObject(Sizeof(t, env)); break;
         case T_POINTER: o = new PointerObject(Sizeof(t, env)); break;
@@ -102,7 +107,10 @@ void TypeFactory::ConstructObject(Object *&o, const TypeBase &t, const Environme
             // function object is handled differently, do nothing here
             break;
         case T_NONE:
-            SyntaxError("ConstructObject: null type has no object..");
+            SyntaxError("ConstructObject: null type has no object.");
+            break;
+        case T_TYPEDEF:
+            SyntaxError("ConstructObject: typedef has no object.");
             break;
         default: SyntaxError("ConstructObject: not implemented."); break;
     }
@@ -122,6 +130,9 @@ bool TypeBase::isIncomplete(const Environment *env, bool recursive) const
         case T_FUNCTION: is = !_complete; break;
         case T_STRUCT: is = ((const StructType *)this)->isIncomplete(env, recursive); break;
         case T_ENUM: is = ((const EnumType *)this)->isIncomplete(env, recursive); break;
+        case T_TYPEDEF:
+        // typedef will unbox automatically, should not
+        // appear here.
         default: SyntaxError("isIncomplete: unknown type: " + _desc); break;
     }
     return is;
@@ -242,6 +253,16 @@ Symbol *Environment::recursiveFindDefinition(StringRef name) const
 
     Symbol *ps = parent() ? parent()->recursiveFindDefinition(name) : nullptr;
     return (ps && !ps->type->isIncompleteSimple()) ? ps : s;
+}
+Symbol *Environment::recursiveFindTypename(StringRef name) const
+{
+    for (Symbol *s : symbols)
+    {
+        if (s->space == SC_ID && s->name == name && s->type &&
+            s->type->type() == T_TYPEDEF)
+            return s;
+    }
+    return parent() ? parent()->recursiveFindTypename(name) : nullptr;
 }
 void Environment::add(Symbol *s)
 {
@@ -460,9 +481,26 @@ TypeBase *__parseStructType(Lexer &lex, Environment *env);
 TypeBase *__parseEnumType(Lexer &lex, Environment *env);
 bool __parseDeclarator(Symbol &s, Lexer &lex, Environment *env);
 
-TypeBase *__parseSpecifier(Lexer &lex, Environment *env)
+bool __parseStorageSpecifier(Lexer &lex, Environment *env)
+{
+    bool is_typedef = false;
+    switch (lex.peakNext().type)
+    {
+        case TYPEDEF:
+            is_typedef = true;
+            lex.getNext();
+            break;
+        default:
+            // SyntaxError("Specifier: not storage specifier: " +
+            //             Token::DebugTokenType(lex.peakNext().type));
+            break;
+    }
+    return is_typedef;
+}
+TypeBase *__parseTypeSpecifier(Lexer &lex, Environment *env)
 {
     TypeBase *s = nullptr;
+    Symbol *td = nullptr;
     switch (lex.peakNext().type)
     {
         case TYPE_VOID:
@@ -484,10 +522,19 @@ TypeBase *__parseSpecifier(Lexer &lex, Environment *env)
         case TYPE_FLOAT: s = __parseFloatingType(lex); break;
         case TYPE_ENUM: s = __parseEnumType(lex, env); break;
         case TYPE_STRUCT: s = __parseStructType(lex, env); break;
-        case TYPE_UNION:
-            SyntaxError("Specifier: not implemented");
+        // case TYPE_UNION:
+        case SYMBOL:
+            td = env->recursiveFindTypename(lex.peakNext().symbol);
+            if (td == nullptr)
+                SyntaxError("Specifier: unknown type: " +
+                        lex.peakNext().symbol.toString());
+            s = TypeFactory::ReadTypedef(*(td->type), env);
+            lex.getNext();
             break;
-        default: break;
+        default:
+            SyntaxError("Specifier: unexpected token: " +
+                        Token::DebugTokenType(lex.peakNext().type));
+            break;
     }
     return s;
 }
@@ -589,7 +636,7 @@ TypeBase *__parseStructType(Lexer &lex, Environment *env)
         TypeFactory::StructBodyBegin(st);
         while (true)
         {
-            TypeBase *spec = __parseSpecifier(lex, env);
+            TypeBase *spec = __parseTypeSpecifier(lex, env);
             while (true)
             {
                 StringRef id("<anonymous-struct-member>");
@@ -683,7 +730,9 @@ TypeBase *__parsePointerList(Lexer &lex);
 bool __parseDeclarator(Symbol &s, Lexer &lex, Environment *env)
 {
     TokenType tt = lex.peakNext().type;
-    if (tt != SYMBOL && tt != OP_MUL && tt != LP)
+    if (tt == STMT_END)
+        return false;
+    else if (tt != SYMBOL && tt != OP_MUL && tt != LP)
     {
         SyntaxWarningEx("Declarator: unexpected token");
         return false;
@@ -758,7 +807,7 @@ TypeBase *__parseParameterList(Lexer &lex, Environment *env,
         for (size_t loc = 0;; ++loc)
         {
             assert(loc < 100);
-            TypeBase *spec = __parseSpecifier(lex, env);
+            TypeBase *spec = __parseTypeSpecifier(lex, env);
             Symbol s;
             __parseDeclarator(s, lex, env);
             assert(s.type != nullptr);
@@ -842,15 +891,21 @@ void __parseDeclaration(Lexer &lex, Environment *env, bool is_global)
     s->name = StringRef("<anonymous-symbol>");
     s->space = SC_ID;
 
-    TypeBase *spec = __parseSpecifier(lex, env);
+    bool is_typedef = __parseStorageSpecifier(lex, env);
+
+    TypeBase *spec = __parseTypeSpecifier(lex, env);
     __parseDeclarator(*s, lex, env);
+    assert(s->type != nullptr);
     TypeFactory::AppendRight(*s->type, *spec, env);
+    if (is_typedef) s->type = TypeFactory::Typedef(s->type);
 
     // parse declaration and add to env
     if (lex.peakNext().type == BLK_BEGIN)  // Function definition
     {
         if (!is_global)
             SyntaxError("Function definition not allowed here.");
+        if (s->type->type() == T_TYPEDEF)
+            SyntaxError("Can't typedef function definition.");
 
         assert(s->name != "<anonymous-symbol>");
 
@@ -864,7 +919,6 @@ void __parseDeclaration(Lexer &lex, Environment *env, bool is_global)
         // add func declaration before parsing its body
         env->add(s);
 
-        // TODO: finish this
         obj->setFuncBody(
             CompoundStatement::parse(lex, obj->getFuncEnv(), true));
     }
@@ -877,12 +931,21 @@ void __parseDeclaration(Lexer &lex, Environment *env, bool is_global)
         {
             if (s->name == "<anonymous-symbol>")
             {
-                SyntaxWarningEx("Missing identifier");
+                if (s->type->type() != T_STRUCT &&
+                    /* s->type->type() != T_UNION && */
+                    s->type->type() != T_ENUM)
+                    SyntaxWarningEx("Missing identifier");
                 break;
             }
 
-            // create objects (function object is handled differently, see above)
+            if (is_typedef)
             {
+                // add typedef type to env instead of create objects
+                env->add(s);
+            }
+            else
+            {
+                // create objects (function object is handled differently, see above)
                 // use outer layer env if inner layer env doesn't has definition
                 Environment *obj_env = env;
                 while (s->type->isIncomplete(obj_env, false) && obj_env->parent())
@@ -900,7 +963,9 @@ void __parseDeclaration(Lexer &lex, Environment *env, bool is_global)
                 s->name = StringRef("<anonymous-symbol>");
                 s->space = SC_ID;
                 __parseDeclarator(*s, lex, env);
+                assert(s->type != nullptr);
                 TypeFactory::AppendRight(*s->type, *spec, env);
+                if (is_typedef) s->type = TypeFactory::Typedef(s->type);
             }
             else
                 break;

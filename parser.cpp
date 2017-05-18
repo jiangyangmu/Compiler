@@ -10,10 +10,10 @@ using namespace std;
 #include "parser.h"
 #include "convert.h"
 
-bool IsDeclaration(TokenType t)
+bool IsDeclaration(Token t, const Environment *env)
 {
     bool decl = false;
-    switch (t)
+    switch (t.type)
     {
         case TYPEDEF:
         case EXTERN:
@@ -31,8 +31,11 @@ bool IsDeclaration(TokenType t)
         case UNSIGNED:
         case TYPE_STRUCT:
         case TYPE_ENUM:
-            // TODO: other typedef names
             decl = true;
+            break;
+        case SYMBOL:  // typedef name
+            if (env->recursiveFindTypename(t.symbol) != nullptr)
+                decl = true;
             break;
         default: break;
     }
@@ -193,7 +196,7 @@ SyntaxNode *CompoundStatement::parse(Lexer &lex, Environment *env,
     }
 
     // add declarations in current scope
-    while (IsDeclaration(lex.peakNext().type))
+    while (IsDeclaration(lex.peakNext(), node->env))
         Environment::ParseLocalDeclaration(lex, node->env);
 
     // parse statements

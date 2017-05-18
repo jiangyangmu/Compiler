@@ -35,6 +35,7 @@ enum ETypeClass
     T_STRUCT,
     T_ENUM,
     T_FUNCTION,
+    T_TYPEDEF,
     T_LABEL
 };
 
@@ -181,6 +182,11 @@ class EnumType : public TypeBase
     const TypeBase *getDefinition(const Environment *env, bool recursive) const;
     StringRef getTag() const;
 };
+class TypedefType : public TypeBase
+{
+    friend TypeBase;
+    friend TypeFactory;
+};
 
 // Type System
 class TypeFactory
@@ -206,7 +212,8 @@ class TypeFactory
             case 'A': t = T_ARRAY; break;
             case 'E': t = T_ENUM; break;
             case 'S': t = T_STRUCT; break;
-            default: break;
+            case 'T': t = T_TYPEDEF; break;
+            default: SyntaxError("TypeFactory: unknown type class"); break;
         }
         return t;
     }
@@ -225,6 +232,7 @@ class TypeFactory
         return t;
     }
     // used by TypeFactory::Sizeof()
+    // just recreate, no unbox.
     static TypeBase *ReadType(const char *&s, const Environment *env)
     {
         TypeBase *t = nullptr;
@@ -257,7 +265,10 @@ class TypeFactory
             case T_ARRAY:
                 ++s;
                 if (*s == '*')
+                {
                     t = ArrayIncomplete();
+                    ++s;
+                }
                 else
                 {
                     ret = sscanf(s, "%lu", &i);
@@ -269,11 +280,15 @@ class TypeFactory
                 AppendRight(*t, *ReadType(s, env), env);
                 break;
             case T_FUNCTION:
-                while (*s != '\0' && *s != '$')
-                    ++s;
-                if (*s == '$')
-                    ++s;
                 t = Function();
+                FunctionBegin(t);
+                ++s;
+                while (*s != '$')
+                {
+                    FunctionParameter(t, *ReadType(s, env));
+                }
+                ++s;
+                FunctionEnd(t);
                 AppendRight(*t, *ReadType(s, env), env);
                 break;
             case T_STRUCT:
@@ -292,6 +307,9 @@ class TypeFactory
                 t = EnumTag(StringRef(s, p - s));
                 s = p + 1;
                 break;
+            case T_TYPEDEF:
+                // typedef will unbox automatically, should not
+                // appear here.
             default:
                 SyntaxError("ReadType: unknown type: " +
                             StringRef(s, strlen(s)).toString());
@@ -299,9 +317,15 @@ class TypeFactory
         }
         return t;
     }
+    static TypeBase *ReadTypedef(const TypeBase &t, const Environment *env)
+    {
+        assert(t.type() == T_TYPEDEF);
+        const char *s = t._desc.data() + 1;
+        return ReadType(s, env);
+    }
 
     // Merge definitions: struct, enum
-    // TODO: array, union, function
+    // TODO: array, union, function, typedef(can't merge)
     static bool MergeDefinition(TypeBase &left, const TypeBase &right)
     {
         if (!left.isCompatible(right))
@@ -332,6 +356,7 @@ class TypeFactory
             case T_FLOAT:
             case T_STRUCT:
             case T_ENUM:
+            case T_TYPEDEF:
                 SyntaxError("TypeFactory: " +
                             TypeBase::DebugTypeClass(left.tailType()) +
                             " is not derived type");
@@ -356,6 +381,15 @@ class TypeFactory
     }
 
     // Type create: only create type object here
+    // AppendRight(): typedef of
+    static TypeBase *Typedef(TypeBase *target)
+    {
+        TypeBase *t = new TypeBase(T_TYPEDEF, true);
+        t->_desc += 'T';
+        t->_desc += target->_desc;
+        references.push_back(t);
+        return t;
+    }
     static TypeBase *Void()
     {
         TypeBase *t = new TypeBase(T_VOID, false);

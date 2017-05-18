@@ -27,6 +27,7 @@ class Environment : public TreeLike<Environment>
     Symbol *recursiveFind(ESymbolNamespace space, StringRef name) const;
     Symbol *findDefinition(StringRef name) const;
     Symbol *recursiveFindDefinition(StringRef name) const;
+    Symbol *recursiveFindTypename(StringRef name) const;
     void add(Symbol *s);
 
     // code generation
