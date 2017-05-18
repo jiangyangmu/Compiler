@@ -234,7 +234,6 @@ Q: 类型系统问题总结？
     要处理的问题：
         > 如何描述各个类型？ 需要知道长什么样
             primitive, typedef, pointer, array, struct/union, enum, function
-            completeness
 
         > 如何描述各个类型的引用？ 只想知道联系方式 [typedef/pointer/array/struct/union/function]
         > 如何处理 Incompleteness？ [typedef/pointer/array/struct/union/function]
@@ -244,10 +243,15 @@ Q: 类型系统问题总结？
         > 类型的 scope?
             树形嵌套
 
-    实现：
-        > 检索一个类型是否已经记录的过程？
-        > 一个类型被添加的过程？
-        > 将上述过程嵌入 Declarator？
+        > 类型的特性？
+            incomplete, compatible, const
+
+        > 如何处理 Declaration 的各个关键接入点 与 对象构造过程 的不匹配？
+        > 如何处理类型组合？
+            TypeFactory::AppendRight(...)
+
+        > array/struct/union/function 对涉及类型的构造要求?
+            [见 拆解复杂对象]
 
     方案：
 
@@ -309,20 +313,22 @@ Q: 拆解复杂对象
 
     typedef: ...
         Completeness: equal to target type completeness
-        String: T<type>
+        String: T<name>$ <type>
 
         typedef int Integer;
-            Symbol-id: "Integer", Type: "Ti4"
+        Integer i;
+            Symbol-id: "Integer", Type: "i4"
+            Symbol-id: "i", Type: "TInteger$"
         typedef int Array[];
-            Symbol-id: "Integer", Type: "TA_*_i4$"
+            Symbol-id: "Array", Type: "A*i4"
         typedef struct Unknown SA[];
-            Symbol-id: "SA", Type: "TSUnknown$"
+            Symbol-id: "SA", Type: "A*SUnknown$"
         typedef int *IP;
-            Symbol-id: "IP", Type: "TP_i4$"
+            Symbol-id: "IP", Type: "Pi4"
         typedef int (*FP)(void);
-            Symbol-id: "FP", Type: "TPF_i4$"
+            Symbol-id: "FP", Type: "PF$i4"
         typedef int F(void);
-            Symbol-id: "F", Type: "TF_i4$"
+            Symbol-id: "F", Type: "F$i4"
 
     指针 T *name
         Completeness: always
@@ -331,7 +337,7 @@ Q: 拆解复杂对象
         int * p;
             Symbol-id: "p", Type: "Pi4", T_POINTER, Object: 64 bits
         int (*p)[3];
-            Symbol-id: "p", Type: "PA_3_i4$", T_POINTER, Object: 64 bits
+            Symbol-id: "p", Type: "PA3i4", T_POINTER, Object: 64 bits
         struct BB * p;
             Symbol-id: "p", Type: "PSBB$", T_POINTER, Object: 64 bits
         struct A (*p)(struct B b, int c[3], int d[][4]);
@@ -339,33 +345,33 @@ Q: 拆解复杂对象
 
         typedef int IP2[2];
         IP2 * p;
-            Symbol-id: "p", Type: "PA_2_i4$", T_POINTER, Object: 64 bits
+            Symbol-id: "p", Type: "PA2i4", T_POINTER, Object: 64 bits
 
     数组 T name[N]
         Constrains: N is non-negative constant expr (what's the meaning of 'int a[0];' ?)
                     T must be complete
         Completeness: T is complete && N exists
-        String: A_<element_count>_<element_type>$
+        String: A<element_count><element_type>
 
         int a[3];
-            Symbol-id: "a", Type: "A_3_i4$", T_ARRAY, Object: 12 bytes
+            Symbol-id: "a", Type: "A3i4", T_ARRAY, Object: 12 bytes
         int a[];
-            Symbol-id: "a", Type: "A_*_i4$", T_ARRAY, incomplete, Object: 12 bytes
+            Symbol-id: "a", Type: "A*i4", T_ARRAY, incomplete, Object: 12 bytes
 
     结构体 struct Tag { M1 a; M2 b; ... };
         Constrains: M1 is complete, M2 is complete, ...
         Completeness: after '}'
-        String: S<tag>$
+        String: S<tag>$ S<m1><m2>...$
 
         struct A { int x; int y; } inst;
-            Symbol-tag: "A", Type: "S_i4_i4$"
+            Symbol-tag: "A", Type: "Si4i4$"
             Symbol-id: "inst", Type: "SA$", T_STRUCT, Object: 8 bytes,
                                                            {"x":<offset>, "y":<offset>},
                                                            [env]{"x":"i4", "y":"i4"}
         struct Node { struct Node *p; };
-            Symbol-tag: "Node", Type: "S_PSNode$$"
+            Symbol-tag: "Node", Type: "SPSNode$$"
         struct Node { struct Node (*fp)(int); };
-            Symbol-tag: "Node", Type: "S_PF_SNode$_i4$$"
+            Symbol-tag: "Node", Type: "SPFi4$SNode$$"
 
         Query [
                 member 'a' exists? check struct_obj->members[?]
@@ -391,10 +397,10 @@ Q: 拆解复杂对象
                     Array parameter decays to pointer. (still must be a valid array declaration)
                     Struct/Union/Enum tag declared as parameter are in file scope.
         Completeness: after '}'
-        String: F_<return_type>_<param1>_<param2>...$
+        String: F<T1><T2>...$<R>
 
         long add(int a, int b) { return a + b; }
-            Symbol-id: "add", Type: "F_i4_i4_i4$", T_FUNCTION, Object: 0 bytes,
+            Symbol-id: "add", Type: "Fi4i4$i4", T_FUNCTION, Object: 0 bytes,
                                                                  [storage]{"a":<location>, "b":<location>},
                                                                  [env]{"a":"i4", "b":"i4"},
                                                                  <Syntax-Tree>
@@ -453,8 +459,7 @@ Q: 类型的 Completeness ?
 
                 struct A;
                 struct A func(int i); // valid
-                struct A func(int i) // error: incomplete result type 'struct A' in function definition
-                {}
+                struct A func(int i) {} // error: incomplete result type 'struct A' in function definition
                 int[] func(int i) // error: function cannot return array type 'int []'
                 int[3] func(int i) // error: function cannot return array type 'int [3]'
             <example>
@@ -499,7 +504,7 @@ Q: 类型的 Completeness ?
       requirements as a pointer to a character type.
 
 ---------------------------------------------
-Q: 什么时候我们需要知道类型的大小？
+Q: sizeof 的时机，什么时候我们需要知道类型的大小？
 
-
-
+---------------------------------------------
+Q: typedef
