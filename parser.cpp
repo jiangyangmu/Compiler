@@ -10,6 +10,8 @@ using namespace std;
 #include "parser.h"
 #include "convert.h"
 
+// TODO: conversion: add arithmetic type check? or just use hasOperation()?
+
 bool IsDeclaration(Token t, const Environment *env)
 {
     bool decl = false;
@@ -128,11 +130,6 @@ bool IsExpression(TokenType t)
     }
     return is;
 }
-
-// SyntaxNode *TypeName::parse(Lexer &lex, Environment *env)
-// {
-//     return nullptr;
-// }
 
 // no instance, only dispatch
 SyntaxNode *Statement::parse(Lexer &lex, Environment *env)
@@ -390,16 +387,16 @@ Expression *AssignExpression::parse(Lexer &lex, Environment *env)
     expr->target = target;
     expr->source = AssignExpression::parse(lex, env);
 
+    assert(expr->target != nullptr);
+    assert(expr->source != nullptr);
     EXPECT_TYPE_WITH(target->type(), TOp_ASSIGN);
-    if (!target->type()->equal(*expr->source->type()))
-    {
-        // [Type] insert Castexpression
-    }
-    expr->type_ = target->type();
-
+    expr->type_ = AssignmentConversion(expr->source->type(), expr->target->type());
     return expr;
 }
-// binary expression <- Usual Arithmatic Conversion
+
+// TODO: common result type, type cast
+// binary expression <- Usual Arithmetic Conversion
+//
 Expression *CondExpression::parse(Lexer &lex, Environment *env)
 {
     Expression *e = OrExpression::parse(lex, env);
@@ -411,8 +408,11 @@ Expression *CondExpression::parse(Lexer &lex, Environment *env)
         expr->left = CommaExpression::parse(lex, env);
         EXPECT(OP_COLON);
         expr->right = CondExpression::parse(lex, env);
-        // [Type] expr->type_ = TypeConversion::Common(a, b);
-        // [Type] insert Castexpression if type not equal
+        expr->type_ = CondResultConversion(expr->left->type(), expr->right->type());
+        if (!expr->left->type()->equal(*expr->type()))
+            expr->left = new CastExpression(expr->type(), expr->left);
+        if (!expr->right->type()->equal(*expr->type()))
+            expr->right = new CastExpression(expr->type(), expr->right);
         return expr;
     }
     else
@@ -429,7 +429,7 @@ Expression *OrExpression::parse(Lexer &lex, Environment *env)
         OrExpression *expr = new OrExpression();
         expr->left = e;
         expr->right = OrExpression::parse(lex, env);
-        // [Type] convert result to bool
+        expr->type_ = TypeFactory::Primitive_Int();
         return expr;
     }
     else
@@ -444,7 +444,7 @@ Expression *AndExpression::parse(Lexer &lex, Environment *env)
         AndExpression *expr = new AndExpression();
         expr->left = e;
         expr->right = AndExpression::parse(lex, env);
-        // [Type] convert result to bool
+        expr->type_ = TypeFactory::Primitive_Int();
         return expr;
     }
     else
@@ -459,7 +459,14 @@ Expression *BitOrExpression::parse(Lexer &lex, Environment *env)
         BitOrExpression *expr = new BitOrExpression();
         expr->left = e;
         expr->right = BitOrExpression::parse(lex, env);
-        // [Type] integer promotion?
+        expr->type_ = UsualArithmeticConversion(
+                expr->left->type(),
+                expr->right->type());
+        if (!expr->left->type()->equal(*expr->type()))
+            expr->left = new CastExpression(expr->type(), expr->left);
+        if (!expr->right->type()->equal(*expr->type()))
+            expr->right = new CastExpression(expr->type(), expr->right);
+
         return expr;
     }
     else
@@ -474,7 +481,14 @@ Expression *BitXorExpression::parse(Lexer &lex, Environment *env)
         BitXorExpression *expr = new BitXorExpression();
         expr->left = e;
         expr->right = BitXorExpression::parse(lex, env);
-        // [Type] integer promotion?
+        expr->type_ = UsualArithmeticConversion(
+                expr->left->type(),
+                expr->right->type());
+        if (!expr->left->type()->equal(*expr->type()))
+            expr->left = new CastExpression(expr->type(), expr->left);
+        if (!expr->right->type()->equal(*expr->type()))
+            expr->right = new CastExpression(expr->type(), expr->right);
+
         return expr;
     }
     else
@@ -489,7 +503,14 @@ Expression *BitAndExpression::parse(Lexer &lex, Environment *env)
         BitAndExpression *expr = new BitAndExpression();
         expr->left = e;
         expr->right = BitAndExpression::parse(lex, env);
-        // [Type] integer promotion?
+        expr->type_ = UsualArithmeticConversion(
+                expr->left->type(),
+                expr->right->type());
+        if (!expr->left->type()->equal(*expr->type()))
+            expr->left = new CastExpression(expr->type(), expr->left);
+        if (!expr->right->type()->equal(*expr->type()))
+            expr->right = new CastExpression(expr->type(), expr->right);
+
         return expr;
     }
     else
@@ -504,7 +525,21 @@ Expression *EqExpression::parse(Lexer &lex, Environment *env)
         expr->op = lex.getNext().type;
         expr->left = e;
         expr->right = EqExpression::parse(lex, env);
-        // [Type] convert to bool?
+        expr->type_ = TypeFactory::Primitive_Int();
+        if (expr->left->type()->isArithmetic() &&
+            expr->right->type()->isArithmetic())
+        {
+            const TypeBase *t= UsualArithmeticConversion(
+                    expr->left->type(),
+                    expr->right->type());
+            expr->left = new CastExpression(t, expr->left);
+            expr->right = new CastExpression(t, expr->right);
+        }
+        else
+        {
+            EXPECT_TYPE_IS(expr->left->type(), T_POINTER);
+            EXPECT_TYPE_IS(expr->right->type(), T_POINTER);
+        }
         return expr;
     }
     else
@@ -520,7 +555,21 @@ Expression *RelExpression::parse(Lexer &lex, Environment *env)
         expr->op = lex.getNext().type;
         expr->left = e;
         expr->right = RelExpression::parse(lex, env);
-        // [Type] convert to bool?
+        expr->type_ = TypeFactory::Primitive_Int();
+        if (expr->left->type()->isArithmetic() &&
+            expr->right->type()->isArithmetic())
+        {
+            const TypeBase *t= UsualArithmeticConversion(
+                    expr->left->type(),
+                    expr->right->type());
+            expr->left = new CastExpression(t, expr->left);
+            expr->right = new CastExpression(t, expr->right);
+        }
+        else
+        {
+            EXPECT_TYPE_IS(expr->left->type(), T_POINTER);
+            EXPECT_TYPE_IS(expr->right->type(), T_POINTER);
+        }
         return expr;
     }
     else
@@ -533,15 +582,29 @@ Expression *ShiftExpression::parse(Lexer &lex, Environment *env)
     {
         ShiftExpression *expr = new ShiftExpression();
         expr->op = lex.getNext().type;
-        expr->left = e;
-        expr->right = ShiftExpression::parse(lex, env);
-        // [Type] integer promotion?
-        expr->type_ = e->type();
+
+        Expression *l = e;
+        Expression *r = ShiftExpression::parse(lex, env);
+        assert(l->type()->isIntegral());
+        assert(r->type()->isIntegral());
+
+        const TypeBase *pl = IntegerPromotion(l->type());
+        const TypeBase *pr = IntegerPromotion(r->type());
+
+        expr->left = l;
+        if (!pl->equal(*l->type()))
+            expr->left = new CastExpression(pl, l);
+        expr->right = r;
+        if (!pr->equal(*r->type()))
+            expr->right = new CastExpression(pr, r);
+
+        expr->type_ = pl;
         return expr;
     }
     else
         return e;
 }
+// parameter 'left' is used to achieve left-association
 Expression *AddExpression::parse(Lexer &lex, Environment *env, Expression *left)
 {
     if (left == nullptr)
@@ -553,13 +616,57 @@ Expression *AddExpression::parse(Lexer &lex, Environment *env, Expression *left)
         expr->left = left;
         expr->right = MulExpression::parse(lex, env);
 
-        // [Type] integer promotion?
+        // EXPECT_TYPE_WITH(expr->left->type(), TOp_ADD);
+        // EXPECT_TYPE_WITH(expr->right->type(), TOp_ADD);
 
-        EXPECT_TYPE_WITH(expr->left->type(), TOp_ADD);
-        EXPECT_TYPE_WITH(expr->right->type(), TOp_ADD);
-
-        // expr->type_ = TypeConversion::Common(expr->left->type(), expr->right->type());
-        expr->type_ = expr->left->type();
+        // arithmetic type
+        // pointer + int | int + pointer
+        // pointer - int/pointer
+        const TypeBase *l = expr->left->type();
+        const TypeBase *r = expr->right->type();
+        do
+        {
+            if (l->isArithmetic() && r->isArithmetic())
+            {
+                const TypeBase *t = UsualArithmeticConversion(l, r);
+                if (!t->equal(*l))
+                    expr->left = new CastExpression(t, expr->left);
+                if (!t->equal(*r))
+                    expr->right = new CastExpression(t, expr->right);
+                expr->type_ = t;
+                break;
+            }
+            else if (expr->op == OP_ADD)
+            {
+                if (l->type() == T_POINTER && r->isIntegral())
+                {
+                    expr->type_ = l;
+                    break;
+                }
+                else if (l->type() == T_POINTER && r->isIntegral())
+                {
+                    expr->type_ = r;
+                    break;
+                }
+            }
+            else if (expr->op == OP_SUB)
+            {
+                if (l->type() == T_POINTER)
+                {
+                    if (r->isIntegral())
+                    {
+                        expr->type_ = l;
+                        break;
+                    }
+                    else if (r->type() == T_POINTER) // TODO: type: use ptrdiff_t
+                    {
+                        expr->type_ = TypeFactory::Primitive_Int();
+                        break;
+                    }
+                }
+            }
+            SyntaxErrorEx("AddExpression: invalid combination");
+        } while (false);
 
         return parse(lex, env, expr);
     }
@@ -569,20 +676,27 @@ Expression *AddExpression::parse(Lexer &lex, Environment *env, Expression *left)
 Expression *MulExpression::parse(Lexer &lex, Environment *env)
 {
     Expression *e = CastExpression::parse(lex, env);
-    if (lex.peakNext().type == OP_MUL || lex.peakNext().type == OP_DIV ||
-        lex.peakNext().type == OP_MOD)
+    TokenType tt = lex.peakNext().type;
+    if (tt == OP_MUL || tt == OP_DIV || tt == OP_MOD)
     {
         MulExpression *expr = new MulExpression();
         expr->op = lex.getNext().type;
         expr->left = e;
         expr->right = MulExpression::parse(lex, env);
 
-        // [Type] integer promotion?
+        // EXPECT_TYPE_WITH(expr->left->type(), TOp_MUL);
+        // EXPECT_TYPE_WITH(expr->right->type(), TOp_MUL);
 
-        EXPECT_TYPE_WITH(expr->left->type(), TOp_MUL);
-        EXPECT_TYPE_WITH(expr->right->type(), TOp_MUL);
-
-        // expr->type_ = TypeConversion::Common(expr->left->type(), expr->right->type());
+        const TypeBase *l = expr->left->type();
+        const TypeBase *r = expr->right->type();
+        do
+        {
+            if (tt == OP_MOD && l->isIntegral() && r->isIntegral())
+                break;
+            if (l->isArithmetic() && r->isArithmetic())
+                break;
+            SyntaxErrorEx("MulExpression: invalid combination");
+        } while (false);
 
         return expr;
     }
@@ -595,19 +709,18 @@ Expression *CastExpression::parse(Lexer &lex, Environment *env)
     // cast or unary
     if (lex.peakNext().type == LP && IsTypeName(lex.peakNext(1).type))
     {
-        CastExpression *expr = new CastExpression();
-        while (lex.peakNext().type == LP && IsTypeName(lex.peakNext(1).type))
-        {
-            lex.getNext();
-            TypeBase *type = nullptr;  // ParseTypename(lex, env);
-            expr->types.push_back(type);
-            if (lex.getNext().type != RP)
-            {
-                SyntaxError("Expect ')'");
-            }
-        }
-        expr->target = UnaryExpression::parse(lex, env);
-        return expr;
+        SyntaxError("CastExpression: not implemented.");
+        return nullptr;
+        // CastExpression *expr = new CastExpression();
+        // while (lex.peakNext().type == LP && IsTypeName(lex.peakNext(1).type))
+        // {
+        //     lex.getNext();
+        //     const TypeBase *type = nullptr;  // ParseTypename(lex, env);
+        //     expr->types.push_back(type);
+        //     EXPECT(RP);
+        // }
+        // expr->target = UnaryExpression::parse(lex, env);
+        // return expr;
     }
     else
     {
@@ -809,19 +922,20 @@ Expression *PrimaryExpression::parse(Lexer &lex, Environment *env)
             p = new PrimaryExpression();
             p->t = lex.getNext();
             p->cval = p->t.cval;
-            // p->type_ = env->factory.newIntegral(TYPE_CHAR, false);
+            p->type_ = TypeFactory::Char();
             break;
         case CONST_INT:
             p = new PrimaryExpression();
             p->t = lex.getNext();
             p->ival = p->t.ival;
+            p->type_ = TypeFactory::Integer(4, true);
             // p->type_ = env->factory.newIntegral(TYPE_INT, true);
             break;
         case STRING:
             p = new PrimaryExpression();
             p->t = lex.getNext();
             p->str = &p->t.string_;
-            // p->type_ = env->factory.newStringLiteral();
+            p->type_ = TypeFactory::StringLiteral();
             break;
         case SYMBOL:
             p = new PrimaryExpression();

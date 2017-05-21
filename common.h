@@ -3,9 +3,9 @@
 #include <algorithm>
 #include <cassert>
 #include <cctype>
+#include <iterator>
 #include <string>
 #include <vector>
-using namespace std;
 
 #define ELEMENT_COUNT(a) (sizeof(a) / sizeof((a)[0]))
 
@@ -19,7 +19,7 @@ class StringBuf
         size_t count = static_cast<size_t>(strlen(data));
         char *data2 = new char[count + 1];
 
-        copy(data, data + count, data2);
+        std::copy(data, data + count, data2);
         data2[count] = '\0';
 
         begin = now = data2;
@@ -34,7 +34,7 @@ class StringBuf
         count = (count > n) ? n : count;
         char *data2 = new char[count + 1];
 
-        copy(data, data + count, data2);
+        std::copy(data, data + count, data2);
         data2[count] = '\0';
 
         begin = now = data2;
@@ -122,9 +122,9 @@ class StringRef
         return end - begin;
     }
 
-    string toString() const
+    std::string toString() const
     {
-        string s;
+        std::string s;
         if (end > begin)
             s.assign(begin, end - begin);
         return s;
@@ -178,9 +178,9 @@ class StringRef
     {
         return !(s2 == s1);
     }
-    friend ostream &operator<<(ostream &o, const StringRef &s)
+    friend std::ostream &operator<<(std::ostream &o, const StringRef &s)
     {
-        copy(s.begin, s.end, ostream_iterator<char>(o));
+        std::copy(s.begin, s.end, std::ostream_iterator<char>(o));
         return o;
     }
 
@@ -268,6 +268,9 @@ class ListLike
 
 #ifndef DEBUG_UTILS
 #define DEBUG_UTILS
+
+#include <iostream>
+using namespace std;
 
 // TODO: easy way to print enum constant as string
 

@@ -59,11 +59,15 @@ class TypeBase
 
    protected:
     ETypeClass _headtype, _tailtype;
-    bool _complete;
+    bool _complete, _is_arithmetic, _is_integral;
     string _desc;  // complete type info description string
 
     TypeBase(ETypeClass type, bool complete)
-        : _headtype(type), _tailtype(type), _complete(complete)
+        : _headtype(type),
+          _tailtype(type),
+          _complete(complete),
+          _is_arithmetic(false),
+          _is_integral(false)
     {
     }
 
@@ -86,6 +90,14 @@ class TypeBase
     bool isCompatible(const TypeBase &o) const
     {
         return type() == o.type();
+    }
+    bool isArithmetic() const
+    {
+        return _is_arithmetic;
+    }
+    bool isIntegral() const
+    {
+        return _is_integral;
     }
 
     bool isIncomplete(const Environment *env, bool recursive = true) const;
@@ -149,6 +161,7 @@ class FloatingType : public TypeBase
     friend TypeBase;
     friend TypeFactory;
 };
+// TODO: conversion: get target type
 class PointerType : public TypeBase
 {
     friend TypeBase;
@@ -189,6 +202,7 @@ class TypedefType : public TypeBase
 };
 
 // Type System
+// TODO: conversion: get primitive type
 class TypeFactory
 {
     static vector<TypeBase *> references;
@@ -230,6 +244,13 @@ class TypeFactory
         t->_desc = string(s, length);
         references.push_back(t);
         return t;
+    }
+    static TypeBase *cloneType(const TypeBase &t)
+    {
+        TypeBase *c = new TypeBase(T_NONE, false);
+        *c = t;
+        references.push_back(c);
+        return c;
     }
     // used by TypeFactory::Sizeof()
     // just recreate, no unbox.
@@ -308,8 +329,8 @@ class TypeFactory
                 s = p + 1;
                 break;
             case T_TYPEDEF:
-                // typedef will unbox automatically, should not
-                // appear here.
+            // typedef will unbox automatically, should not
+            // appear here.
             default:
                 SyntaxError("ReadType: unknown type: " +
                             StringRef(s, strlen(s)).toString());
@@ -401,6 +422,8 @@ class TypeFactory
     {
         TypeBase *t = new TypeBase(T_CHAR, true);
         t->_desc += 'c';
+        t->_is_arithmetic = true;
+        t->_is_integral = true;
         references.push_back(t);
         return t;
     }
@@ -410,6 +433,8 @@ class TypeFactory
         assert(length <= 8);
         t->_desc += is_signed ? 'i' : 'u';
         t->_desc += (char)('0' + length);
+        t->_is_arithmetic = true;
+        t->_is_integral = true;
         references.push_back(t);
         return t;
     }
@@ -419,6 +444,7 @@ class TypeFactory
         assert(length <= 8);
         t->_desc += 'f';
         t->_desc += (char)('0' + length);
+        t->_is_arithmetic = true;
         references.push_back(t);
         return t;
     }
@@ -429,6 +455,14 @@ class TypeFactory
         t->_desc += 'P';
         if (is_const)
             t->_desc += 'C';
+        references.push_back(t);
+        return t;
+    }
+    static TypeBase *StringLiteral()
+    {
+        TypeBase *t = new TypeBase(T_POINTER, true);
+        // TODO: should be const char * const
+        t->_desc += "PCc";
         references.push_back(t);
         return t;
     }
@@ -495,7 +529,8 @@ class TypeFactory
     {
         t->_complete = true;
     }
-    static void FunctionDeclarationCheck(TypeBase *t, const Environment *env, StringRef name)
+    static void FunctionDeclarationCheck(TypeBase *t, const Environment *env,
+                                         StringRef name)
     {
         assert(t && t->type() == T_FUNCTION);
         const char *s = t->_desc.data() + 1;
@@ -504,15 +539,19 @@ class TypeFactory
             assert(*s != '\0');
             TypeBase *param = ReadType(s, env);
             if (param->isIncomplete(env))
-                SyntaxError("function '" + name.toString() + "' has incomplete parameter type: " + param->toString());
+                SyntaxError("function '" + name.toString() +
+                            "' has incomplete parameter type: " +
+                            param->toString());
         }
         ++s;
         assert(*s != '\0');
         TypeBase *ret = ReadType(s, env);
         if (ret->isIncomplete(env) && ret->type() != T_VOID)
-            SyntaxError("function '" + name.toString() + "' has incomplete return type: " + ret->toString());
+            SyntaxError("function '" + name.toString() +
+                        "' has incomplete return type: " + ret->toString());
         if (ret->type() == T_FUNCTION || ret->type() == T_ARRAY)
-            SyntaxError("function '" + name.toString() + "' has invalid return type: " + ret->toString());
+            SyntaxError("function '" + name.toString() +
+                        "' has invalid return type: " + ret->toString());
     }
     static TypeBase *StructTag(StringRef tag)
     {
@@ -570,6 +609,43 @@ class TypeFactory
         t->_desc += tag.toString();
         t->_desc += '$';
         references.push_back(t);
+        return t;
+    }
+
+    // Primitive Types
+    static const TypeBase *Primitive_Int()
+    {
+        static TypeBase *t = nullptr;
+        if (t == nullptr)
+            t = Integer(4, true);
+        return t;
+    }
+    static const TypeBase *Primitive_UInt()
+    {
+        static TypeBase *t = nullptr;
+        if (t == nullptr)
+            t = Integer(4, false);
+        return t;
+    }
+    static const TypeBase *Primitive_Long()
+    {
+        static TypeBase *t = nullptr;
+        if (t == nullptr)
+            t = Integer(sizeof(long), true);
+        return t;
+    }
+    static const TypeBase *Primitive_ULong()
+    {
+        static TypeBase *t = nullptr;
+        if (t == nullptr)
+            t = Integer(sizeof(long), false);
+        return t;
+    }
+    static const TypeBase *Primitive_Char()
+    {
+        static TypeBase *t = nullptr;
+        if (t == nullptr)
+            t = Char();
         return t;
     }
 

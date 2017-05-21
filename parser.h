@@ -67,7 +67,6 @@ class CompoundStatement : public SyntaxNode
     }
     // virtual void emit(Environment *__not_used, EEmitGoal goal) const;
 };
-// no instance, dispatch only
 class ExpressionStatement : public SyntaxNode
 {
     Expression *expr;
@@ -447,11 +446,27 @@ class MulExpression : public Expression
 };
 class CastExpression : public Expression
 {
-    vector<TypeBase *> types;
+    // vector<TypeBase *> types;
     Expression *target;
 
    public:
+    CastExpression(const TypeBase *to, Expression *from)
+        : target(from)
+    {
+        type_ = to;
+    }
     static Expression *parse(Lexer &lex, Environment *env);
+    virtual string debugString()
+    {
+        string s;
+        s += target ? target->type()->toString() : "<null>";
+        s += " -~> ";
+        s += type_ ? type_->toString() : "<null>";
+        s += "\n>\n";
+        if (target) s += target->debugString();
+        s += "<\n";
+        return s;
+    }
 };
 // TODO: finish this!
 class UnaryExpression : public Expression
