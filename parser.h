@@ -197,7 +197,7 @@ class CommaExpression : public Expression
     static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
-        string s = ",>\n";
+        string s = ", [" + (type_ ? type_->toString() : "") + "]>\n";
         s += curr->debugString();
         if (next) s += next->debugString();
         s += "<\n";
@@ -217,7 +217,7 @@ class AssignExpression : public Expression
     static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
-        string s = "=>\n";
+        string s = "= [" + (type_ ? type_->toString() : "") + "]>\n";
         // for (SyntaxNode *t : targets) s += t->debugString();
         if (target) s += target->debugString();
         if (source) s += source->debugString();
@@ -236,7 +236,7 @@ class CondExpression : public Expression
     static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
-        string s = "?:>\n";
+        string s = "?: [" + (type_ ? type_->toString() : "") + "]>\n";
         if (cond) s += cond->debugString();
         if (left) s += left->debugString();
         if (right) s += right->debugString();
@@ -253,7 +253,7 @@ class OrExpression : public Expression
     static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
-        string s = "||>\n";
+        string s = "|| [" + (type_ ? type_->toString() : "") + "]>\n";
         if (left) s += left->debugString();
         if (right) s += right->debugString();
         s += "<\n";
@@ -269,7 +269,7 @@ class AndExpression : public Expression
     static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
-        string s = "&&>\n";
+        string s = "&& [" + (type_ ? type_->toString() : "") + "]>\n";
         if (left) s += left->debugString();
         if (right) s += right->debugString();
         s += "<\n";
@@ -285,7 +285,7 @@ class BitOrExpression : public Expression
     static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
-        string s = "|>\n";
+        string s = "| [" + (type_ ? type_->toString() : "") + "]>\n";
         if (left) s += left->debugString();
         if (right) s += right->debugString();
         s += "<\n";
@@ -301,7 +301,7 @@ class BitXorExpression : public Expression
     static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
-        string s = "^>\n";
+        string s = "^ [" + (type_ ? type_->toString() : "") + "]>\n";
         if (left) s += left->debugString();
         if (right) s += right->debugString();
         s += "<\n";
@@ -317,7 +317,7 @@ class BitAndExpression : public Expression
     static Expression *parse(Lexer &lex, Environment *env);
     virtual string debugString()
     {
-        string s = "&>\n";
+        string s = "& [" + (type_ ? type_->toString() : "") + "]>\n";
         if (left) s += left->debugString();
         if (right) s += right->debugString();
         s += "<\n";
@@ -337,7 +337,7 @@ class EqExpression : public Expression
         string s;
         if (op == REL_EQ) s += "==";
         else s += "!=";
-        s += ">\n";
+        s += " [" + (type_ ? type_->toString() : "") + "]>\n";
         if (left) s += left->debugString();
         if (right) s += right->debugString();
         s += "<\n";
@@ -357,13 +357,13 @@ class RelExpression : public Expression
         string s;
         switch (op)
         {
-            case REL_GT: s += "~>\n"; break;
-            case REL_GE: s += "~>=\n"; break;
-            case REL_LT: s += "~<\n"; break;
-            case REL_LE: s += "~<=\n"; break;
+            case REL_GT: s += "~>"; break;
+            case REL_GE: s += "~>="; break;
+            case REL_LT: s += "~<"; break;
+            case REL_LE: s += "~<="; break;
             default: break;
         }
-        s += ">\n";
+        s += " [" + (type_ ? type_->toString() : "") + "]\n>\n";
         if (left) s += left->debugString();
         if (right) s += right->debugString();
         s += "<\n";
@@ -383,11 +383,11 @@ class ShiftExpression : public Expression
         string s;
         switch (op)
         {
-            case BIT_SLEFT: s += "~<~<\n"; break;
-            case BIT_SRIGHT: s += "~>~>\n"; break;
+            case BIT_SLEFT: s += "~<~<"; break;
+            case BIT_SRIGHT: s += "~>~>"; break;
             default: break;
         }
-        s += ">\n";
+        s += " [" + (type_ ? type_->toString() : "") + "]\n>\n";
         if (left) s += left->debugString();
         if (right) s += right->debugString();
         s += "<\n";
@@ -408,11 +408,11 @@ class AddExpression : public Expression
         string s;
         switch (op)
         {
-            case OP_ADD: s += "+\n"; break;
-            case OP_SUB: s += "-\n"; break;
+            case OP_ADD: s += "+"; break;
+            case OP_SUB: s += "-"; break;
             default: break;
         }
-        s += ">\n";
+        s += " [" + (type_ ? type_->toString() : "") + "]\n>\n";
         if (left) s += left->debugString();
         if (right) s += right->debugString();
         s += "<\n";
@@ -432,12 +432,12 @@ class MulExpression : public Expression
         string s;
         switch (op)
         {
-            case OP_MUL: s += "*\n"; break;
-            case OP_DIV: s += "/\n"; break;
-            case OP_MOD: s += "%\n"; break;
+            case OP_MUL: s += "*"; break;
+            case OP_DIV: s += "/"; break;
+            case OP_MOD: s += "%"; break;
             default: break;
         }
-        s += ">\n";
+        s += " [" + (type_ ? type_->toString() : "") + "]\n>\n";
         if (left) s += left->debugString();
         if (right) s += right->debugString();
         s += "<\n";
@@ -446,12 +446,12 @@ class MulExpression : public Expression
 };
 class CastExpression : public Expression
 {
-    // vector<TypeBase *> types;
     Expression *target;
+    bool implicit_;
 
    public:
-    CastExpression(const TypeBase *to, Expression *from)
-        : target(from)
+    CastExpression(const TypeBase *to, Expression *from, bool is_implicit = true)
+        : target(from), implicit_(is_implicit)
     {
         type_ = to;
     }
@@ -459,6 +459,7 @@ class CastExpression : public Expression
     virtual string debugString()
     {
         string s;
+        s += implicit_ ? "imp:" : "exp:";
         s += target ? target->type()->toString() : "<null>";
         s += " -~> ";
         s += type_ ? type_->toString() : "<null>";

@@ -73,6 +73,7 @@ int tmod_ok(int i1, int i2)
 // {
 //     return nullptr;
 // }
+// const TypeBase *IntegerConversion(const TypeBase *from, const TypeBase *to);
 // TypeBase *PointerConversion(const TypeBase *from, const TypeBase *to)
 // {
 //     assert(from != nullptr && to != nullptr);
@@ -91,6 +92,7 @@ int tmod_ok(int i1, int i2)
 const TypeBase *IntegerPromotion(const TypeBase *t)
 {
     assert(t != nullptr);
+
     const TypeBase *ret = nullptr;
     switch (t->type())
     {
@@ -103,12 +105,30 @@ const TypeBase *IntegerPromotion(const TypeBase *t)
     return ret;
 }
 
-// TODO: implement this
+// 1. the left operand has qualified or unqualified arithmetic type and
+//    the right has arithmetic type;
+// 2. the left operand has a qualified or unqualified version of a structure
+//    or union type compatible with the type of the right;
+// 3. both operands are pointers to qualified or unqualified versions of
+//    compatible types, and the type pointed to by the left has all the
+//    qualifiers of the type pointed to by the right;
+// 4. one operand is a pointer to an object or incomplete type and the other
+//    is a pointer to a qualified or unqualified version of void, and the type
+//    pointed to by the left has all the qualifiers of the type pointed to by
+//    the right; or
+// 5. the left operand is a pointer and the right is a null pointer constant.
 const TypeBase *AssignmentConversion(const TypeBase *from, const TypeBase *to)
 {
     return to;
-    // SyntaxError("Not implemented.");
-    // return nullptr;
+    // if (from->isArithmetic() && to->isArithmetic())
+    // {
+    //     return to;
+    // }
+    // else
+    // {
+    //     SyntaxError("Not implemented.");
+    //     return nullptr;
+    // }
 }
 // TypeBase *LvalueConversion(const TypeBase *t, const Environment *env)
 // {
@@ -138,7 +158,10 @@ const TypeBase *UsualArithmeticConversion(const TypeBase *l, const TypeBase *r)
     assert(l->isArithmetic());
     assert(r->isArithmetic());
 
-    // No conversion needed
+    // promote type
+    l = IntegerPromotion(l);
+    r = IntegerPromotion(r);
+
     if (l->equal(*r))
         return l;
 

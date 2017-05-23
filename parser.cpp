@@ -81,10 +81,10 @@ bool IsUnaryOperator(TokenType t)
     }
     return is;
 }
-bool IsTypeName(TokenType t)
+bool IsTypeName(Token t, const Environment *env)
 {
     bool is = false;
-    switch (t)
+    switch (t.type)
     {
         // type qualifiers
         case CONST:
@@ -101,6 +101,10 @@ bool IsTypeName(TokenType t)
         case SIGNED:
         case TYPE_STRUCT:
         case TYPE_ENUM: is = true; break;
+        case SYMBOL:  // typedef name
+            if (env->recursiveFindTypename(t.symbol) != nullptr)
+                is = true;
+            break;
         default: break;
     }
     return is;
@@ -390,7 +394,10 @@ Expression *AssignExpression::parse(Lexer &lex, Environment *env)
     assert(expr->target != nullptr);
     assert(expr->source != nullptr);
     EXPECT_TYPE_WITH(target->type(), TOp_ASSIGN);
-    expr->type_ = AssignmentConversion(expr->source->type(), expr->target->type());
+    const TypeBase *t = AssignmentConversion(expr->source->type(), expr->target->type());
+    if (!expr->source->type()->equal(*t))
+        expr->source = new CastExpression(t, expr->source);
+    expr->type_ = t;
     return expr;
 }
 
@@ -684,8 +691,8 @@ Expression *MulExpression::parse(Lexer &lex, Environment *env)
         expr->left = e;
         expr->right = MulExpression::parse(lex, env);
 
-        // EXPECT_TYPE_WITH(expr->left->type(), TOp_MUL);
-        // EXPECT_TYPE_WITH(expr->right->type(), TOp_MUL);
+        EXPECT_TYPE_WITH(expr->left->type(), TOp_MUL);
+        EXPECT_TYPE_WITH(expr->right->type(), TOp_MUL);
 
         const TypeBase *l = expr->left->type();
         const TypeBase *r = expr->right->type();
@@ -698,6 +705,13 @@ Expression *MulExpression::parse(Lexer &lex, Environment *env)
             SyntaxErrorEx("MulExpression: invalid combination");
         } while (false);
 
+        const TypeBase *t = UsualArithmeticConversion(l, r);
+        if (!t->equal(*l))
+            expr->left = new CastExpression(t, expr->left);
+        if (!t->equal(*r))
+            expr->right = new CastExpression(t, expr->right);
+        expr->type_ = t;
+
         return expr;
     }
     else
@@ -706,21 +720,14 @@ Expression *MulExpression::parse(Lexer &lex, Environment *env)
 // Explicit Type Conversion
 Expression *CastExpression::parse(Lexer &lex, Environment *env)
 {
-    // cast or unary
-    if (lex.peakNext().type == LP && IsTypeName(lex.peakNext(1).type))
+    if (lex.peakNext().type == LP && IsTypeName(lex.peakNext(1), env))
     {
-        SyntaxError("CastExpression: not implemented.");
-        return nullptr;
-        // CastExpression *expr = new CastExpression();
-        // while (lex.peakNext().type == LP && IsTypeName(lex.peakNext(1).type))
-        // {
-        //     lex.getNext();
-        //     const TypeBase *type = nullptr;  // ParseTypename(lex, env);
-        //     expr->types.push_back(type);
-        //     EXPECT(RP);
-        // }
-        // expr->target = UnaryExpression::parse(lex, env);
-        // return expr;
+        EXPECT(LP);
+        const TypeBase *t = Environment::ParseTypename(lex, env);
+        assert(t != nullptr);
+        EXPECT(RP);
+
+        return new CastExpression(t, CastExpression::parse(lex, env), false);
     }
     else
     {

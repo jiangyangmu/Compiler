@@ -39,5 +39,5 @@ class Environment : public TreeLike<Environment>
 
     static void ParseLocalDeclaration(Lexer &lex, Environment *env);
     static void ParseGlobalDeclaration(Lexer &lex, Environment *env);
-    // static TypeBase *ParseTypename(Lexer &lex, Environment *env);
+    static TypeBase *ParseTypename(Lexer &lex, Environment *env);
 };

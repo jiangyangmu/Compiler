@@ -18,7 +18,7 @@ int tmod_ok(int i1, int i2);
 // void enum_to_int(EnumType *et, IntType *it);
 // void int_to_enum(IntType *it, EnumType *et);
 // TypeBase *BooleanConversion(const TypeBase *t);
-// TypeBase *IntegerConversion(const TypeBase *from, const TypeBase *to);
+// const TypeBase *IntegerConversion(const TypeBase *from, const TypeBase *to);
 // TypeBase *PointerConversion(const TypeBase *from, const TypeBase *to);
 // FloatToInteger
 // IntegerToFloat

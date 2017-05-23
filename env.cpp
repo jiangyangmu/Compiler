@@ -989,3 +989,23 @@ void Environment::ParseGlobalDeclaration(Lexer &lex, Environment *env)
         __parseDeclaration(lex, env, true);
     }
 }
+// TODO: do nothing if parse failed
+TypeBase *Environment::ParseTypename(Lexer &lex, Environment *env)
+{
+    if (__parseStorageSpecifier(lex, env))
+        return nullptr;
+
+    TypeBase *spec = __parseTypeSpecifier(lex, env);
+    if (spec == nullptr)
+        return nullptr;
+
+    Symbol *s = SymbolFactory::newInstance();
+    s->name = StringRef("<anonymous-symbol>");
+    s->space = SC_ID;
+    __parseDeclarator(*s, lex, env);
+    if (s->type == nullptr)
+        return nullptr;
+
+    TypeFactory::AppendRight(*s->type, *spec, env);
+    return s->type;
+}
