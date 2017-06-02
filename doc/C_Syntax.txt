@@ -1,5 +1,6 @@
 C Grammar
 
+Q: 如何建树？
 
 ================ Translation Unit ===============
 
@@ -9,8 +10,12 @@ translation-unit        := ( function-definition || declaration )+
 
 function-definition     := ( specifiers )? declarator compound-stmt
 
-declaration             := specifiers ( decl-init ( ',' decl-init )* )? ';'
-                            # so int; is legal, though meaningless
+declaration             := specifiers (init-declarator-list)? ';'
+
+init-declarator-list    := init-declarator
+                        || init-declarator-list ',' init-declarator
+
+init-declarator         := declarator ( '=' initializer )?
 
 # 如何判断是一个 function definition(F) 还是 declaration(D) ？
     parse specifiers
@@ -19,44 +24,58 @@ declaration             := specifiers ( decl-init ( ',' decl-init )* )? ';'
     if '{' -> F
     else -> D
 
-================== Declarator ==================
+================== Declarator(completed) ==================
+Q: 需要收集哪些 data? (type, object, env)
+Q: 需要检测哪些 constrains?
 
-specifiers              := ( storage-specifier | type-specifier | type-qualifier )+
+declarator              := ( pointer )? direct-declarator
+#Result: named object with type
+#[type] PointerType
 
-decl-init               := declarator ( '=' init )?
+direct-declarator       := identifier
+                        || '(' declarator ')'
+                        || direct-declarator '[' (constant-expression)? ']'
+                        || direct-declarator '(' parameter-type-list ')'
+                        || direct-declarator '(' (identifier-list)? ')'
+#FIRST: '*' '(' identifier
+#[env] Symbol.name
+#[type] ArrayType, FunctionType
+#[FunctionType] createEnv
 
-declarator = (pointer)? (identifier || '(' declarator ')') ()
+abstract-declarator     := pointer ( direct-abstract-declarator )?
+                        || direct-abstract-declarator
+#Result: just type
+#[type] PointerType
 
+direct-abstract-declarator
+                        := '(' abstract-declarator ')'
+                        || (direct-abstract-declarator)? '[' (constant-expr)? ']'
+                        || (direct-abstract-declarator)? '(' (parameter-type-list)? ')'
+                        # 解读：[2][3]存在的时候可以不要[1]，即不能匹配空
+#[type] ArrayType, FunctionType
+#[FunctionType] createEnv // invalid after ';'
 
-declarator              := ( pointer )?
-                           ( identifier || '(' declarator ')' )
-                           ( ('[' ( constant-expr )? ']')* || ('(' (parameter-list)? ')')? )
-                            # FIRST => { '*' '(' identifier }
+================== Initialize(completed) ==================
 
+initializer             := assign-expr
+                        || '{' initializer-list (',')? '}'
 
-# 暂时忽略, 交给 declarator 处理，所以不支持 [] 这种 declarator
-abstract-declarator     := ( pointer )?
-                           ( '(' abstract-declarator ')' )?
-                           ( ('[' ( constant-expr )? ']')* || ('(' ( parameter-list )? ')')? )
-
-# C 里数组 如果作为函数返回类型，或者参数类型，统一转成指针
+initializer-list        := initializer ( ',' initializer )*
 
 -------------------------------------------------
+## tail
 
-parameter-list          := parameter-declaration ( ',' parameter-declaration )* ( ',' '...' )?
+parameter-type-list     := parameter-list ( ',' '...' )?
 
-parameter-declaration   := specifiers ( declarator || abstract-declarator )
+parameter-list          := parameter-declaration
+                        || parameter-list ',' parameter-declaration
 
----------------------------------------
+parameter-declaration   := specifiers ( declarator || (abstract-declarator)? )
 
-init                    := assign-expr
-                        || '{' init-list (',')? '}'
+identifier-list         := identifier ( ',' identifier )*
 
-init-list               := init ( ',' init )*
-
----------------------------------------
-
-type-name               := ( type-specifier | type-qualifier )+ abstract-declarator
+-------------------------------------------------
+## others
 
 # register VS volatile
 # 'register' should be understood as a code quality check that the programmer is
@@ -64,6 +83,8 @@ type-name               := ( type-specifier | type-qualifier )+ abstract-declara
 # of the object.
 # 'volatile' indicates that accesses to (reads from and writes to) the object are
 # considered side effects and cannot be optimised away.
+
+specifiers              := ( storage-specifier | type-specifier | type-qualifier )+
 
 storage-specifier       := typedef || extern || static || auto || register
 
@@ -74,13 +95,13 @@ type-specifier          := void || char || short || int || long || float || doub
                         || enum-specifier
                         || typedef-name
 
+type-name               := specifier-qualifier-list ( abstract-declarator )?
 
-pointer                 := ( '*' [type-qualifier-list] )+
+pointer                 := '*' (type-qualifier-list)? (pointer)?
 
 identifier              := [_a-zA-Z] [_a-zA-Z0-9]*
 
 type-qualifier-list     := ( type-qualifier )+
-identifier-list         := identifier ( ',' identifier )*
 
 constant                := floating-constant
                         || integer-constant
@@ -114,16 +135,20 @@ struct-or-union-specifier
                         := struct-or-union (identifier)? '{' ( struct-declaration )+ '}'
                            struct-or-union identifier
 
-struct-or-union         := struct || union
+struct-or-union         := 'struct' || 'union'
 
-struct-declaration      := ( type-specifier || type-qualifier )+ struct-declarator (',' struct-declarator)* ';'
+struct-declaration      := ( type-specifier || type-qualifier )+ struct-declarator-list ';'
 
+struct-declarator-list  := struct-declarator
+                        || struct-declarator-list ',' struct-declarator
 struct-declarator       := declarator
                         || (declarator)? ':' constant-expr              # bit-field! why declarator is optional?
 
-enum-specifier          := enum (identifier)? '{' enumerator ( ',' enumerator )* '}'
-                        || enum identifier
+enum-specifier          := 'enum' (identifier)? '{' enumerator-list '}'
+                        || 'enum' identifier
 
+enumerator-list         := enumerator
+                        || enumerator-list ',' enumerator
 enumerator              := enumeration-constant ( '=' constant-expression )?
 
 =============== expr(completed) ===============

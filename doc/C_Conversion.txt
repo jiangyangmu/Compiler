@@ -3,8 +3,11 @@ C 类型系统 之 类型转换
 Outline
         * 代码实现
         * C 对 "自动类型转换" 的支持？
-		* C 对 "主动类型转换" 的支持？
+		    * C 对 "主动类型转换" 的支持？
         * void 类型
+
+1. 计算结果类型
+2. 插入 CastExpression 语法结点
 
 ------------------------------------------------------------------------
 代码实现
@@ -83,6 +86,15 @@ C 对 "自动类型转换" 的支持？
 
     Integer Promotions => if 'int' is large enough -> use int
                           else -> use unsigned int
+
+            definition:
+                * A char, a short int, or an int bit-field, or their signed or unsigned varieties,
+                  or an object that has enumeration type, may be used in an expression wherever
+                  an int or unsigned int may be used.
+                * If an int can represent all values of the original type, the value is converted
+                  to an int; otherwise it is converted to an unsigned int.
+                * These are called the integral promotions.
+
             apply when:
                 * in __Usual arithmetic conversions__
                 * in __Default argument promotions__
