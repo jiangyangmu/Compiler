@@ -1,162 +1,661 @@
 #pragma once
 
-#include <iostream>
-#include <stack>
-#include <cstdint>
-using namespace std;
-
-#include "lexer.h"
-#include "env.h"
 #include "codegen.h"
+// #include "env.h"
+#include "lexer.h"
 
-// XXX: all tryParse() functions return 'nullptr' on failure!!!
-// XXX: all parse() functions raise SyntaxError on failure!!!
+#include <iostream>
+#include <string>
 
-// helplers
-bool IsDeclaration(TokenType t);
-bool IsAssignOperator(TokenType t);
-bool IsUnaryOperator(TokenType t);
+class Environment {};
+class Type {};
+
+// BNF correctness
+// [expression] internal node elimination
+
+enum ESyntaxNodeType
+{
+    SN_NONE = 0UL,
+    SN_TRANSLATION_UNIT = 1UL,
+    SN_EXTERNAL_DECLARATION = (1UL << 1),
+    SN_FUNCTION_DEFINITION = (1UL << 2),
+    SN_DECLARATION = (1UL << 3),
+    SN_DECLARATION_LIST = (1UL << 4),
+    SN_INIT_DECLARATOR = (1UL << 5),
+    SN_INIT_DECLARATOR_LIST = (1UL << 6),
+    SN_DECLARATOR = (1UL << 7),
+    SN_DIRECT_DECLARATOR = (1UL << 8),
+    SN_ABSTRACT_DECLARATOR = (1UL << 9),
+    SN_DIRECT_ABSTRACT_DECLARATOR = (1UL << 10),
+    SN_INITIALIZER = (1UL << 11),
+    SN_INITIALIZER_LIST = (1UL << 12),
+    SN_PARAMETER_TYPE_LIST = (1UL << 13),
+    SN_PARAMETER_LIST = (1UL << 14),
+    SN_PARAMETER_DECLARATION = (1UL << 15),
+    SN_DECLARATION_SPECIFIERS = (1UL << 16),
+    SN_SPECIFIER_QUALIFIER_LIST = (1UL << 17),
+    SN_STORAGE_SPECIFIER = (1UL << 18),
+    SN_TYPE_QUALIFIER = (1UL << 19),
+    SN_TYPE_QUALIFIER_LIST = (1UL << 20),
+    SN_TYPE_SPECIFIER = (1UL << 21),
+    SN_STRUCT_UNION_SPECIFIER = (1UL << 22),
+    SN_ENUM_SPECIFIER = (1UL << 23),
+    SN_STRUCT_DECLARATION = (1UL << 24),
+    SN_STRUCT_DECLARATION_LIST = (1UL << 25),
+    SN_STRUCT_DECLARATOR = (1UL << 26),
+    SN_STRUCT_DECLARATOR_LIST = (1UL << 27),
+    SN_ENUMERATOR_LIST = (1UL << 28),
+    SN_ENUMERATOR = (1UL << 29),
+    SN_ENUMERATION_CONSTANT = (1UL << 30),
+    SN_TYPE_NAME = (1UL << 31),
+    SN_POINTER = (1UL << 32),
+    SN_IDENTIFIER = (1UL << 33),
+    SN_IDENTIFIER_LIST = (1UL << 34),
+    SN_TYPEDEF_NAME = (1UL << 35),
+    SN_STATEMENT = (1UL << 36),
+    SN_STATEMENT_LIST = (1UL << 37),
+    SN_LABEL_STATEMENT = (1UL << 38),
+    SN_COMPOUND_STATEMENT = (1UL << 39),
+    SN_EXPRESSION_STATEMENT = (1UL << 40),
+    SN_SELECTION_STATEMENT = (1UL << 41),
+    SN_ITERATION_STATEMENT = (1UL << 42),
+    SN_JUMP_STATEMENT = (1UL << 43),
+    SN_EXPRESSION = (1UL << 44),
+    SN_COMMA_EXPRESSION = (1UL << 45),
+    SN_ASSIGN_EXPRESSION = (1UL << 46),
+    SN_COND_EXPRESSION = (1UL << 47),
+    SN_OR_EXPRESSION = (1UL << 48),
+    SN_AND_EXPRESSION = (1UL << 49),
+    SN_BITOR_EXPRESSION = (1UL << 50),
+    SN_BITXOR_EXPRESSION = (1UL << 51),
+    SN_BITAND_EXPRESSION = (1UL << 52),
+    SN_EQ_EXPRESSION = (1UL << 53),
+    SN_REL_EXPRESSION = (1UL << 54),
+    SN_SHIFT_EXPRESSION = (1UL << 55),
+    SN_ADD_EXPRESSION = (1UL << 56),
+    SN_MUL_EXPRESSION = (1UL << 57),
+    SN_CAST_EXPRESSION = (1UL << 58),
+    SN_UNARY_EXPRESSION = (1UL << 59),
+    SN_POSTFIX_EXPRESSION = (1UL << 60),
+    SN_PRIMARY_EXPRESSION = (1UL << 61),
+    SN_ARGUMENT_EXPRESSION_LIST = (1UL << 62),
+    SN_CONST_EXPRESSION = (1UL << 63),
+};
+
+class sn_translation_unit;
+class sn_external_declaration;
+class sn_function_definition;
+class sn_declaration;
+class sn_declaration_list;
+class sn_init_declarator;
+class sn_init_declarator_list;
+class sn_declarator;
+class sn_direct_declarator;
+class sn_abstract_declarator;
+class sn_direct_abstract_declarator;
+class sn_initializer;
+class sn_initializer_list;
+class sn_parameter_type_list;
+class sn_parameter_list;
+class sn_parameter_declaration;
+class sn_declaration_specifiers;
+class sn_specifier_qualifier_list;
+class sn_storage_specifier;
+class sn_type_qualifier;
+class sn_type_qualifier_list;
+class sn_type_specifier;
+class sn_struct_union_specifier;
+class sn_enum_specifier;
+class sn_struct_declaration;
+class sn_struct_declaration_list;
+class sn_struct_declarator;
+class sn_struct_declarator_list;
+class sn_enumerator_list;
+class sn_enumerator;
+class sn_enumeration_constant;
+class sn_type_name;
+class sn_pointer;
+class sn_identifier;
+class sn_identifier_list;
+class sn_typedef_name;
+class sn_statement;
+class sn_statement_list;
+class sn_label_statement;
+class sn_compound_statement;
+class sn_expression_statement;
+class sn_selection_statement;
+class sn_iteration_statement;
+class sn_jump_statement;
+class sn_expression;
+class sn_comma_expression;
+class sn_assign_expression;
+class sn_cond_expression;
+class sn_or_expression;
+class sn_and_expression;
+class sn_bitor_expression;
+class sn_bitxor_expression;
+class sn_bitand_expression;
+class sn_eq_expression;
+class sn_rel_expression;
+class sn_shift_expression;
+class sn_add_expression;
+class sn_mul_expression;
+class sn_cast_expression;
+class sn_unary_expression;
+class sn_postfix_expression;
+class sn_primary_expression;
+class sn_argument_expression_list;
+class sn_const_expression;
 
 class SyntaxNode : public CodeGenerator
 {
+    ESyntaxNodeType node_type_;
+
    public:
-    virtual string debugString() { return "~<?~>"; }
+    SyntaxNode(ESyntaxNodeType nt = SN_NONE) : node_type_(nt)
+    {
+    }
+    ESyntaxNodeType nodeType() const
+    {
+        return node_type_;
+    }
+
+    virtual std::string debugString();
     // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
-class Expression : public SyntaxNode
-{
-   protected:
-    const TypeBase *type_;
-   public:
-    Expression() : type_(nullptr) {}
-    const TypeBase * type() const { return type_; }
-};
 
-// no instance, only dispatch
-class Statement : public SyntaxNode
+// Foundation
+class sn_translation_unit : public SyntaxNode
 {
-   public:
-    static SyntaxNode *parse(Lexer &lex, Environment *env);
-};
-class LabelStatement : public SyntaxNode
-{
-   public:
-    static SyntaxNode *parse(Lexer &lex, Environment *env);
-    virtual string debugString()
-    {
-        return "~<LabelStatement~>";
-    }
-};
-class CompoundStatement : public SyntaxNode
-{
-    vector<SyntaxNode *> stmts;
-    Environment *env;
+    sn_external_declaration *ed;
+    sn_translation_unit *left;
 
    public:
-    static SyntaxNode *parse(Lexer &lex, Environment *env, bool reuse_env = false);
-    virtual string debugString()
+    static sn_translation_unit *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
+};
+class sn_external_declaration : public SyntaxNode
+{
+    enum
     {
-        string s = "{>\n";
-        if (env) s += "@" + to_string((uintptr_t)env) + "\n";
-        for (SyntaxNode *stmt: stmts)
-        {
-            s += stmt->debugString();
-        }
-        s += "<\n}\n";
-        return s;
-    }
+        FUNCDEF,
+        DECL
+    } branch;
+    union {
+        sn_function_definition *fd;
+        sn_declaration *d;
+    } data;
+
+   public:
+    static sn_external_declaration *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
+};
+class sn_function_definition : public SyntaxNode
+{
+    sn_declaration_specifiers *s;
+    sn_declarator *d;
+    sn_declaration_list *dl;
+    sn_compound_statement *cs;
+
+   public:
+    static sn_function_definition *parse(Lexer &lex, Environment *env,
+                                         sn_declaration_specifiers *s,
+                                         sn_declarator *d);
+    virtual std::string debugString();
+};
+class sn_declaration : public SyntaxNode
+{
+    sn_declaration_specifiers *s;
+    sn_init_declarator_list *idl;
+
+   public:
+    static sn_declaration *parse(Lexer &lex, Environment *env);
+    static sn_declaration *parse(Lexer &lex, Environment *env,
+                                 sn_declaration_specifiers *s,
+                                 sn_declarator *d);
+    virtual std::string debugString();
+};
+class sn_declaration_list : public SyntaxNode
+{
+    sn_declaration *d;
+    sn_declaration_list *left;
+
+   public:
+    static sn_declaration_list *parse(Lexer &lex, Environment *env);
+    // virtual std::string debugString()
+    // {
+    //     string ds = left ? left + d->debugString()
+    //                      : "~<declaration_list~>>\n" +;
+    //     if (d) ds += d->debugString();
+    //     if (dl) ds += dl->debugString();
+    //     ds += "<\n";
+    //     return ds;
+    // }
+};
+
+// Declaration
+class sn_init_declarator : public SyntaxNode
+{
+    sn_declarator *d;
+    sn_initializer *i;
+
+   public:
+    sn_init_declarator() {}
+    sn_init_declarator(sn_declarator *_d, sn_initializer *_i) : d(_d), i(_i) {}
+    static sn_init_declarator *parse(Lexer &lex, Environment *env);
+    // virtual std::string debugString()
+    // {
+    //     string ds = "~<init_declarator~>>\n";
+    //     if (d) ds += d->debugString();
+    //     if (dl) ds += dl->debugString();
+    //     ds += "<\n";
+    //     return ds;
+    // }
+};
+class sn_init_declarator_list : public SyntaxNode
+{
+    sn_init_declarator *id;
+    sn_init_declarator_list *left;
+
+   public:
+    static sn_init_declarator_list *parse(Lexer &lex, Environment *env,
+                                          sn_init_declarator *id = nullptr);
+};
+// declarator
+class sn_declarator : public SyntaxNode
+{
+    sn_pointer *p;
+    sn_direct_declarator *dd;
+
+   public:
+    static sn_declarator *parse(Lexer &lex, Environment *env);
+};
+class sn_direct_declarator : public SyntaxNode
+{
+    enum
+    {
+        ID,
+        DECLARATOR,
+        ARRAY,
+        PARAM_LIST,
+        ID_LIST
+    } branch;
+    union {
+        sn_identifier *id;
+        sn_declarator *d;
+        sn_const_expression *arr;
+        sn_parameter_type_list *ptlist;
+        sn_identifier_list *idlist;
+    } data;
+    sn_direct_declarator *left;
+
+   public:
+    static sn_direct_declarator *parse(Lexer &lex, Environment *env,
+                                       sn_direct_declarator *left = nullptr);
+};
+class sn_abstract_declarator : public SyntaxNode
+{
+    sn_pointer *p;
+    sn_direct_abstract_declarator *dad;
+
+   public:
+    static sn_abstract_declarator *parse(Lexer &lex, Environment *env);
+};
+class sn_direct_abstract_declarator : public SyntaxNode
+{
+    enum
+    {
+        ABST_DECL,
+        ARRAY,
+        PARAM_LIST
+    } branch;
+    union {
+        sn_abstract_declarator *ad;
+        sn_const_expression *arr;
+        sn_parameter_type_list *ptlist;
+    } data;
+    sn_direct_abstract_declarator *left;
+
+   public:
+    static sn_direct_abstract_declarator *parse(
+        Lexer &lex, Environment *env,
+        sn_direct_abstract_declarator *left = nullptr);
+};
+// initializer
+class sn_initializer : public SyntaxNode
+{
+    sn_expression *e;
+    sn_initializer_list *il;
+
+   public:
+    static sn_initializer *parse(Lexer &lex, Environment *env);
+};
+class sn_initializer_list : public SyntaxNode
+{
+    sn_initializer *i;
+    sn_initializer_list *left;
+
+   public:
+    static sn_initializer_list *parse(Lexer &lex, Environment *env);
+};
+// declarator-tail
+class sn_parameter_type_list : public SyntaxNode
+{
+    sn_parameter_list *pl;
+    bool varlist;
+
+   public:
+    static sn_parameter_type_list *parse(Lexer &lex, Environment *env);
+};
+class sn_parameter_list : public SyntaxNode
+{
+    sn_parameter_declaration *pd;
+    sn_parameter_list *left;
+
+   public:
+    static sn_parameter_list *parse(Lexer &lex, Environment *env);
+};
+class sn_parameter_declaration : public SyntaxNode
+{
+    sn_declaration_specifiers *s;
+    enum
+    {
+        DECL,
+        ABST_DECL
+    } branch;
+    union {
+        sn_declarator *d;
+        sn_abstract_declarator *ad;
+    } data;
+
+   public:
+    static sn_parameter_declaration *parse(Lexer &lex, Environment *env);
+};
+
+// specifier
+class sn_declaration_specifiers : public SyntaxNode
+{
+    enum
+    {
+        STORAGE,
+        TYPE_SPEC,
+        TYPE_QUAL
+    } branch;
+    union {
+        sn_storage_specifier *ss;
+        sn_type_specifier *ts;
+        sn_type_qualifier *tq;
+    } data;
+    sn_declaration_specifiers *right;
+
+   public:
+    static sn_declaration_specifiers *parse(Lexer &lex, Environment *env);
+};
+class sn_specifier_qualifier_list : public SyntaxNode
+{
+    enum
+    {
+        TYPE_SPEC,
+        TYPE_QUAL
+    } branch;
+    union {
+        sn_type_specifier *ts;
+        sn_type_qualifier *tq;
+    } data;
+    sn_specifier_qualifier_list *right;
+
+   public:
+    static sn_specifier_qualifier_list *parse(Lexer &lex, Environment *env);
+};
+class sn_storage_specifier : public SyntaxNode
+{
+    TokenType t;
+
+   public:
+    static sn_storage_specifier *parse(Lexer &lex, Environment *env);
+};
+class sn_type_qualifier : public SyntaxNode
+{
+    TokenType t;
+
+   public:
+    static sn_type_qualifier *parse(Lexer &lex, Environment *env);
+};
+class sn_type_qualifier_list : public SyntaxNode
+{
+    sn_type_qualifier *tq;
+    sn_type_qualifier_list *left;
+
+   public:
+    static sn_type_qualifier_list *parse(Lexer &lex, Environment *env);
+};
+class sn_type_specifier : public SyntaxNode
+{
+    enum
+    {
+        TYPESPEC_SIMPLE,
+        TYPESPEC_STRUCT_UNION,
+        TYPESPEC_ENUM,
+        TYPESPEC_TYPEDEF
+    } branch;
+    union {
+        TokenType t;
+        sn_struct_union_specifier *sus;
+        sn_enum_specifier *es;
+        sn_typedef_name *tn;
+    } data;
+
+   public:
+    static sn_type_specifier *parse(Lexer &lex, Environment *env);
+};
+class sn_struct_union_specifier : public SyntaxNode
+{
+    TokenType t;  // struct or union
+    sn_identifier *tag;
+    sn_struct_declaration_list *sdl;
+
+   public:
+    static sn_struct_union_specifier *parse(Lexer &lex, Environment *env);
+};
+class sn_enum_specifier : public SyntaxNode
+{
+    sn_identifier *tag;
+    sn_enumerator_list *el;
+
+   public:
+    static sn_enum_specifier *parse(Lexer &lex, Environment *env);
+};
+// struct/union/enum definition
+class sn_struct_declaration : public SyntaxNode
+{
+    sn_specifier_qualifier_list *sql;
+    sn_struct_declarator_list *sdl;
+
+   public:
+    static sn_struct_declaration *parse(Lexer &lex, Environment *env);
+};
+class sn_struct_declaration_list : public SyntaxNode
+{
+    sn_struct_declaration *sd;
+    sn_struct_declaration_list *left;
+
+   public:
+    static sn_struct_declaration_list *parse(Lexer &lex, Environment *env);
+};
+class sn_struct_declarator : public SyntaxNode
+{
+    sn_declarator *d;
+    sn_const_expression *bit_field;
+
+   public:
+    static sn_struct_declarator *parse(Lexer &lex, Environment *env);
+};
+class sn_struct_declarator_list : public SyntaxNode
+{
+    sn_struct_declarator *sd;
+    sn_struct_declarator_list *left;
+
+   public:
+    static sn_struct_declarator_list *parse(Lexer &lex, Environment *env);
+};
+class sn_enumerator_list : public SyntaxNode
+{
+    sn_enumerator *e;
+    sn_enumerator_list *left;
+
+   public:
+    static sn_enumerator_list *parse(Lexer &lex, Environment *env);
+};
+class sn_enumerator : public SyntaxNode
+{
+    sn_enumeration_constant *ec;
+    sn_const_expression *value;
+
+   public:
+    static sn_enumerator *parse(Lexer &lex, Environment *env);
+};
+class sn_enumeration_constant
+{
+    sn_identifier *id;
+
+   public:
+    static sn_enumeration_constant *parse(Lexer &lex, Environment *env);
+};
+
+// others
+class sn_type_name : public SyntaxNode
+{
+    sn_specifier_qualifier_list *sql;
+    sn_abstract_declarator *ad;
+
+   public:
+    static sn_type_name *parse(Lexer &lex, Environment *env);
+};
+class sn_pointer : public SyntaxNode
+{
+    sn_type_qualifier_list *tql;
+    sn_pointer *right;
+
+   public:
+    static sn_pointer *parse(Lexer &lex, Environment *env);
+};
+class sn_identifier : public SyntaxNode
+{
+    Token id;
+
+   public:
+    static sn_identifier *parse(Lexer &lex, Environment *env);
+};
+class sn_identifier_list : public SyntaxNode
+{
+    sn_identifier *id;
+    sn_identifier_list *left;
+
+   public:
+    static sn_identifier_list *parse(Lexer &lex, Environment *env);
+};
+class sn_typedef_name : public SyntaxNode
+{
+    sn_identifier *i;
+
+   public:
+    static sn_typedef_name *parse(Lexer &lex, Environment *env);
+};
+
+// Statement
+class sn_statement : public SyntaxNode
+{
+   public:
+    static sn_statement *parse(Lexer &lex, Environment *env);
+};
+class sn_statement_list : public SyntaxNode
+{
+    sn_statement *s;
+    sn_statement_list *left;
+
+   public:
+    static sn_statement_list *parse(Lexer &lex, Environment *env);
+};
+class sn_label_statement : public sn_statement
+{
+    enum
+    {
+        LABEL_STAT,
+        CASE_STAT,
+        DEFAULT_STAT
+    } branch;
+    union {
+        sn_identifier *id;
+        sn_const_expression *value;
+    } data;
+    sn_statement *stat;
+
+   public:
+    static sn_statement *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
+};
+class sn_compound_statement : public sn_statement
+{
+    sn_declaration_list *dl;
+    sn_statement_list *sl;
+
+   public:
+    static sn_compound_statement *parse(Lexer &lex, Environment *env);
+    // virtual std::string debugString();
+    // {
+    //     string s = "{>\n";
+    //     if (env)
+    //         s += "@" + to_string((uintptr_t)env) + "\n";
+    //     for (SyntaxNode *stmt : stmts)
+    //     {
+    //         s += stmt->debugString();
+    //     }
+    //     s += "<\n}\n";
+    //     return s;
+    // }
     // virtual void emit(Environment *__not_used, EEmitGoal goal) const;
 };
-class ExpressionStatement : public SyntaxNode
+class sn_expression_statement : public sn_statement
 {
-    Expression *expr;
+    sn_expression *expr;
 
    public:
-    static SyntaxNode *parse(Lexer &lex, Environment *env);
-    virtual string debugString()
-    {
-        return expr->debugString();
-    }
+    static sn_statement *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
     // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
-// TODO: implement switch
-class SelectionStatement : public SyntaxNode
+class sn_selection_statement : public sn_statement
 {
-    Expression *expr;
-    SyntaxNode *stmt;
-    SyntaxNode *stmt2;
+    enum
+    {
+        IF_STAT,
+        SWITCH_STAT
+    } branch;
+    sn_expression *expr;
+    sn_statement *stmt;
+    sn_statement *stmt2;
 
    public:
-    static SyntaxNode *parse(Lexer &lex, Environment *env);
-    virtual string debugString()
-    {
-        string s;
-        // switch (type)
-        // {
-        //     case IF: s += "if"; break;
-        //     case SWITCH: s += "switch"; break;
-        //     default: break;
-        // }
-        s += "if>\n";
-        s += expr->debugString();
-        s += "<then>\n";
-        s += stmt->debugString();
-        if (stmt2)
-        {
-            s += "<else>\n";
-            s += stmt2->debugString();
-        }
-        s += "<\n";
-        return s;
-    }
+    static sn_statement *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
     // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
-class IterationStatement : public SyntaxNode
+class sn_iteration_statement : public sn_statement
 {
     typedef enum IterationType { WHILE_LOOP, DO_LOOP, FOR_LOOP } IterationType;
 
     IterationType type;
-    Expression *expr;
-    Expression *expr2;
-    Expression *expr3;
-    SyntaxNode *stmt;
+    sn_expression *expr;
+    sn_expression *expr2;
+    sn_expression *expr3;
+    sn_statement *stmt;
 
    public:
-    static SyntaxNode *parse(Lexer &lex, Environment *env);
-    virtual string debugString()
-    {
-        string s;
-        switch (type)
-        {
-            case WHILE_LOOP:
-                s += "while>\n";
-                if (expr) s += expr->debugString();
-                s += "<\ndo>\n";
-                if (stmt) s += stmt->debugString();
-                break;
-            case DO_LOOP:
-                s += "do>\n";
-                if (stmt) s += stmt->debugString();
-                s += "<\nwhile>\n";
-                if (expr) s += expr->debugString();
-                break;
-            case FOR_LOOP:
-                s += "for>\n";
-                if (expr) s += expr->debugString();
-                if (expr2) s += expr2->debugString();
-                if (expr3) s += expr3->debugString();
-                if (stmt) s += stmt->debugString();
-                break;
-            default:
-                s += ">\n";
-                break;
-        }
-        s += "<\n";
-        return s;
-    }
+    static sn_statement *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
     // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
-class JumpStatement : public SyntaxNode
+class sn_jump_statement : public sn_statement
 {
     typedef enum JumpType {
         JMP_GOTO,
@@ -166,337 +665,190 @@ class JumpStatement : public SyntaxNode
     } JumpType;
 
     JumpType type;
-    Expression *expr;
-    int id;  // for goto Label
+    union {
+        sn_identifier *id;  // for goto Label
+        sn_expression *expr;
+    } data;
+
    public:
-    static SyntaxNode *parse(Lexer &lex, Environment *env);
-    virtual string debugString()
-    {
-        string s;
-        switch (type)
-        {
-            case JMP_BREAK: s += "break"; break;
-            case JMP_CONTINUE: s += "continue"; break;
-            case JMP_GOTO: s += "goto"; break;
-            case JMP_RETURN: s += "return"; break;
-        }
-        s += ">\n";
-        if (expr) s += expr->debugString();
-        s += "<\n";
-        return s;
-    }
+    static sn_statement *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
     // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 
-class CommaExpression : public Expression
+// Expression
+class sn_expression : public SyntaxNode
 {
-    // vector<Expression *> exprs;
-    Expression *curr, *next;
+   protected:
+    const Type *type_;
 
    public:
-    static Expression *parse(Lexer &lex, Environment *env);
-    virtual string debugString()
+    sn_expression() : type_(nullptr)
     {
-        string s = ", [" + (type_ ? type_->toString() : "") + "]>\n";
-        s += curr->debugString();
-        if (next) s += next->debugString();
-        s += "<\n";
-        return s;
     }
-    // virtual void emit(Environment *env, EEmitGoal goal) const;
+    sn_expression(ESyntaxNodeType nt) : SyntaxNode(nt), type_(nullptr)
+    {
+    }
+    const Type *type() const
+    {
+        return type_;
+    }
 };
-// TODO: fix this class, only works for most cases for now
-class AssignExpression : public Expression
+class sn_comma_expression : public sn_expression
 {
-    // treat unary as condition
-    // vector<UnaryExpression *> targets;
-    Expression *target, *source;
+    sn_expression *curr, *next;
+
+   public:
+    static sn_expression *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
+};
+class sn_assign_expression : public sn_expression
+{
+    sn_expression *to, *from;  // from maybe nullptr
     TokenType op;
 
    public:
-    static Expression *parse(Lexer &lex, Environment *env);
-    virtual string debugString()
-    {
-        string s = "= [" + (type_ ? type_->toString() : "") + "]>\n";
-        // for (SyntaxNode *t : targets) s += t->debugString();
-        if (target) s += target->debugString();
-        if (source) s += source->debugString();
-        s += "<\n";
-        return s;
-    }
+    static sn_expression *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
     // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
-class CondExpression : public Expression
+class sn_cond_expression : public sn_expression
 {
-    Expression *cond;
-    Expression *left;
-    Expression *right;
+    sn_expression *cond;
+    sn_expression *left;
+    sn_expression *right;
 
    public:
-    static Expression *parse(Lexer &lex, Environment *env);
-    virtual string debugString()
-    {
-        string s = "?: [" + (type_ ? type_->toString() : "") + "]>\n";
-        if (cond) s += cond->debugString();
-        if (left) s += left->debugString();
-        if (right) s += right->debugString();
-        s += "<\n";
-        return s;
-    }
+    static sn_expression *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
     // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
-class OrExpression : public Expression
+class sn_or_expression : public sn_expression
 {
-    Expression *left, *right;
+    sn_expression *left, *right;
 
    public:
-    static Expression *parse(Lexer &lex, Environment *env);
-    virtual string debugString()
-    {
-        string s = "|| [" + (type_ ? type_->toString() : "") + "]>\n";
-        if (left) s += left->debugString();
-        if (right) s += right->debugString();
-        s += "<\n";
-        return s;
-    }
+    static sn_expression *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
     // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
-class AndExpression : public Expression
+class sn_and_expression : public sn_expression
 {
-    Expression *left, *right;
+    sn_expression *left, *right;
 
    public:
-    static Expression *parse(Lexer &lex, Environment *env);
-    virtual string debugString()
-    {
-        string s = "&& [" + (type_ ? type_->toString() : "") + "]>\n";
-        if (left) s += left->debugString();
-        if (right) s += right->debugString();
-        s += "<\n";
-        return s;
-    }
+    static sn_expression *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
     // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
-class BitOrExpression : public Expression
+class sn_bitor_expression : public sn_expression
 {
-    Expression *left, *right;
+    sn_expression *left, *right;
 
    public:
-    static Expression *parse(Lexer &lex, Environment *env);
-    virtual string debugString()
-    {
-        string s = "| [" + (type_ ? type_->toString() : "") + "]>\n";
-        if (left) s += left->debugString();
-        if (right) s += right->debugString();
-        s += "<\n";
-        return s;
-    }
+    static sn_expression *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
     // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
-class BitXorExpression : public Expression
+class sn_bitxor_expression : public sn_expression
 {
-    Expression *left, *right;
+    sn_expression *left, *right;
 
    public:
-    static Expression *parse(Lexer &lex, Environment *env);
-    virtual string debugString()
-    {
-        string s = "^ [" + (type_ ? type_->toString() : "") + "]>\n";
-        if (left) s += left->debugString();
-        if (right) s += right->debugString();
-        s += "<\n";
-        return s;
-    }
+    static sn_expression *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
     // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
-class BitAndExpression : public Expression
+class sn_bitand_expression : public sn_expression
 {
-    Expression *left, *right;
+    sn_expression *left, *right;
 
    public:
-    static Expression *parse(Lexer &lex, Environment *env);
-    virtual string debugString()
-    {
-        string s = "& [" + (type_ ? type_->toString() : "") + "]>\n";
-        if (left) s += left->debugString();
-        if (right) s += right->debugString();
-        s += "<\n";
-        return s;
-    }
+    static sn_expression *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
     // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
-class EqExpression : public Expression
+class sn_eq_expression : public sn_expression
 {
-    Expression *left, *right;
+    sn_expression *left, *right;
     TokenType op;
 
    public:
-    static Expression *parse(Lexer &lex, Environment *env);
-    virtual string debugString()
-    {
-        string s;
-        if (op == REL_EQ) s += "==";
-        else s += "!=";
-        s += " [" + (type_ ? type_->toString() : "") + "]>\n";
-        if (left) s += left->debugString();
-        if (right) s += right->debugString();
-        s += "<\n";
-        return s;
-    }
+    static sn_expression *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
     // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
-class RelExpression : public Expression
+class sn_rel_expression : public sn_expression
 {
-    Expression *left, *right;
+    sn_expression *left, *right;
     TokenType op;
 
    public:
-    static Expression *parse(Lexer &lex, Environment *env);
-    virtual string debugString()
-    {
-        string s;
-        switch (op)
-        {
-            case REL_GT: s += "~>"; break;
-            case REL_GE: s += "~>="; break;
-            case REL_LT: s += "~<"; break;
-            case REL_LE: s += "~<="; break;
-            default: break;
-        }
-        s += " [" + (type_ ? type_->toString() : "") + "]\n>\n";
-        if (left) s += left->debugString();
-        if (right) s += right->debugString();
-        s += "<\n";
-        return s;
-    }
+    static sn_expression *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
     // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
-class ShiftExpression : public Expression
+class sn_shift_expression : public sn_expression
 {
-    Expression *left, *right;
+    sn_expression *left, *right;
     TokenType op;
 
    public:
-    static Expression *parse(Lexer &lex, Environment *env);
-    virtual string debugString()
-    {
-        string s;
-        switch (op)
-        {
-            case BIT_SLEFT: s += "~<~<"; break;
-            case BIT_SRIGHT: s += "~>~>"; break;
-            default: break;
-        }
-        s += " [" + (type_ ? type_->toString() : "") + "]\n>\n";
-        if (left) s += left->debugString();
-        if (right) s += right->debugString();
-        s += "<\n";
-        return s;
-    }
+    static sn_expression *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
     // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
-class AddExpression : public Expression
+class sn_add_expression : public sn_expression
 {
-    Expression *left, *right;
+    sn_expression *left, *right;
     TokenType op;
 
    public:
-    static Expression *parse(Lexer &lex, Environment *env,
-                             Expression *left = nullptr);
-    virtual string debugString()
-    {
-        string s;
-        switch (op)
-        {
-            case OP_ADD: s += "+"; break;
-            case OP_SUB: s += "-"; break;
-            default: break;
-        }
-        s += " [" + (type_ ? type_->toString() : "") + "]\n>\n";
-        if (left) s += left->debugString();
-        if (right) s += right->debugString();
-        s += "<\n";
-        return s;
-    }
+    static sn_expression *parse(Lexer &lex, Environment *env,
+                                sn_expression *left = nullptr);
+    virtual std::string debugString();
     // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
-class MulExpression : public Expression
+class sn_mul_expression : public sn_expression
 {
-    Expression *left, *right;
+    sn_expression *left, *right;
     TokenType op;
 
    public:
-    static Expression *parse(Lexer &lex, Environment *env);
-    virtual string debugString()
-    {
-        string s;
-        switch (op)
-        {
-            case OP_MUL: s += "*"; break;
-            case OP_DIV: s += "/"; break;
-            case OP_MOD: s += "%"; break;
-            default: break;
-        }
-        s += " [" + (type_ ? type_->toString() : "") + "]\n>\n";
-        if (left) s += left->debugString();
-        if (right) s += right->debugString();
-        s += "<\n";
-        return s;
-    }
+    static sn_expression *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
 };
-class CastExpression : public Expression
+class sn_cast_expression : public sn_expression
 {
-    Expression *target;
-    bool implicit_;
+    sn_expression *from;
+    sn_type_name *to;
+    // bool implicit_;
 
    public:
-    CastExpression(const TypeBase *to, Expression *from, bool is_implicit = true)
-        : target(from), implicit_(is_implicit)
-    {
-        type_ = to;
-    }
-    static Expression *parse(Lexer &lex, Environment *env);
-    virtual string debugString()
-    {
-        string s;
-        s += implicit_ ? "imp:" : "exp:";
-        s += target ? target->type()->toString() : "<null>";
-        s += " -~> ";
-        s += type_ ? type_->toString() : "<null>";
-        s += "\n>\n";
-        if (target) s += target->debugString();
-        s += "<\n";
-        return s;
-    }
+    // sn_cast_expression(const Type *to, sn_expression *from, bool
+    // is_implicit = true)
+    //     : target(from), implicit_(is_implicit)
+    // {
+    //     type_ = to;
+    // }
+    static sn_expression *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
 };
-// TODO: finish this!
-class UnaryExpression : public Expression
+class sn_unary_expression : public sn_expression
 {
-    Expression *expr;
     TokenType op;
+    sn_expression *e;
+    sn_type_name *tn;
 
    public:
-    static Expression *parse(Lexer &lex, Environment *env);
-    virtual string debugString()
+    sn_unary_expression() : sn_expression(SN_UNARY_EXPRESSION)
     {
-        string s;
-        switch (op)
-        {
-            case OP_INC: s += "++\n"; break;
-            case OP_DEC: s += "--\n"; break;
-            case OP_MUL: s += "*\n"; break;
-            case SIZEOF: s += "sizeof\n"; break;
-            default: break;
-        }
-        s += ">\n";
-        if (expr) s += expr->debugString();
-        s += "<\n";
-        return s;
     }
+    static sn_expression *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
     // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
-// TODO: finish this!
-class PostfixExpression : public Expression
+class sn_postfix_expression : public sn_expression
 {
     typedef enum PostfixOperation {
         POSTFIX_INDEX,
@@ -507,117 +859,75 @@ class PostfixExpression : public Expression
         POSTFIX_DEC
     } PostfixOperation;
     PostfixOperation op;
-    Expression *target;
+    sn_expression *left;
     union {
-        Expression *index; // array index
-        vector<Expression *> params; // function arguments
-        StringRef member; // member id
-    };
+        sn_expression *e;  // array index
+        sn_argument_expression_list *ael;
+        sn_identifier *id;
+    } data;
 
    public:
-    PostfixExpression() : params() {}
-    static Expression *parse(Lexer &lex, Environment *env, Expression *target);
-    virtual string debugString()
-    {
-        assert( target != nullptr );
-        string s;
-        switch (op)
-        {
-            case POSTFIX_INDEX:
-                s += "[]>\n";
-                s += index->debugString();
-                break;
-            case POSTFIX_CALL:
-                s += "()>\n";
-                for (Expression *e : params)
-                    s += e->debugString();
-                break;
-            case POSTFIX_OBJECT_OFFSET:
-                s += ".>\n";
-                s += member.toString();
-                break;
-            case POSTFIX_POINTER_OFFSET:
-                s += "-~>>\n";
-                s += member.toString();
-                break;
-            case POSTFIX_INC:
-                s += "++(post)>\n";
-                break;
-            case POSTFIX_DEC:
-                s += "--(post)>\n";
-                break;
-            default:
-                break;
-        }
-        s += target->debugString();
-        s += "<\n";
-        return s;
-    }
+    static sn_expression *parse(Lexer &lex, Environment *env,
+                                sn_expression *left);
+    virtual std::string debugString();
     // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
-// TODO: finish this!
-class PrimaryExpression : public Expression
+class sn_primary_expression : public sn_expression
 {
-    friend PostfixExpression;
+    friend sn_postfix_expression;
 
+    // constant, string-literal
     Token t;
     union {
-        char cval;
-        int ival;
-        StringRef *str;
-        Symbol *symbol;
-        Expression *expr;
-    };
+        sn_identifier *id;
+        sn_expression *expr;
+    } data;
 
    public:
-    static Expression *parse(Lexer &lex, Environment *env);
-    virtual string debugString()
-    {
-        string s;
-        switch (t.type)
-        {
-            case SYMBOL:
-                s += symbol->name.toString();
-                break;
-            case CONST_INT:
-                s += to_string(ival);
-                break;
-            case STRING:
-                s += '"';
-                s += str->toString();
-                s += '"';
-                break;
-            default:
-                break;
-        }
-        s += '\n';
-        return s;
-    }
+    static sn_expression *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
     // virtual void emit(Environment *env, EEmitGoal goal) const;
 };
-class ConstExpression : public Expression
+class sn_argument_expression_list : public SyntaxNode
 {
+    sn_expression *ae;
+    sn_argument_expression_list *left;
+
    public:
-    static Token eval(CondExpression *expr);
+    static sn_argument_expression_list *parse(Lexer &lex, Environment *env);
+};
+
+class sn_const_expression : public sn_expression
+{
+    sn_expression *e;
+
+   public:
+    // Token eval();
+    static sn_const_expression *parse(Lexer &lex, Environment *env);
 };
 
 class Parser
 {
-    Environment env;
+    // Environment env;
     Lexer &lex;
+    sn_translation_unit *tu;
 
+    void __debugPrint(string &&s);
    public:
     Parser(Lexer &l) : lex(l)
     {
     }
     void parse()
     {
-        Environment::ParseGlobalDeclaration(lex, &env);
-        env.debugPrint();
-        SymbolFactory::check();
+        tu = sn_translation_unit::parse(lex, nullptr);
+        __debugPrint(tu->debugString());
+        // Environment::ParseGlobalDeclaration(lex, &env);
+        // env.debugPrint();
+        // SymbolFactory::check();
     }
     void emit()
     {
-        env.emit();
+        // env.emit();
     }
+    // Token eval();
 };

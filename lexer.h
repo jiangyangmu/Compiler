@@ -32,8 +32,6 @@ typedef enum TokenType
 
 	/* address operator */
     REFER_TO, POINT_TO,
-	/* sizeof operator */
-    OP_SIZEOF,
     /* condition operator */
     OP_QMARK, OP_COLON,
     /* comma operator */
@@ -52,10 +50,16 @@ typedef enum TokenType
 	BIT_AND, BIT_OR, BIT_XOR, BIT_NOT, BIT_SLEFT, BIT_SRIGHT
 } TokenType;
 
+typedef enum TokenTypeCategory
+{
+    TOKEN_CATEGORY_NONE = 0,
+    TOKEN_CATEGORY_ASSIGN_OPERATOR = 1,
+} TokenTypeCategory;
+
 struct Token
 {
 	TokenType type;
-    //long typeid_; // to support user defined type
+    int category;
 	union
 	{
         StringRef symbol;
@@ -118,7 +122,6 @@ struct Token
             case CONTINUE: s = "continue"; break;
             case RETURN: s = "return"; break;
             case GOTO: s = "goto"; break;
-            case OP_SIZEOF: s = "sizeof"; break;
             case OP_QMARK: s = "?"; break;
             case OP_COLON: s = ":"; break;
             case OP_COMMA: s = ","; break;
@@ -158,7 +161,7 @@ struct Token
 
             case CONST_CHAR: s = "char"; break;
             case CONST_INT: s = "int"; break;
-	        //CONST_FLOAT,
+            case CONST_FLOAT: s = "float"; break;
             case STRING: s = "string"; break;
             default: s = "unknown"; break;
         }
@@ -211,7 +214,6 @@ struct Token
             case CONTINUE: o << "continue"; break;
             case RETURN: o << "return"; break;
             case GOTO: o << "goto"; break;
-            case OP_SIZEOF: o << "sizeof"; break;
             case OP_QMARK: o << "?"; break;
             case OP_COLON: o << ":"; break;
             case OP_COMMA: o << ","; break;
@@ -251,7 +253,7 @@ struct Token
 
             case CONST_CHAR: o << "char('" << t.cval << "')"; break;
             case CONST_INT: o << "int(" << t.ival << ")"; break;
-	        //CONST_FLOAT,
+            case CONST_FLOAT: o << "float(--)"; break;
             case STRING: o << "string(\"" << t.string_ << "\")"; break;
             default: o << "unknown"; break;
         }
@@ -351,6 +353,7 @@ class Lexer
     bool _read_token(StringBuf &input, Token &t)
     {
         t.type = NONE;
+        t.category = TOKEN_CATEGORY_NONE;
 
         // handle punc & REFER_TO
         const char *str_begin, *str_end;
@@ -486,11 +489,11 @@ class Lexer
                 if (input.peak(1) == '=')
                     t.type = REL_EQ, oplen = 2;
                 else
-                    t.type = ASSIGN, oplen = 1;
+                    t.type = ASSIGN, t.category |= TOKEN_CATEGORY_ASSIGN_OPERATOR, oplen = 1;
                 break;
             case '+':
                 if (input.peak(1) == '=')
-                    t.type = ASSIGN_ADD, oplen = 2;
+                    t.type = ASSIGN_ADD, t.category |= TOKEN_CATEGORY_ASSIGN_OPERATOR, oplen = 2;
                 else if (input.peak(1) == '+')
                     t.type = OP_INC, oplen = 2;
                 else
@@ -498,7 +501,7 @@ class Lexer
                 break;
             case '-':
                 if (input.peak(1) == '=')
-                    t.type = ASSIGN_SUB, oplen = 2;
+                    t.type = ASSIGN_SUB, t.category |= TOKEN_CATEGORY_ASSIGN_OPERATOR, oplen = 2;
                 else if (input.peak(1) == '>')
                     t.type = POINT_TO, oplen = 2;
                 else if (input.peak(1) == '-')
@@ -508,19 +511,19 @@ class Lexer
                 break;
             case '*':
                 if (input.peak(1) == '=')
-                    t.type = ASSIGN_MUL, oplen = 2;
+                    t.type = ASSIGN_MUL, t.category |= TOKEN_CATEGORY_ASSIGN_OPERATOR, oplen = 2;
                 else
                     t.type = OP_MUL, oplen = 1;
                 break;
             case '/':
                 if (input.peak(1) == '=')
-                    t.type = ASSIGN_DIV, oplen = 2;
+                    t.type = ASSIGN_DIV, t.category |= TOKEN_CATEGORY_ASSIGN_OPERATOR, oplen = 2;
                 else
                     t.type = OP_DIV, oplen = 1;
                 break;
             case '%':
                 if (input.peak(1) == '=')
-                    t.type = ASSIGN_MOD, oplen = 2;
+                    t.type = ASSIGN_MOD, t.category |= TOKEN_CATEGORY_ASSIGN_OPERATOR, oplen = 2;
                 else
                     t.type = OP_MOD, oplen = 1;
                 break;
@@ -530,7 +533,7 @@ class Lexer
                 else if (input.peak(1) == '<')
                 {
                     if (input.peak(2) == '=')
-                        t.type = ASSIGN_SLEFT, oplen = 3;
+                        t.type = ASSIGN_SLEFT, t.category |= TOKEN_CATEGORY_ASSIGN_OPERATOR, oplen = 3;
                     else
                         t.type = BIT_SLEFT, oplen = 2;
                 }
@@ -543,7 +546,7 @@ class Lexer
                 else if (input.peak(1) == '>')
                 {
                     if (input.peak(2) == '=')
-                        t.type = ASSIGN_SRIGHT, oplen = 3;
+                        t.type = ASSIGN_SRIGHT, t.category |= TOKEN_CATEGORY_ASSIGN_OPERATOR, oplen = 3;
                     else
                         t.type = BIT_SRIGHT, oplen = 2;
                 }
@@ -552,7 +555,7 @@ class Lexer
                 break;
             case '&':
                 if (input.peak(1) == '=')
-                    t.type = ASSIGN_AND, oplen = 2;
+                    t.type = ASSIGN_AND, t.category |= TOKEN_CATEGORY_ASSIGN_OPERATOR, oplen = 2;
                 else if (input.peak(1) == '&')
                     t.type = BOOL_AND, oplen = 2;
                 else
@@ -560,7 +563,7 @@ class Lexer
                 break;
             case '|':
                 if (input.peak(1) == '=')
-                    t.type = ASSIGN_OR, oplen = 2;
+                    t.type = ASSIGN_OR, t.category |= TOKEN_CATEGORY_ASSIGN_OPERATOR, oplen = 2;
                 else if (input.peak(1) == '|')
                     t.type = BOOL_OR, oplen = 2;
                 else
@@ -568,7 +571,7 @@ class Lexer
                 break;
             case '^':
                 if (input.peak(1) == '=')
-                    t.type = ASSIGN_XOR, oplen = 2;
+                    t.type = ASSIGN_XOR, t.category |= TOKEN_CATEGORY_ASSIGN_OPERATOR, oplen = 2;
                 else
                     t.type = BIT_XOR, oplen = 1;
                 break;
@@ -641,23 +644,23 @@ class Lexer
         return tokens[n];
     }
 
-    void expect(TokenType t)
-    {
-        expectGet(t);
-    }
-    Token expectGet(TokenType t)
-    {
-        if (tokens.empty() || tokens[0].type != t)
-        {
-            Token tmp;
-            tmp.type = t;
-            cout << "Syntax: Expect token " << tmp << endl;
-            exit(1);
-        }
-        Token tk = tokens.front();
-        tokens.pop_front();
-        return tk;
-    }
+    // void expect(TokenType t)
+    // {
+    //     expectGet(t);
+    // }
+    // Token expectGet(TokenType t)
+    // {
+    //     if (tokens.empty() || tokens[0].type != t)
+    //     {
+    //         Token tmp;
+    //         tmp.type = t;
+    //         cout << "Syntax: Expect token " << tmp << endl;
+    //         exit(1);
+    //     }
+    //     Token tk = tokens.front();
+    //     tokens.pop_front();
+    //     return tk;
+    // }
 
     void debugPrint()
     {
