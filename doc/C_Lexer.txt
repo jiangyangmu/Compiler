@@ -2,40 +2,91 @@ C Lexer
 
 =============== Lex ===============
 
-token       := <id> | <keyword> | <const> | <string> | <operator> | <punc>
+<token>         := <keyword>
+                || <identifier>
+                || <constant>
+                || <string-literal>
+                || <operator>
+                || <punctuator>
 
-<keyword>   := auto double int struct
-               break else long switch
-               case enum register typedef
-               char extern return union
-               const float short unsigned
-               continue for signed void
-               default goto sizeof volatile
-               do if static while
+<keyword>       := auto double int struct
+                   break else long switch
+                   case enum register typedef
+                   char extern return union
+                   const float short unsigned
+                   continue for signed void
+                   default goto sizeof volatile
+                   do if static while
 
-<id>        := [_a-zA-Z][_0-9a-zA-Z]*
+<identifier>    := [_a-zA-Z][_0-9a-zA-Z]*
 
-<const>     := <int-const> | <char-const> | <float-const> | <enum-const>
-<int-const> :=
-<char-const>:= '<c-char>'
-<float-const>:=
-<enum-const>:=
+<constant>      := <floating-constant>
+                || <integer-constant>
+                || <enumeration-constant>
+                || <character-constant>
+<floating-constant>
+                := [0-9]+.[0-9]+([eE][+-]?[0-9]+)?[flFL]
+                := [0-9]+.([eE][+-]?[0-9]+)?[flFL]
+                := .[0-9]+([eE][+-]?[0-9]+)?[flFL]
+                || [0-9]+([eE][+-]?[0-9]+)[flFL]
+<integer-constant>
+                := [1-9][0-9]*([uU]?[lL]?|[lL]?|[uU]?)
+                || 0[0-7]*([uU]?[lL]?|[lL]?|[uU]?)
+                || 0[xX][0-9a-fA-F]+([uU]?[lL]?|[lL]?|[uU]?)
+<enumeration-constant>
+                := <identifier>
+<character-const>
+                := '<c-char>+'
+                || L'<c-char>+'
+<c-char>        := any char except ' \ new-line
+                || <escape-sequence>
 
-<string>    := '<c-char>*'
+<string-literal>:= "<s-char>*"
+                || L"<s-char>*"
+<s-char>        := any char except " \ new-line
+                || <escape-sequence>
 
-<operator>  := ..............
-<float-const>:=
-<enum-const>:=
-<addr-op>   := '.' | '->'
-<sizeof-op> := 'sizeof'
-<inc-op>    := '++'
-<dec-op>    := '--'
-<bit-op>    := '&' | '|' | '^' | '~' | '<<' | '>>'
-<bool-op>   := '&&' | '||' | '!'
-<assign-op> := '=' | '+=' | '-=' | '*=' | '/=' | '%=' | '<<=' | '>>=' | '&=' | '^=' | '|='
-<arith-op>  := '+' | '-' | '*' | '/' | '%'
-<rel-op>    := '<' | '>' | '<=' | '>=' | '==' | '!='
-<cond-op>   := '?' | ':'
-<comma-op>  := ','
+<escape-sequence>
+                := <simple-escape-sequence>
+                || <octal-escape-sequence>
+                || <hexadecimal-escape-sequence>
+<simple-escape-sequence>
+                := \' \" \? \\ \a \b \f \n \r \t \v
+<octal-escape-sequence>
+                := \[0-7]{1,3}
+<hexadecimal-escape-sequence>
+                := \x[0-9a-fA-F]+
 
-<punc>      := '(' | ')' | '[' | ']' | '{' | '}' | ';' | '...'
+## Operator Category
+# [ ] ( ) . ->
+# ++ -- & * + - ~ ! sizeof
+# / % << >> < > <= >= == != ^ | && || ? :
+# = *= /= %= += -= <<= >>= &= ^= |= , # ##
+<addr-op>       := '.' | '->'
+<inc-op>        := '++'
+<dec-op>        := '--'
+<bit-op>        := '&' | '|' | '^' | '~' | '<<' | '>>'
+<bool-op>       := '&&' | '||' | '!'
+<assign-op>     := '=' | '+=' | '-=' | '*=' | '/=' | '%=' | '<<=' | '>>=' | '&=' | '^=' | '|='
+<arith-op>      := '+' | '-' | '*' | '/' | '%'
+<rel-op>        := '<' | '>' | '<=' | '>=' | '==' | '!='
+<cond-op>       := '?' | ':'
+<comma-op>      := ','
+
+## Operator Token
+<operator>      := '.' | '->'
+                || '++' | '--'
+                || '&' | '|' | '^' | '~' | '<<' | '>>'
+                || '&&' | '||' | '!'
+                || '=' | '+=' | '-=' | '*=' | '/=' | '%=' | '<<=' | '>>=' | '&=' | '^=' | '|='
+                || '+' | '-' | '*' | '/' | '%'
+                || '<' | '>' | '<=' | '>=' | '==' | '!='
+                || '?' | ':'
+                || ','
+
+## Punctuator Category
+# [ ] ( ) { } * , : = ; ... #
+
+## Punctuator Token
+<punctuator>    := '(' | ')' | '[' | ']' | '{' | '}' | ';' | '...'
+
