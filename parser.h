@@ -7,8 +7,12 @@
 #include <iostream>
 #include <string>
 
-class Environment {};
-class Type {};
+class Environment
+{
+};
+class Type
+{
+};
 
 // BNF correctness
 // [expression] internal node elimination
@@ -168,11 +172,12 @@ class SyntaxNode : public CodeGenerator
 class sn_translation_unit : public SyntaxNode
 {
     sn_external_declaration *ed;
-    sn_translation_unit *left;
+    sn_translation_unit *right;
 
    public:
     static sn_translation_unit *parse(Lexer &lex, Environment *env);
     virtual std::string debugString();
+    virtual void emit(Environment *env, EEmitGoal goal) const;
 };
 class sn_external_declaration : public SyntaxNode
 {
@@ -218,19 +223,11 @@ class sn_declaration : public SyntaxNode
 class sn_declaration_list : public SyntaxNode
 {
     sn_declaration *d;
-    sn_declaration_list *left;
+    sn_declaration_list *right;
 
    public:
     static sn_declaration_list *parse(Lexer &lex, Environment *env);
-    // virtual std::string debugString()
-    // {
-    //     string ds = left ? left + d->debugString()
-    //                      : "~<declaration_list~>>\n" +;
-    //     if (d) ds += d->debugString();
-    //     if (dl) ds += dl->debugString();
-    //     ds += "<\n";
-    //     return ds;
-    // }
+    virtual std::string debugString();
 };
 
 // Declaration
@@ -240,26 +237,24 @@ class sn_init_declarator : public SyntaxNode
     sn_initializer *i;
 
    public:
-    sn_init_declarator() {}
-    sn_init_declarator(sn_declarator *_d, sn_initializer *_i) : d(_d), i(_i) {}
+    sn_init_declarator()
+    {
+    }
+    sn_init_declarator(sn_declarator *_d, sn_initializer *_i) : d(_d), i(_i)
+    {
+    }
     static sn_init_declarator *parse(Lexer &lex, Environment *env);
-    // virtual std::string debugString()
-    // {
-    //     string ds = "~<init_declarator~>>\n";
-    //     if (d) ds += d->debugString();
-    //     if (dl) ds += dl->debugString();
-    //     ds += "<\n";
-    //     return ds;
-    // }
+    virtual std::string debugString();
 };
 class sn_init_declarator_list : public SyntaxNode
 {
     sn_init_declarator *id;
-    sn_init_declarator_list *left;
+    sn_init_declarator_list *right;
 
    public:
     static sn_init_declarator_list *parse(Lexer &lex, Environment *env,
                                           sn_init_declarator *id = nullptr);
+    virtual std::string debugString();
 };
 // declarator
 class sn_declarator : public SyntaxNode
@@ -269,6 +264,7 @@ class sn_declarator : public SyntaxNode
 
    public:
     static sn_declarator *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
 };
 class sn_direct_declarator : public SyntaxNode
 {
@@ -278,7 +274,7 @@ class sn_direct_declarator : public SyntaxNode
         DECLARATOR,
         ARRAY,
         PARAM_LIST,
-        ID_LIST
+        ID_LIST // maybe empty, thus idlist == nullptr
     } branch;
     union {
         sn_identifier *id;
@@ -287,11 +283,12 @@ class sn_direct_declarator : public SyntaxNode
         sn_parameter_type_list *ptlist;
         sn_identifier_list *idlist;
     } data;
-    sn_direct_declarator *left;
+    sn_direct_declarator *right;
 
    public:
     static sn_direct_declarator *parse(Lexer &lex, Environment *env,
-                                       sn_direct_declarator *left = nullptr);
+                                       bool head = true);
+    virtual std::string debugString();
 };
 class sn_abstract_declarator : public SyntaxNode
 {
@@ -300,6 +297,7 @@ class sn_abstract_declarator : public SyntaxNode
 
    public:
     static sn_abstract_declarator *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
 };
 class sn_direct_abstract_declarator : public SyntaxNode
 {
@@ -314,12 +312,12 @@ class sn_direct_abstract_declarator : public SyntaxNode
         sn_const_expression *arr;
         sn_parameter_type_list *ptlist;
     } data;
-    sn_direct_abstract_declarator *left;
+    sn_direct_abstract_declarator *right;
 
    public:
-    static sn_direct_abstract_declarator *parse(
-        Lexer &lex, Environment *env,
-        sn_direct_abstract_declarator *left = nullptr);
+    static sn_direct_abstract_declarator *parse(Lexer &lex, Environment *env,
+                                                bool head = true);
+    virtual std::string debugString();
 };
 // initializer
 class sn_initializer : public SyntaxNode
@@ -329,14 +327,16 @@ class sn_initializer : public SyntaxNode
 
    public:
     static sn_initializer *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
 };
 class sn_initializer_list : public SyntaxNode
 {
     sn_initializer *i;
-    sn_initializer_list *left;
+    sn_initializer_list *right;
 
    public:
     static sn_initializer_list *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
 };
 // declarator-tail
 class sn_parameter_type_list : public SyntaxNode
@@ -346,14 +346,16 @@ class sn_parameter_type_list : public SyntaxNode
 
    public:
     static sn_parameter_type_list *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
 };
 class sn_parameter_list : public SyntaxNode
 {
     sn_parameter_declaration *pd;
-    sn_parameter_list *left;
+    sn_parameter_list *right;
 
    public:
     static sn_parameter_list *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
 };
 class sn_parameter_declaration : public SyntaxNode
 {
@@ -370,6 +372,7 @@ class sn_parameter_declaration : public SyntaxNode
 
    public:
     static sn_parameter_declaration *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
 };
 
 // specifier
@@ -390,6 +393,7 @@ class sn_declaration_specifiers : public SyntaxNode
 
    public:
     static sn_declaration_specifiers *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
 };
 class sn_specifier_qualifier_list : public SyntaxNode
 {
@@ -406,6 +410,7 @@ class sn_specifier_qualifier_list : public SyntaxNode
 
    public:
     static sn_specifier_qualifier_list *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
 };
 class sn_storage_specifier : public SyntaxNode
 {
@@ -413,6 +418,7 @@ class sn_storage_specifier : public SyntaxNode
 
    public:
     static sn_storage_specifier *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
 };
 class sn_type_qualifier : public SyntaxNode
 {
@@ -420,14 +426,16 @@ class sn_type_qualifier : public SyntaxNode
 
    public:
     static sn_type_qualifier *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
 };
 class sn_type_qualifier_list : public SyntaxNode
 {
     sn_type_qualifier *tq;
-    sn_type_qualifier_list *left;
+    sn_type_qualifier_list *right;
 
    public:
     static sn_type_qualifier_list *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
 };
 class sn_type_specifier : public SyntaxNode
 {
@@ -447,6 +455,7 @@ class sn_type_specifier : public SyntaxNode
 
    public:
     static sn_type_specifier *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
 };
 class sn_struct_union_specifier : public SyntaxNode
 {
@@ -456,6 +465,7 @@ class sn_struct_union_specifier : public SyntaxNode
 
    public:
     static sn_struct_union_specifier *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
 };
 class sn_enum_specifier : public SyntaxNode
 {
@@ -464,6 +474,7 @@ class sn_enum_specifier : public SyntaxNode
 
    public:
     static sn_enum_specifier *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
 };
 // struct/union/enum definition
 class sn_struct_declaration : public SyntaxNode
@@ -473,14 +484,16 @@ class sn_struct_declaration : public SyntaxNode
 
    public:
     static sn_struct_declaration *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
 };
 class sn_struct_declaration_list : public SyntaxNode
 {
     sn_struct_declaration *sd;
-    sn_struct_declaration_list *left;
+    sn_struct_declaration_list *right;
 
    public:
     static sn_struct_declaration_list *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
 };
 class sn_struct_declarator : public SyntaxNode
 {
@@ -489,22 +502,25 @@ class sn_struct_declarator : public SyntaxNode
 
    public:
     static sn_struct_declarator *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
 };
 class sn_struct_declarator_list : public SyntaxNode
 {
     sn_struct_declarator *sd;
-    sn_struct_declarator_list *left;
+    sn_struct_declarator_list *right;
 
    public:
     static sn_struct_declarator_list *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
 };
 class sn_enumerator_list : public SyntaxNode
 {
     sn_enumerator *e;
-    sn_enumerator_list *left;
+    sn_enumerator_list *right;
 
    public:
     static sn_enumerator_list *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
 };
 class sn_enumerator : public SyntaxNode
 {
@@ -513,6 +529,7 @@ class sn_enumerator : public SyntaxNode
 
    public:
     static sn_enumerator *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
 };
 class sn_enumeration_constant
 {
@@ -520,6 +537,7 @@ class sn_enumeration_constant
 
    public:
     static sn_enumeration_constant *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
 };
 
 // others
@@ -530,6 +548,7 @@ class sn_type_name : public SyntaxNode
 
    public:
     static sn_type_name *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
 };
 class sn_pointer : public SyntaxNode
 {
@@ -538,6 +557,7 @@ class sn_pointer : public SyntaxNode
 
    public:
     static sn_pointer *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
 };
 class sn_identifier : public SyntaxNode
 {
@@ -545,14 +565,16 @@ class sn_identifier : public SyntaxNode
 
    public:
     static sn_identifier *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
 };
 class sn_identifier_list : public SyntaxNode
 {
     sn_identifier *id;
-    sn_identifier_list *left;
+    sn_identifier_list *right;
 
    public:
     static sn_identifier_list *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
 };
 class sn_typedef_name : public SyntaxNode
 {
@@ -560,6 +582,7 @@ class sn_typedef_name : public SyntaxNode
 
    public:
     static sn_typedef_name *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
 };
 
 // Statement
@@ -571,7 +594,7 @@ class sn_statement : public SyntaxNode
 class sn_statement_list : public SyntaxNode
 {
     sn_statement *s;
-    sn_statement_list *left;
+    sn_statement_list *right;
 
    public:
     static sn_statement_list *parse(Lexer &lex, Environment *env);
@@ -601,18 +624,7 @@ class sn_compound_statement : public sn_statement
 
    public:
     static sn_compound_statement *parse(Lexer &lex, Environment *env);
-    // virtual std::string debugString();
-    // {
-    //     string s = "{>\n";
-    //     if (env)
-    //         s += "@" + to_string((uintptr_t)env) + "\n";
-    //     for (SyntaxNode *stmt : stmts)
-    //     {
-    //         s += stmt->debugString();
-    //     }
-    //     s += "<\n}\n";
-    //     return s;
-    // }
+    virtual std::string debugString();
     // virtual void emit(Environment *__not_used, EEmitGoal goal) const;
 };
 class sn_expression_statement : public sn_statement
@@ -891,7 +903,7 @@ class sn_primary_expression : public sn_expression
 class sn_argument_expression_list : public SyntaxNode
 {
     sn_expression *ae;
-    sn_argument_expression_list *left;
+    sn_argument_expression_list *right;
 
    public:
     static sn_argument_expression_list *parse(Lexer &lex, Environment *env);
@@ -904,6 +916,7 @@ class sn_const_expression : public sn_expression
    public:
     // Token eval();
     static sn_const_expression *parse(Lexer &lex, Environment *env);
+    virtual std::string debugString();
 };
 
 class Parser
@@ -913,6 +926,7 @@ class Parser
     sn_translation_unit *tu;
 
     void __debugPrint(string &&s);
+
    public:
     Parser(Lexer &l) : lex(l)
     {

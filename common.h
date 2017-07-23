@@ -366,6 +366,10 @@ using namespace std;
             assert(false), Token())                                           \
          : lex.getNext())
 
+#define SKIP(token_type)                                     \
+    (lex.hasNext() && lex.peakNext().type == (token_type) && \
+     lex.getNext().type == (token_type))
+
 #define EXPECT_TYPE_IS(ptr, type_)                                            \
     do                                                                        \
     {                                                                         \
