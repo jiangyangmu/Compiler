@@ -1,0 +1,314 @@
+知识补充
+    > code generation
+        > floating 运算系统
+        > x64 Instruction Selection
+            有哪些指令？
+        > x64 Register Allocation
+            有哪些寄存器？各自有什么使用限制？
+
+-------------------------------------------------------------------------------
+
++ full PP support.
+    ...
+
++ full lex support [C_Lexer.txt]
+    ...
+    [-] ensure lexical correctness
+        > all tokens are valid
+
++ full syntax support [C_Syntax.txt]
+    [x] ensure BNF correctness
+        > can find a derivation (syntax tree exists)
+
++ full semantics support
+    [-] ensure semantics correctness
+        > align to c89 standard
+    [!] collect information in parsing
+        > environment
+            * declaration: build symbol table
+            * reference: resolve symbol binding
+
++ full code generation support [C_x64.txt]
+    [!] assembly code generation
+        > declaration => data
+        > function body => code
+
++ more
+    front-end features
+        [ ] user: error report
+    std library
+
+-------------------------------------------------------------------------------
+ensure lexical correctness
+    > regular expression engine
+
+    [Regular Expression Engine]
+    syntax:
+    impl:
+
+-------------------------------------------------------------------------------
+ensure BNF correctness
+    > recursive-descent parsing [done]
+    > output syntax tree
+
+    [DEMO]
+    declaration
+        type
+        obj
+    function definition
+        declaration
+        statement
+        expression
+
+-------------------------------------------------------------------------------
+ensure semantics correctness
+
+[Task]
+
+    Syntax Check
+        * symbol: name confict, undefined name
+        * type: specific constrains,
+                type in assignment (implicit conversion or invalid),
+                type in expression (implicit conversion or invalid)
+        * object: NONE
+
+    Information Collection:
+        * symbol: name, scope, linkage, namespace
+        * type: ???
+        * object: size, linkage, location, const/volatile
+
+[Solution]
+// Syntax from C89 doc //
+
+    [Type System]
+    类型的表示&构造的约束 (declaration) ，可执行的行为 (conversion, expression)
+    Type, Type Categories & Properties, Representation, Alignment, Type in Expression
+
+        Type:
+            void - an incomplete type that cannot be completed.
+            char - large enough to store any member of the basic execution character set
+                common character value is guaranteed to be positive (2.2.1)
+                uncommon character value is implementation-defined: either signed or nonnegative integers
+            signed integer - signed char, short int, int, long int
+                sizeof(signed char) == sizeof(char)
+                sizeof(int) natural size suggested by the architecture (<limits.h>)
+                range(signed char) <= range(short int) <= range(int) <= range(long int)
+            unsigned integer - ...
+                same size and alignment as unsigned integer.
+                A computation involving unsigned operands can never overflow, because a result that cannot be represented by the resulting unsigned integer type is reduced modulo the number that is one greater than the largest value that can be represented by the resulting unsigned integer type.
+            floating - float, double, long double
+            enum - treated as unique enumerated, integer type
+            array - a contiguously allocated set of objects with a particular member object type
+                element type + number of members
+            struct - a sequentially allocated set of member objects
+            union - an overlapping set of member objects
+            function - a function with specified return type
+                return type + param list
+            pointer
+
+        Type Categories & Properties:
+            <根据特性分为一类：某些共同行为>
+            basic = char/signed integer/unsigned integer/floating
+            character = char/signed char/unsigned char
+            enumerated = enum
+            derived = array/struct/union/function/pointer
+            derived declarator = array/function/pointer
+                array of T, function returning T, pointer to T
+            aggregate = array/struct
+            integral = char/signed integer/unsigned integer/enumerated
+            arithmetic = integral/floating
+            scalar = arithmetic/pointer
+            <自身属性：大小，可否读写>
+            incomplete = size unknown (...)
+                array no size
+                struct/union tag no content
+            qualified = top type is specified with a type qualifier
+                unqualified type = top type remove type qualifiers
+                'const'/'volatile'
+            <两个类型之间：融合>
+            compatible = if their types are the same. Additional rules for determining whether two types are compatible are described in 3.5.2 for type specifiers, in 3.5.3 for type qualifiers, and in 3.5.4 for declarators.
+                         two structure, union, or enumeration types declared in separate translation units are compatible if they have the same number of members, the same member names, and compatible member types; for two structures, the members shall be in the same order; for two enumerations, the members shall have the same values.
+            composite = constructed from two types that are compatible
+                If one type is an array of known size, the composite type is an array of that size.
+                If only one type is a function type with a parameter type list (a function prototype), the composite type is a function prototype with the parameter type list.
+                If both types have parameter type lists, the type of each parameter in the composite parameter type list is the composite type of the corresponding parameters.
+                These rules apply recursively to the types from which the two types are derived.
+                For an identifier with external or internal linkage declared in the same scope as another declaration for that identifier, the type of the identifier becomes the composite type.
+                <used by linkage merge>
+
+            * undefined: All declarations that refer to the same object or function shall have compatible type; otherwise the behavior is undefined.
+
+        Representation
+            integral: define values by use of a pure binary numeration system.
+            floating: unspecified
+            repr(void *) == repr(char *)
+
+        Alignment
+            align(void *) == align(char *)
+
+        Type in Expression
+
+            [lvalue] expression that donates an object
+                > can get address
+                > can assign
+            [prototype]
+
+            Expression - a sequence of operators and operands that specifies computation of a value,
+                         or that designates an object or a function,
+                         or that generates side effects,
+                         or that performs a combination thereof.
+
+                Write once: Between the previous and next sequence point an object shall have its stored value modified at most once by the evaluation of an expression. Furthermore, the prior value shall be accessed only to determine the value to be stored. (?)
+
+                Evaluation Order and Side Effect: Except as indicated by the syntax27 or otherwise specified later (for the function-call operator () , && , || , ?: , and comma operators), the order of evaluation of subexpressions and the order in which side effects take place are both unspecified.
+
+                Lvalue Compatibility: An object shall have its stored value accessed only by an lvalue that has one of the following types: (?)
+                    * the declared type of the object,
+                    * a qualified version of the declared type of the object,
+                    * a type that is the signed or unsigned type corresponding to the declared type of the object,
+                    * a type that is the signed or unsigned type corresponding to a qualified version of the declared type of the object,
+                    * an aggregate or union type that includes one of the aforementioned types among its members (including, recursively, a member of a subaggregate or contained union), or
+                    * a character type.
+
+                * implementation-defined: Some operators (the unary operator ~ , and the binary operators << , >> , & , ^ , and | , collectively described as bitwise operators )shall have operands that have integral type. These operators return values that depend on the internal representations of integers, and thus have implementation-defined aspects for signed types.
+                * undefined behavior: If an exception occurs during the evaluation of an expression (that is, if the result is not mathematically defined or not representable), the behavior is undefined.
+
+            Primary-Expression
+                if is identifier, it must be an object (is an lvalue) or a function (is a function designator)
+            Postfix-Expression
+                array-subscripting:
+                                <pointer-to-obj> '[' <integral-type> ']'
+                                E1[E2] is identical to (*(E1+(E2))), because conversion rules of '+', array[i] works
+                function-calls: <pointer-to-func> '(' <arg-list> ')'
+
+                                arguments match parameters
+
+                                default no-param function declaration: 'extern' 'int' identifier();
+
+                                default argument promotion: If the expression that denotes the called function has a type that does not include a prototype, the integral promotions are performed on each argument and arguments that have type float are promoted to double. (未定义接口的函数：执行默认参数提升)
+
+                                argument conversion: If the expression that denotes the called function has a type that includes a prototype, the arguments are implicitly converted, as if by assignment, to the types of the corresponding parameters. The ellipsis notation in a function prototype declarator causes argument type conversion to stop after the last declared parameter. The default argument promotions are performed on trailing arguments. (参数传递规则，变长参数自动提升类型)
+
+                                No other conversions are performed implicitly; in particular, the number and types of arguments are not compared with those of the parameters in a function definition that does not include a function prototype declarator. (?)
+
+                                The order of evaluation of the function designator, the arguments, and subexpressions within the arguments is unspecified, but there is a sequence point before the actual call. (参数估值顺序未知，但调用前必须全部计算完毕)
+
+                                Recursive function calls shall be permitted, both directly and indirectly through any chain of other functions. (支持递归)
+
+                                * undefined behavior: count(argument) != count(parameter)
+                                * undefined behavior: the function is defined with a type that does not include a prototype, and the types of the arguments after promotion are not compatible with those of the parameters after promotion.
+                                * undefined behavior: the function is defined with a type that includes a prototype, and the types of the arguments after promotion are not compatible with the types of the parameters, or if the prototype ends with an ellipsis ( ", ..." ). (?)
+                                * undefined behavior: If the function is defined with a type that is not compatible with the type (of the expression) pointed to by the expression that denotes the called function, the behavior is undefined.
+                structure and union members:
+                                <object> '.' <member>
+                                <pointer-to-object> '->' <member>
+
+                                '.': <member> is an lvalue if the first expression is an lvalue.
+                                '.': <member> is qualified as the first expression.
+                                '->': <member> is an lvalue
+                                '->': <member> is qualified as the first expression.
+
+                                union: With one exception, if a member of a union object is accessed after a value has been stored in a different member of the object, the behavior is implementation-defined.33 One special guarantee is made in order to simplify the use of unions: If a union contains several structures that share a common initial sequence, and if the union object currently contains one of these structures, it is permitted to inspect the common initial part of any of them. Two structures share a common initial sequence if corresponding members have compatible types for a sequence of one or more initial members. (union)
+                postfix increment and decrement operators:
+                                <scalar-type and modifiable lvalue> '++ --'
+                                [see additive operators and compound assignment for constraints, side effects, etc.]
+            Unary-Expression
+                prefix increment and decrement operators:
+                                '++ --' <scalar-type and modifiable lvalue>
+                                [see additive operators and compound assignment for constraints, side effects, etc.]
+                address and indirection operators
+                                '&' <a function designator or an lvalue that designates an object that is not a bit-field and is not declared with the register storage-class specifier>
+                                '*' <pointer-type>
+
+                                '*': <expr> is pointer to function, return function designator
+                                     <expr> is pointer to object, return lvalue of object
+                                * undefined behavior: indirect pointer with invalid value.
+                unary arithmetic operators
+                                '+ -' <arithmetic-type>
+                                '~' <integral-type>
+                                '!' <scalar-type>
+
+                                '+ - ~': integral promotion is performed on the operand, and the result has the promoted type.
+                                '!': has type int, equal to 0 or 1
+                the sizeof operator
+                                'sizeof' <not function type or incomplete type, to the parenthesized name of such a type, or to an lvalue that designates a bit-field object>
+                                'sizeof': yields the size (in bytes) of its operand's type, is not itself evaluated.
+                                          result is an integer constant, of type size_t (an unsigned integral type).
+                                sizeof(char, unsigned char, signed char) == 1
+                                sizeof(array) == sizeof(T) * N
+                                sizeof(struct/union) == total bytes in memory
+            Cast-Expression
+                                '(' 'void' ')' <expr>
+                                '(' <scalar-type> ')' <scalar-type>
+
+                                rules: [3.3.4]
+
+    [Storage System]
+    存储资源管理
+
+        Object:
+            storage duration, location
+
+        storage duration: how long to keep objects?
+            static - storage is reserved, exists and retains its last-stored value throughout the execution of the entire program.
+                     initialized only once, prior to program startup.
+                internal linkage OR external linkage OR 'static'
+            automatic - storage is reserved for a new instance of such an object on each normal entry into the block in which it is declared, or on a jump from outside the block to a label in the block or in an enclosed block. And is no longer guaranteed to be reserved when execution of the block ends in any way.
+                        initialization (if exists) is performed on each normal entry, but not if the block is entered by a jump to a label.
+                no linkage AND no 'static'
+
+        * implementation-defined limits: restrict the significance of an external name (an identifier that has external linkage) to six characters and may ignore distinctions of alphabetical case for such names
+        * undefined behavior: The implementation shall treat at least the first 31 characters of an internal name (a macro name or an identifier that does not have external linkage) as significant. Any identifiers that differ in a significant character are different identifiers. If two identifiers differ in a non-significant character, the behavior is undefined.
+        * indeterminate: The value of a pointer that referred to an object with automatic storage duration that is no longer guaranteed to be reserved is indeterminate.
+
+
+    [Environment System]
+    符号管理
+
+        Symbol:
+            name, scope, linkage, namespace
+
+        name:
+            object(arithmatic, pointer, array, func)
+            struct/union/enum tag
+            struct/union-member
+            enum-constant
+            function-param
+            typedef name
+            label name
+            (or) macro name, macro parameter
+
+        scope: visibility of identifier
+            function - label only
+                all function
+            file - global decls, function returned types
+                <start> -> file end
+            block - in { ...here.. } or func( ...here... ) {...}
+                <start> -> block end
+            function prototype - in func( ...here... );
+                decl end;
+            <start>:
+                tag/enum-const -> after itself
+                id -> after its declarator
+            * outer layer name hidden
+
+        linkage: treat identifiers in different scopes or in the same scope as the same object or function
+            external - the same in whole program
+            internal - the same in one translation unit
+            none - unique
+            rules
+                file scope + 'static' => internal
+                'extern' + file scope has the same object with linkage L => L
+                'extern' + no file scope decl => external
+                function object default => like add 'extern' in effect
+                file scope object default => external
+                not object or function => none
+                function parameters => none
+                block scope object without 'extern' => none
+            * undefined: within a translation unit, the same identifier appears with both internal and external linkage.
+
+        namespace: separate name spaces for various categories of identifiers
+            label
+            tag
+            struct/union members
+            id (object, enum-constant, typedef-name)

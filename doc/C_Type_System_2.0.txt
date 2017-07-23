@@ -1,0 +1,120 @@
+Type System 2.0
+
+type representation
+type construction
+type actions
+type conversion
+
+1. type representation (size, layout, alignment)
+
+    void
+    char
+    unsigned char
+    signed char
+    (signed) short (int)
+    unsigned short (int)
+    (signed) (int)
+    unsigned (int)
+    (signed) long (int)
+    unsigned long (int)
+    float
+    double
+    long double
+
+    enum
+    array
+    struct
+    union
+    function
+    pointer
+
+    typedef
+    label
+
+    // implementation
+        struct TypeRepr {
+            size_t size;
+            size_t alignment;
+        };
+
+2. type construction (incomplete, qualified - const/volatile, lvalue)
+
+    enum
+        constrains: NONE
+        incomplete: after '}'
+    array
+        constrains: N is non-negative constant expr,
+                    T must be complete.
+        incomplete: T is complete && N exists
+    struct/union
+        constrains: members are all complete
+        incomplete: after '}'
+    function
+        declaration constrains: NONE
+        definition constrains: return type and param types all complete before '{',
+                               R is not array/function type,
+                               Array parameter decays to pointer. (still must be a valid array declaration),
+                               Struct/Union/Enum tag declared as parameter are in file scope.
+        definition complete: after '}'
+    pointer
+        constrains: NONE
+        incomplete: always
+    typedef
+        constrains: NONE
+        incomplete: same as T
+    label
+        constrains: NONE
+        incomplete: after appear
+
+    // implementation
+        struct TypeProp {
+            int flags; // incomplete,const,volatile,lvalue
+        };
+        struct Type {
+            EType type;
+            TypeRepr repr;
+            TypeProp prop;
+        };
+        struct PointerType : Type {
+            struct Type * T;
+        };
+        struct ArrayType : Type {
+            struct Type *T;
+            size_t N;
+        };
+        struct FunctionType : Type {
+            struct Type * T;
+            vector<struct Type *> param_types;
+        };
+        struct EnumType : Type {
+            string tag;
+        };
+        struct StructType : Type {
+            string tag;
+        };
+        struct TypedefType : Type {
+            string name;
+        };
+        struct LabelType : Type {};
+        // tag definition
+        struct StructTypeImpl : Type {
+            vector<string> member_names;
+            vector<struct Type *> member_types;
+        };
+        struct EnumTypeImpl : Type {};
+        struct TypedefTypeImpl : Type {
+            struct Type *type;
+        };
+
+3. type actions & category (integral, arithmetic, scalar, 传递 2 的属性)
+
+    Expression
+
+    // implementation
+        struct TypeProp {
+            int flags; // integral, arithmetic, scalar, ...
+        };
+
+4. type conversion (compatible, composite, 传递 2 的属性)
+
+    Conversion

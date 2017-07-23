@@ -70,7 +70,7 @@ visibility: .hidden, .internal, .protected
 
 
 
----------- 代码图 ----------
+---------- 代码图/指令选择 ----------
 
 prologue
     pushq %rbp
