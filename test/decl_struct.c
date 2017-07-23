@@ -8,11 +8,11 @@ struct simple
 struct Node
 {
     struct Node *next;
-};
+} node;
 struct FN
 {
     struct FN (*p)();
-};
+} fn;
 
 // struct members: css scope
 struct _s
