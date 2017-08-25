@@ -1,19 +1,22 @@
+#define HAS_LEXER
+
+#include "parser.h"
+
+#include "common.h"
+// #include "convert.h"
+#include "env.h"
+#include "lexer.h"
+#include "symbol.h"
+#include "type.h"
+
 // #include <iostream>
 #include <cstdint>
 #include <map>
 #include <string>
 // using namespace std;
 
-#define HAS_LEXER
-
-#include "common.h"
-// #include "convert.h"
-// #include "env.h"
-#include "lexer.h"
-#include "parser.h"
-
 // TODO: check if symbol is typedef-name
-bool first(uint64_t types, Token t, Environment *env)
+bool first(uint64_t types, Token t)
 {
     static std::map<TokenType, uint64_t> m;
     if (m.empty())
@@ -72,7 +75,8 @@ bool follow(uint64_t types, TokenType t)
     static std::map<TokenType, uint64_t> m;
     if (m.empty())
     {
-        m[RP] = SN_TYPE_NAME | SN_PARAMETER_TYPE_LIST;
+        m[RP] =
+            SN_TYPE_NAME | SN_PARAMETER_TYPE_LIST | SN_PARAMETER_DECLARATION;
         m[OP_COMMA] = SN_PARAMETER_DECLARATION;
     }
     auto kv = m.find(t);
@@ -81,177 +85,147 @@ bool follow(uint64_t types, TokenType t)
     return kv != m.end() && (kv->second & types) != 0;
 }
 
-sn_translation_unit *sn_translation_unit::parse(Lexer &lex, Environment *env)
+sn_translation_unit *sn_translation_unit::parse(Lexer &lex)
 {
     sn_translation_unit *t = new sn_translation_unit();
-    t->ed = sn_external_declaration::parse(lex, env);
-    t->right = nullptr;
-    if (lex.hasNext())
-        t->right = parse(lex, env);
+    while (lex.hasNext())
+    {
+        t->addChild(sn_external_declaration::parse(lex));
+    }
     return t;
 }
-sn_external_declaration *sn_external_declaration::parse(Lexer &lex,
-                                                        Environment *env)
+sn_external_declaration *sn_external_declaration::parse(Lexer &lex)
 {
     sn_external_declaration *ed = new sn_external_declaration();
 
-    sn_declaration_specifiers *s = sn_declaration_specifiers::parse(lex, env);
-    sn_declarator *d = sn_declarator::parse(lex, env);
-    if (first(SN_COMPOUND_STATEMENT | SN_DECLARATION_LIST, lex.peakNext(), env))
+    sn_declaration_specifiers *s = sn_declaration_specifiers::parse(lex);
+    sn_declarator *d = sn_declarator::parse(lex);
+    if (first(SN_COMPOUND_STATEMENT | SN_DECLARATION_LIST, lex.peakNext()))
     {
-        ed->branch = FUNCDEF;
-        ed->data.fd = sn_function_definition::parse(lex, env, s, d);
+        ed->addChild(sn_function_definition::parse(lex, s, d));
     }
     else
     {
-        ed->branch = DECL;
-        ed->data.d = sn_declaration::parse(lex, env, s, d);
+        ed->addChild(sn_declaration::parse(lex, s, d));
     }
     return ed;
 }
 sn_function_definition *sn_function_definition::parse(
-    Lexer &lex, Environment *env, sn_declaration_specifiers *s,
-    sn_declarator *d)
+    Lexer &lex, sn_declaration_specifiers *s, sn_declarator *d)
 {
     sn_function_definition *fd = new sn_function_definition();
-    fd->s = s;
-    fd->d = d;
-    fd->dl = nullptr;
-    if (first(SN_DECLARATION_LIST, lex.peakNext(), env))
-        fd->dl = sn_declaration_list::parse(lex, env);
-    fd->cs = sn_compound_statement::parse(lex, env);
+    fd->addChild(s);
+    fd->addChild(d);
+    if (first(SN_DECLARATION_LIST, lex.peakNext()))
+        fd->addChild(sn_declaration_list::parse(lex));
+    fd->addChild(sn_compound_statement::parse(lex));
     return fd;
 }
-sn_declaration *sn_declaration::parse(Lexer &lex, Environment *env)
+sn_declaration *sn_declaration::parse(Lexer &lex)
 {
     sn_declaration *dn = new sn_declaration();
-    dn->s = sn_declaration_specifiers::parse(lex, env);
-    dn->idl = nullptr;
-    if (first(SN_INITIALIZER_LIST, lex.peakNext(), env))
-        dn->idl = sn_init_declarator_list::parse(lex, env);
+    dn->addChild(sn_declaration_specifiers::parse(lex));
+    if (first(SN_INITIALIZER_LIST, lex.peakNext()))
+        dn->addChild(sn_init_declarator_list::parse(lex));
     EXPECT(STMT_END);
     return dn;
 }
-sn_declaration *sn_declaration::parse(Lexer &lex, Environment *env,
-                                      sn_declaration_specifiers *s,
+sn_declaration *sn_declaration::parse(Lexer &lex, sn_declaration_specifiers *s,
                                       sn_declarator *d)
 {
     sn_declaration *dn = new sn_declaration();
 
     if (s == nullptr)
         SyntaxError("Declaration: missing specifiers.");
-    dn->s = s;
+    dn->addChild(s);
 
-    dn->idl = nullptr;
     if (d != nullptr)
     {
-        sn_initializer *i = nullptr;
-        if (lex.peakNext().type == ASSIGN)
-        {
-            lex.getNext();
-            i = sn_initializer::parse(lex, env);
-        }
-        sn_init_declarator *id = new sn_init_declarator(d, i);
-        dn->idl = sn_init_declarator_list::parse(lex, env, id);
+        sn_init_declarator *id = new sn_init_declarator();
+        id->addChild(d);
+        if (SKIP(ASSIGN))
+            id->addChild(sn_initializer::parse(lex));
+
+        dn->addChild(sn_init_declarator_list::parse(lex, id));
     }
     EXPECT(STMT_END);
     return dn;
 }
-sn_declaration_list *sn_declaration_list::parse(Lexer &lex, Environment *env)
+sn_declaration_list *sn_declaration_list::parse(Lexer &lex)
 {
     sn_declaration_list *dl = new sn_declaration_list();
-    dl->d = sn_declaration::parse(lex, env);
-    dl->right = nullptr;
-    if (first(SN_DECLARATION, lex.peakNext(), env))
-        dl->right = parse(lex, env);
+    while (first(SN_DECLARATION, lex.peakNext()))
+        dl->addChild(sn_declaration::parse(lex));
     return dl;
 }
 
 // Declaration
-sn_init_declarator *sn_init_declarator::parse(Lexer &lex, Environment *env)
+sn_init_declarator *sn_init_declarator::parse(Lexer &lex)
 {
     sn_init_declarator *id = new sn_init_declarator();
-    id->d = sn_declarator::parse(lex, env);
-    id->i = nullptr;
-    if (lex.peakNext().type == ASSIGN)
-    {
-        lex.getNext();
-        id->i = sn_initializer::parse(lex, env);
-    }
+    id->addChild(sn_declarator::parse(lex));
+    if (SKIP(ASSIGN))
+        id->addChild(sn_initializer::parse(lex));
     return id;
 }
 sn_init_declarator_list *sn_init_declarator_list::parse(Lexer &lex,
-                                                        Environment *env,
                                                         sn_init_declarator *id)
 {
     sn_init_declarator_list *idl = new sn_init_declarator_list();
-    idl->id = id ? id : sn_init_declarator::parse(lex, env);
-    idl->right = nullptr;
-    if (SKIP(OP_COMMA))
-        idl->right = parse(lex, env);
+    if (id)
+        idl->addChild(id);
+    else
+        idl->addChild(sn_init_declarator::parse(lex));
+    while (SKIP(OP_COMMA))
+        idl->addChild(sn_init_declarator::parse(lex));
     return idl;
 }
-sn_declarator *sn_declarator::parse(Lexer &lex, Environment *env)
+sn_declarator *sn_declarator::parse(Lexer &lex)
 {
     sn_declarator *d = new sn_declarator();
-    d->p = nullptr;
-    if (first(SN_POINTER, lex.peakNext(), env))
-        d->p = sn_pointer::parse(lex, env);
-    d->dd = sn_direct_declarator::parse(lex, env);
+
+    if (first(SN_POINTER, lex.peakNext()))
+        d->addChild(sn_pointer::parse(lex));
+    d->addChild(sn_direct_declarator::parse(lex));
     return d;
 }
-sn_direct_declarator *sn_direct_declarator::parse(Lexer &lex, Environment *env,
-                                                  bool head)
+sn_direct_declarator *sn_direct_declarator::parse(Lexer &lex)
 {
     sn_direct_declarator *dd = new sn_direct_declarator();
-    dd->right = nullptr;
 
-    if (head)
+    switch (lex.peakNext().type)
     {
-        switch (lex.peakNext().type)
-        {
-            case SYMBOL:
-                dd->branch = ID;
-                dd->data.id = sn_identifier::parse(lex, env);
-                break;
-            case LP:
-                EXPECT(LP);
-                dd->branch = DECLARATOR;
-                dd->data.d = sn_declarator::parse(lex, env);
-                EXPECT(RP);
-                break;
-            default:
-                SyntaxErrorDebug("Direct Declarator: unexpected token.");
-                break;
-        }
+        case SYMBOL: dd->addChild(sn_identifier::parse(lex)); break;
+        case LP:
+            EXPECT(LP);
+            dd->addChild(sn_declarator::parse(lex));
+            EXPECT(RP);
+            break;
+        default:
+            SyntaxErrorDebug("Direct Declarator: unexpected token.");
+            break;
     }
-    else
+
+    while (first(SN_DIRECT_DECLARATOR, lex.peakNext()))
     {
         switch (lex.peakNext().type)
         {
             case LSB:
-                dd->branch = ARRAY;
                 EXPECT(LSB);
-                dd->data.arr = sn_const_expression::parse(lex, env);
+                if (lex.peakNext().type != RSB)
+                    dd->addChild(sn_const_expression::parse(lex));
+                else
+                    dd->addChild(new sn_const_expression());
                 EXPECT(RSB);
                 break;
             case LP:
                 EXPECT(LP);
-                if (first(SN_PARAMETER_TYPE_LIST, lex.peakNext(), env))
-                {
-                    dd->branch = PARAM_LIST;
-                    dd->data.ptlist = sn_parameter_type_list::parse(lex, env);
-                }
-                else if (first(SN_IDENTIFIER_LIST, lex.peakNext(), env))
-                {
-                    dd->branch = ID_LIST;
-                    dd->data.idlist = sn_identifier_list::parse(lex, env);
-                }
+                if (first(SN_PARAMETER_TYPE_LIST, lex.peakNext()))
+                    dd->addChild(sn_parameter_type_list::parse(lex));
+                else if (first(SN_IDENTIFIER_LIST, lex.peakNext()))
+                    dd->addChild(sn_identifier_list::parse(lex));
                 else if (lex.peakNext().type == RP)
-                {
-                    dd->branch = ID_LIST;
-                    dd->data.idlist = nullptr;
-                }
+                    dd->addChild(new sn_identifier_list());
                 else
                     SyntaxError("unexpected token");
                 EXPECT(RP);
@@ -260,98 +234,90 @@ sn_direct_declarator *sn_direct_declarator::parse(Lexer &lex, Environment *env,
         }
     }
 
-    if (first(SN_DIRECT_DECLARATOR, lex.peakNext(), env))
-        dd->right = parse(lex, env, false);
     return dd;
 }
-sn_abstract_declarator *sn_abstract_declarator::parse(Lexer &lex,
-                                                      Environment *env)
+sn_abstract_declarator *sn_abstract_declarator::parse(Lexer &lex)
 {
     sn_abstract_declarator *d = new sn_abstract_declarator();
-    d->p = nullptr;
-    d->dad = nullptr;
-    if (first(SN_POINTER, lex.peakNext(), env))
+    if (first(SN_POINTER, lex.peakNext()))
     {
-        d->p = sn_pointer::parse(lex, env);
-        if (first(SN_DIRECT_ABSTRACT_DECLARATOR, lex.peakNext(), env))
-            d->dad = sn_direct_abstract_declarator::parse(lex, env);
+        d->addChild(sn_pointer::parse(lex));
+        if (first(SN_DIRECT_ABSTRACT_DECLARATOR, lex.peakNext()))
+            d->addChild(sn_direct_abstract_declarator::parse(lex));
     }
     else
-        d->dad = sn_direct_abstract_declarator::parse(lex, env);
+        d->addChild(sn_direct_abstract_declarator::parse(lex));
     return d;
 }
-sn_direct_abstract_declarator *sn_direct_abstract_declarator::parse(
-    Lexer &lex, Environment *env, bool head)
+sn_direct_abstract_declarator *sn_direct_abstract_declarator::parse(Lexer &lex)
 {
     sn_direct_abstract_declarator *dad = new sn_direct_abstract_declarator();
-    dad->right = nullptr;
 
-    switch (lex.peakNext().type)
+    bool is_first = true;
+    do
     {
-        case LP:
-            EXPECT(LP);
-            if (head && first(SN_ABSTRACT_DECLARATOR, lex.peakNext(), env))
-            {
-                dad->branch = ABST_DECL;
-                dad->data.ad = sn_abstract_declarator::parse(lex, env);
-            }
-            else
-            {
-                dad->branch = PARAM_LIST;
-                dad->data.ptlist =
-                    lex.peakNext().type == RP
-                        ? nullptr
-                        : sn_parameter_type_list::parse(lex, env);
-            }
-            EXPECT(RP);
-        case LSB:
-            dad->branch = ARRAY;
-            EXPECT(LSB);
-            dad->data.arr = sn_const_expression::parse(lex, env);
-            EXPECT(RSB);
-            break;
-        default:
-            SyntaxError("Direct Abstract Declarator: unexpected token.");
-            break;
-    }
+        switch (lex.peakNext().type)
+        {
+            case LP:
+                EXPECT(LP);
+                if (is_first && first(SN_ABSTRACT_DECLARATOR, lex.peakNext()))
+                {
+                    dad->addChild(sn_abstract_declarator::parse(lex));
+                }
+                else
+                {
+                    dad->addChild(
+                        lex.peakNext().type == RP
+                            ? (SyntaxNode *)new sn_parameter_type_list()
+                            : (SyntaxNode *)sn_parameter_type_list::parse(lex));
+                }
+                EXPECT(RP);
+            case LSB:
+                EXPECT(LSB);
+                if (lex.peakNext().type != RSB)
+                    dad->addChild(sn_const_expression::parse(lex));
+                else
+                    dad->addChild(new sn_const_expression());
+                EXPECT(RSB);
+                break;
+            default:
+                SyntaxError("Direct Abstract Declarator: unexpected token.");
+                break;
+        }
+        is_first = false;
+    } while (first(SN_DIRECT_ABSTRACT_DECLARATOR, lex.peakNext()));
 
-    if (first(SN_DIRECT_ABSTRACT_DECLARATOR, lex.peakNext(), env))
-        dad->right = parse(lex, env, false);
     return dad;
 }
-sn_initializer *sn_initializer::parse(Lexer &lex, Environment *env)
+sn_initializer *sn_initializer::parse(Lexer &lex)
 {
     sn_initializer *i = new sn_initializer();
-    i->e = nullptr;
-    i->il = nullptr;
     if (lex.peakNext().type == BLK_BEGIN)
     {
         EXPECT(BLK_BEGIN);
-        i->il = sn_initializer_list::parse(lex, env);
+        i->addChild(sn_initializer_list::parse(lex));
         if (lex.peakNext().type == OP_COMMA)
             lex.getNext();
         EXPECT(BLK_END);
     }
     else
     {
-        i->e = sn_assign_expression::parse(lex, env);
+        i->addChild(sn_assign_expression::parse(lex));
     }
     return i;
 }
-sn_initializer_list *sn_initializer_list::parse(Lexer &lex, Environment *env)
+sn_initializer_list *sn_initializer_list::parse(Lexer &lex)
 {
     sn_initializer_list *il = new sn_initializer_list();
-    il->i = sn_initializer::parse(lex, env);
-    il->right = nullptr;
-    if (SKIP(OP_COMMA))
-        il->right = parse(lex, env);
+    il->addChild(sn_initializer::parse(lex));
+    while (SKIP(OP_COMMA))
+        il->addChild(sn_initializer::parse(lex));
     return il;
 }
-sn_parameter_type_list *sn_parameter_type_list::parse(Lexer &lex,
-                                                      Environment *env)
+sn_parameter_type_list *sn_parameter_type_list::parse(Lexer &lex)
 {
     sn_parameter_type_list *ptl = new sn_parameter_type_list();
-    ptl->pl = sn_parameter_list::parse(lex, env);
+    ptl->addChild(sn_parameter_list::parse(lex));
     ptl->varlist = false;
     if (SKIP(OP_COMMA))
     {
@@ -360,23 +326,35 @@ sn_parameter_type_list *sn_parameter_type_list::parse(Lexer &lex,
     }
     return ptl;
 }
-sn_parameter_list *sn_parameter_list::parse(Lexer &lex, Environment *env)
+sn_parameter_list *sn_parameter_list::parse(Lexer &lex)
 {
     sn_parameter_list *pl = new sn_parameter_list();
-    pl->pd = sn_parameter_declaration::parse(lex, env);
-    pl->right = nullptr;
-    if (lex.peakNext().type == OP_COMMA && lex.peakNext(1).type != VAR_PARAM)
+    pl->addChild(sn_parameter_declaration::parse(lex));
+    while (lex.peakNext().type == OP_COMMA && lex.peakNext(1).type != VAR_PARAM)
     {
         lex.getNext();
-        pl->right = parse(lex, env);
+        pl->addChild(sn_parameter_declaration::parse(lex));
     }
     return pl;
 }
-int declarator_or_abstract_declarator(Lexer &lex, Environment *env)
+int declarator_or_abstract_declarator(Lexer &lex)
 {
     int status = 0;  // 1: declarator 2: abstract declarator 3: none
+    bool inner = false;
     for (size_t i = 0; status == 0; ++i)
     {
+        while (lex.peakNext(i).type == OP_MUL)
+        {
+            ++i;
+            if (lex.peakNext(i).type == CONST)
+                ++i;
+        }
+        if (inner && lex.peakNext(i).type == RP)
+        {
+            status = 2;
+            break;
+        }
+
         switch (lex.peakNext(i).type)
         {
             case SYMBOL: status = 1; break;
@@ -384,9 +362,11 @@ int declarator_or_abstract_declarator(Lexer &lex, Environment *env)
             case LP:
                 if (lex.peakNext(i + 1).type == RP)
                     status = 2;
+                else
+                    inner = true;
                 break;
             default:
-                if (first(SN_DECLARATION_SPECIFIERS, lex.peakNext(i), env))
+                if (first(SN_DECLARATION_SPECIFIERS, lex.peakNext(i)))
                     status = 2;
                 else if (follow(SN_PARAMETER_DECLARATION, lex.peakNext(i).type))
                     status = 3;
@@ -397,22 +377,14 @@ int declarator_or_abstract_declarator(Lexer &lex, Environment *env)
     }
     return status;
 }
-sn_parameter_declaration *sn_parameter_declaration::parse(Lexer &lex,
-                                                          Environment *env)
+sn_parameter_declaration *sn_parameter_declaration::parse(Lexer &lex)
 {
     sn_parameter_declaration *pd = new sn_parameter_declaration();
-    pd->s = sn_declaration_specifiers::parse(lex, env);
-    pd->data.ad = nullptr;
-    switch (declarator_or_abstract_declarator(lex, env))
+    pd->addChild(sn_declaration_specifiers::parse(lex));
+    switch (declarator_or_abstract_declarator(lex))
     {
-        case 1:
-            pd->branch = DECL;
-            pd->data.d = sn_declarator::parse(lex, env);
-            break;
-        case 2:
-            pd->branch = ABST_DECL;
-            pd->data.ad = sn_abstract_declarator::parse(lex, env);
-            break;
+        case 1: pd->addChild(sn_declarator::parse(lex)); break;
+        case 2: pd->addChild(sn_abstract_declarator::parse(lex)); break;
         case -1: SyntaxError("Parameter Declaration: unexpected token."); break;
         case 3:
         default: break;
@@ -421,52 +393,37 @@ sn_parameter_declaration *sn_parameter_declaration::parse(Lexer &lex,
 }
 
 // specifier
-sn_declaration_specifiers *sn_declaration_specifiers::parse(Lexer &lex,
-                                                            Environment *env)
+sn_declaration_specifiers *sn_declaration_specifiers::parse(Lexer &lex)
 {
     sn_declaration_specifiers *s = new sn_declaration_specifiers();
-    s->right = nullptr;
-    if (first(SN_STORAGE_SPECIFIER, lex.peakNext(), env))
-    {
-        s->branch = STORAGE;
-        s->data.ss = sn_storage_specifier::parse(lex, env);
-    }
-    else if (first(SN_TYPE_SPECIFIER, lex.peakNext(), env))
-    {
-        s->branch = TYPE_SPEC;
-        s->data.ts = sn_type_specifier::parse(lex, env);
-    }
-    else
-    {
-        s->branch = TYPE_QUAL;
-        s->data.tq = sn_type_qualifier::parse(lex, env);
-    }
 
-    if (first(SN_DECLARATION_SPECIFIERS, lex.peakNext(), env))
-        s->right = parse(lex, env);
+    do
+    {
+        if (first(SN_STORAGE_SPECIFIER, lex.peakNext()))
+            s->addChild(sn_storage_specifier::parse(lex));
+        else if (first(SN_TYPE_SPECIFIER, lex.peakNext()))
+            s->addChild(sn_type_specifier::parse(lex));
+        else
+            s->addChild(sn_type_qualifier::parse(lex));
+    } while (first(SN_DECLARATION_SPECIFIERS, lex.peakNext()));
+
     return s;
 }
-sn_specifier_qualifier_list *sn_specifier_qualifier_list::parse(
-    Lexer &lex, Environment *env)
+sn_specifier_qualifier_list *sn_specifier_qualifier_list::parse(Lexer &lex)
 {
     sn_specifier_qualifier_list *sql = new sn_specifier_qualifier_list();
-    sql->right = nullptr;
-    if (first(SN_TYPE_SPECIFIER, lex.peakNext(), env))
-    {
-        sql->branch = TYPE_SPEC;
-        sql->data.ts = sn_type_specifier::parse(lex, env);
-    }
-    else
-    {
-        sql->branch = TYPE_QUAL;
-        sql->data.tq = sn_type_qualifier::parse(lex, env);
-    }
 
-    if (first(SN_TYPE_SPECIFIER | SN_TYPE_QUALIFIER, lex.peakNext(), env))
-        sql->right = parse(lex, env);
+    do
+    {
+        if (first(SN_TYPE_SPECIFIER, lex.peakNext()))
+            sql->addChild(sn_type_specifier::parse(lex));
+        else
+            sql->addChild(sn_type_qualifier::parse(lex));
+    } while (first(SN_TYPE_SPECIFIER | SN_TYPE_QUALIFIER, lex.peakNext()));
+
     return sql;
 }
-sn_storage_specifier *sn_storage_specifier::parse(Lexer &lex, Environment *env)
+sn_storage_specifier *sn_storage_specifier::parse(Lexer &lex)
 {
     sn_storage_specifier *ss = new sn_storage_specifier();
     switch (lex.peakNext().type)
@@ -480,7 +437,7 @@ sn_storage_specifier *sn_storage_specifier::parse(Lexer &lex, Environment *env)
     }
     return ss;
 }
-sn_type_qualifier *sn_type_qualifier::parse(Lexer &lex, Environment *env)
+sn_type_qualifier *sn_type_qualifier::parse(Lexer &lex)
 {
     sn_type_qualifier *tq = new sn_type_qualifier();
     switch (lex.peakNext().type)
@@ -491,9 +448,10 @@ sn_type_qualifier *sn_type_qualifier::parse(Lexer &lex, Environment *env)
     }
     return tq;
 }
-sn_type_specifier *sn_type_specifier::parse(Lexer &lex, Environment *env)
+sn_type_specifier *sn_type_specifier::parse(Lexer &lex)
 {
     sn_type_specifier *ts = new sn_type_specifier();
+    ts->t = NONE;
     switch (lex.peakNext().type)
     {
         case TYPE_VOID:
@@ -504,44 +462,39 @@ sn_type_specifier *sn_type_specifier::parse(Lexer &lex, Environment *env)
         case TYPE_FLOAT:
         case TYPE_DOUBLE:
         case SIGNED:
-        case UNSIGNED:
-            ts->branch = TYPESPEC_SIMPLE;
-            ts->data.t = lex.getNext().type;
-            break;
+        case UNSIGNED: ts->t = lex.getNext().type; break;
         case TYPE_STRUCT:
         case TYPE_UNION:
-            ts->branch = TYPESPEC_STRUCT_UNION;
-            ts->data.sus = sn_struct_union_specifier::parse(lex, env);
+            ts->t = lex.getNext().type;
+            ts->addChild(sn_struct_union_specifier::parse(lex));
             break;
         case TYPE_ENUM:
-            ts->branch = TYPESPEC_ENUM;
-            ts->data.es = sn_enum_specifier::parse(lex, env);
+            ts->t = lex.getNext().type;
+            ts->addChild(sn_enum_specifier::parse(lex));
             break;
         case SYMBOL:
-            ts->branch = TYPESPEC_TYPEDEF;
-            ts->data.tn = sn_typedef_name::parse(lex, env);
+            ts->t = lex.getNext().type;
+            ts->addChild(sn_typedef_name::parse(lex));
             break;
         default: SyntaxError("Type Specifier: unexpected token"); break;
     }
     return ts;
 }
-sn_type_qualifier_list *sn_type_qualifier_list::parse(Lexer &lex,
-                                                      Environment *env)
+sn_type_qualifier_list *sn_type_qualifier_list::parse(Lexer &lex)
 {
     sn_type_qualifier_list *tql = new sn_type_qualifier_list();
-    tql->tq = sn_type_qualifier::parse(lex, env);
-    tql->right = nullptr;
-    if (first(SN_TYPE_QUALIFIER, lex.peakNext(), env))
-        tql->right = parse(lex, env);
+
+    do
+    {
+        tql->addChild(sn_type_qualifier::parse(lex));
+    } while (first(SN_TYPE_QUALIFIER, lex.peakNext()));
+
     return tql;
 }
 // struct specifier
-sn_struct_union_specifier *sn_struct_union_specifier::parse(Lexer &lex,
-                                                            Environment *env)
+sn_struct_union_specifier *sn_struct_union_specifier::parse(Lexer &lex)
 {
     sn_struct_union_specifier *sus = new sn_struct_union_specifier();
-    sus->tag = nullptr;
-    sus->sdl = nullptr;
 
     if (lex.peakNext().type == TYPE_STRUCT || lex.peakNext().type == TYPE_UNION)
         sus->t = lex.getNext().type;
@@ -549,154 +502,153 @@ sn_struct_union_specifier *sn_struct_union_specifier::parse(Lexer &lex,
         SyntaxError("Struct: unexpected token");
 
     if (lex.peakNext().type != BLK_BEGIN)
-        sus->tag = sn_identifier::parse(lex, env);
+        sus->addChild(sn_identifier::parse(lex));
 
     if (lex.peakNext().type == BLK_BEGIN)
     {
         EXPECT(BLK_BEGIN);
-        sus->sdl = sn_struct_declaration_list::parse(lex, env);
+        sus->addChild(sn_struct_declaration_list::parse(lex));
         EXPECT(BLK_END);
     }
+
     return sus;
 }
-sn_struct_declaration *sn_struct_declaration::parse(Lexer &lex,
-                                                    Environment *env)
+sn_struct_declaration *sn_struct_declaration::parse(Lexer &lex)
 {
     sn_struct_declaration *sd = new sn_struct_declaration();
-    sd->sql = sn_specifier_qualifier_list::parse(lex, env);
-    sd->sdl = sn_struct_declarator_list::parse(lex, env);
+
+    sd->addChild(sn_specifier_qualifier_list::parse(lex));
+    sd->addChild(sn_struct_declarator_list::parse(lex));
+
     return sd;
 }
-sn_struct_declaration_list *sn_struct_declaration_list::parse(Lexer &lex,
-                                                              Environment *env)
+sn_struct_declaration_list *sn_struct_declaration_list::parse(Lexer &lex)
 {
     sn_struct_declaration_list *sdl = new sn_struct_declaration_list();
-    sdl->sd = sn_struct_declaration::parse(lex, env);
-    sdl->right = nullptr;
-    if (SKIP(OP_COMMA))
-        sdl->right = parse(lex, env);
+
+    do
+    {
+        sdl->addChild(sn_struct_declaration::parse(lex));
+    } while (SKIP(OP_COMMA));
+
     return sdl;
 }
-sn_struct_declarator *sn_struct_declarator::parse(Lexer &lex, Environment *env)
+sn_struct_declarator *sn_struct_declarator::parse(Lexer &lex)
 {
     sn_struct_declarator *sd = new sn_struct_declarator();
-    sd->d = nullptr;
-    sd->bit_field = nullptr;
 
     if (lex.peakNext().type != OP_COLON)
-        sd->d = sn_declarator::parse(lex, env);
-
-    if (lex.peakNext().type == OP_COLON)
-    {
-        lex.getNext();
-        sd->bit_field = sn_const_expression::parse(lex, env);
-    }
+        sd->addChild(sn_declarator::parse(lex));
+    if (SKIP(OP_COLON))
+        sd->addChild(sn_const_expression::parse(lex));
 
     return sd;
 }
-sn_struct_declarator_list *sn_struct_declarator_list::parse(Lexer &lex,
-                                                            Environment *env)
+sn_struct_declarator_list *sn_struct_declarator_list::parse(Lexer &lex)
 {
     sn_struct_declarator_list *sdl = new sn_struct_declarator_list();
-    sdl->sd = sn_struct_declarator::parse(lex, env);
-    sdl->right = nullptr;
-    if (SKIP(OP_COMMA))
-        sdl->right = parse(lex, env);
+
+    do
+    {
+        sdl->addChild(sn_struct_declarator::parse(lex));
+    } while (SKIP(OP_COMMA));
+
     return sdl;
 }
 // enum specifier
-sn_enum_specifier *sn_enum_specifier::parse(Lexer &lex, Environment *env)
+sn_enum_specifier *sn_enum_specifier::parse(Lexer &lex)
 {
     sn_enum_specifier *es = new sn_enum_specifier();
-    es->tag = nullptr;
-    es->el = nullptr;
 
     EXPECT(TYPE_ENUM);
 
     if (lex.peakNext().type != BLK_BEGIN)
-        es->tag = sn_identifier::parse(lex, env);
+        es->addChild(sn_identifier::parse(lex));
 
     if (lex.peakNext().type == BLK_BEGIN)
     {
         EXPECT(BLK_BEGIN);
-        es->el = sn_enumerator_list::parse(lex, env);
+        es->addChild(sn_enumerator_list::parse(lex));
         EXPECT(BLK_END);
     }
     return es;
 }
-sn_enumerator_list *sn_enumerator_list::parse(Lexer &lex, Environment *env)
+sn_enumerator_list *sn_enumerator_list::parse(Lexer &lex)
 {
     sn_enumerator_list *el = new sn_enumerator_list();
-    el->e = sn_enumerator::parse(lex, env);
-    el->right = nullptr;
-    if (SKIP(OP_COMMA))
-        el->right = parse(lex, env);
+
+    do
+    {
+        el->addChild(sn_enumerator::parse(lex));
+    } while (SKIP(OP_COMMA));
+
     return el;
 }
-sn_enumerator *sn_enumerator::parse(Lexer &lex, Environment *env)
+sn_enumerator *sn_enumerator::parse(Lexer &lex)
 {
     sn_enumerator *e = new sn_enumerator();
-    e->ec = sn_enumeration_constant::parse(lex, env);
-    e->value = nullptr;
-    if (lex.peakNext().type == ASSIGN)
-    {
-        e->value = sn_const_expression::parse(lex, env);
-    }
+
+    e->addChild(sn_enumeration_constant::parse(lex));
+    if (SKIP(ASSIGN))
+        e->addChild(sn_const_expression::parse(lex));
+
     return e;
 }
-sn_enumeration_constant *sn_enumeration_constant::parse(Lexer &lex,
-                                                        Environment *env)
+sn_enumeration_constant *sn_enumeration_constant::parse(Lexer &lex)
 {
     sn_enumeration_constant *ec = new sn_enumeration_constant();
-    ec->id = sn_identifier::parse(lex, env);
+    ec->addChild(sn_identifier::parse(lex));
     return ec;
 }
 
-sn_type_name *sn_type_name::parse(Lexer &lex, Environment *env)
+sn_type_name *sn_type_name::parse(Lexer &lex)
 {
     sn_type_name *tn = new sn_type_name();
-    tn->sql = sn_specifier_qualifier_list::parse(lex, env);
-    tn->ad = nullptr;
+
+    tn->addChild(sn_specifier_qualifier_list::parse(lex));
     if (!follow(SN_TYPE_NAME, lex.peakNext().type))
-        tn->ad = sn_abstract_declarator::parse(lex, env);
+        tn->addChild(sn_abstract_declarator::parse(lex));
+
     return tn;
 }
-sn_pointer *sn_pointer::parse(Lexer &lex, Environment *env)
+sn_pointer *sn_pointer::parse(Lexer &lex)
 {
     sn_pointer *p = new sn_pointer();
-    p->tql = nullptr;
-    p->right = nullptr;
+
     EXPECT(OP_MUL);
-    if (first(SN_TYPE_QUALIFIER, lex.peakNext(), env))
-        p->tql = sn_type_qualifier_list::parse(lex, env);
-    if (first(SN_POINTER, lex.peakNext(), env))
-        p->right = parse(lex, env);
+    if (first(SN_TYPE_QUALIFIER, lex.peakNext()))
+        p->addChild(sn_type_qualifier_list::parse(lex));
+    if (first(SN_POINTER, lex.peakNext()))
+        p->addChild(parse(lex));
+
     return p;
 }
-sn_identifier *sn_identifier::parse(Lexer &lex, Environment *env)
+sn_identifier *sn_identifier::parse(Lexer &lex)
 {
     sn_identifier *id = new sn_identifier();
     id->id = EXPECT_GET(SYMBOL);
     return id;
 }
-sn_identifier_list *sn_identifier_list::parse(Lexer &lex, Environment *env)
+sn_identifier_list *sn_identifier_list::parse(Lexer &lex)
 {
     sn_identifier_list *il = new sn_identifier_list();
-    il->id = sn_identifier::parse(lex, env);
-    il->right = nullptr;
-    if (SKIP(OP_COMMA))
-        il->right = parse(lex, env);
+
+    do
+    {
+        il->addChild(sn_identifier::parse(lex));
+    } while (SKIP(OP_COMMA));
+
     return il;
 }
-sn_typedef_name *sn_typedef_name::parse(Lexer &lex, Environment *env)
+sn_typedef_name *sn_typedef_name::parse(Lexer &lex)
 {
     sn_typedef_name *tn = new sn_typedef_name();
-    tn->i = sn_identifier::parse(lex, env);
+    tn->addChild(sn_identifier::parse(lex));
     return tn;
 }
 
 // Statement
-sn_statement *sn_statement::parse(Lexer &lex, Environment *env)
+sn_statement *sn_statement::parse(Lexer &lex)
 {
     sn_statement *node = nullptr;
     switch (lex.peakNext().type)
@@ -704,212 +656,202 @@ sn_statement *sn_statement::parse(Lexer &lex, Environment *env)
         case SYMBOL:
             if (lex.peakNext(1).type == OP_COLON)
             {
-                node = sn_label_statement::parse(lex, env);
+                node = sn_label_statement::parse(lex);
             }
             else
             {
-                node = sn_expression_statement::parse(lex, env);
+                node = sn_expression_statement::parse(lex);
             }
             break;
         case CASE:
-        case DEFAULT: node = sn_label_statement::parse(lex, env); break;
-        case BLK_BEGIN: node = sn_compound_statement::parse(lex, env); break;
+        case DEFAULT: node = sn_label_statement::parse(lex); break;
+        case BLK_BEGIN: node = sn_compound_statement::parse(lex); break;
         case IF:
-        case SWITCH: node = sn_selection_statement::parse(lex, env); break;
+        case SWITCH: node = sn_selection_statement::parse(lex); break;
         case WHILE:
         case DO:
-        case FOR: node = sn_iteration_statement::parse(lex, env); break;
+        case FOR: node = sn_iteration_statement::parse(lex); break;
         case GOTO:
         case CONTINUE:
         case BREAK:
-        case RETURN: node = sn_jump_statement::parse(lex, env); break;
+        case RETURN: node = sn_jump_statement::parse(lex); break;
         default:
             /* TODO: check FIRST(expr) */
-            node = sn_expression_statement::parse(lex, env);
+            node = sn_expression_statement::parse(lex);
             break;
     }
     if (node == nullptr)
         SyntaxError("Statement: empty statement");
     return node;
 }
-sn_statement_list *sn_statement_list::parse(Lexer &lex, Environment *env)
+sn_statement_list *sn_statement_list::parse(Lexer &lex)
 {
     sn_statement_list *sl = new sn_statement_list();
-    sl->s = sn_statement::parse(lex, env);
-    sl->right = nullptr;
-    if (lex.peakNext().type != BLK_END)
-        sl->right = parse(lex, env);
+
+    do
+    {
+        sl->addChild(sn_statement::parse(lex));
+    } while (lex.peakNext().type != BLK_END);
+
     return sl;
 }
-sn_statement *sn_label_statement::parse(Lexer &lex, Environment *env)
+sn_statement *sn_label_statement::parse(Lexer &lex)
 {
     sn_label_statement *ls = new sn_label_statement();
+
     switch (lex.peakNext().type)
     {
-        case SYMBOL:
-            ls->branch = LABEL_STAT;
-            ls->data.id = sn_identifier::parse(lex, env);
-            break;
+        case SYMBOL: ls->addChild(sn_identifier::parse(lex)); break;
         case CASE:
-            ls->branch = CASE_STAT;
             lex.getNext();
-            ls->data.value = sn_const_expression::parse(lex, env);
+            ls->addChild(sn_const_expression::parse(lex));
             break;
-        case DEFAULT:
-            ls->branch = DEFAULT_STAT;
-            lex.getNext();
-            break;
+        case DEFAULT: lex.getNext(); break;
         default: SyntaxError("Label Statement: unexpected token."); break;
     }
     EXPECT(OP_COLON);
-    ls->stat = sn_statement::parse(lex, env);
+    ls->addChild(sn_statement::parse(lex));
+
     return ls;
 }
-sn_compound_statement *sn_compound_statement::parse(Lexer &lex,
-                                                    Environment *env)
+sn_compound_statement *sn_compound_statement::parse(Lexer &lex)
 {
     sn_compound_statement *cs = new sn_compound_statement();
-    cs->dl = nullptr;
-    cs->sl = nullptr;
 
     EXPECT(BLK_BEGIN);
-    if (first(SN_DECLARATION_LIST, lex.peakNext(), env))
-        cs->dl = sn_declaration_list::parse(lex, env);
-    if (first(SN_STATEMENT_LIST, lex.peakNext(), env))
-        cs->sl = sn_statement_list::parse(lex, env);
+    if (first(SN_DECLARATION_LIST, lex.peakNext()))
+        cs->addChild(sn_declaration_list::parse(lex));
+    if (first(SN_STATEMENT_LIST, lex.peakNext()))
+        cs->addChild(sn_statement_list::parse(lex));
     EXPECT(BLK_END);
 
     return cs;
 }
-sn_statement *sn_expression_statement::parse(Lexer &lex, Environment *env)
+sn_statement *sn_expression_statement::parse(Lexer &lex)
 {
     sn_expression_statement *stmt = new sn_expression_statement();
-    stmt->expr = nullptr;
+
     if (lex.peakNext().type != STMT_END)
-        stmt->expr = sn_comma_expression::parse(lex, env);
+        stmt->addChild(sn_comma_expression::parse(lex));
     EXPECT(STMT_END);
 
     return stmt;
 }
-sn_statement *sn_selection_statement::parse(Lexer &lex, Environment *env)
+sn_statement *sn_selection_statement::parse(Lexer &lex)
 {
     sn_selection_statement *stmt = new sn_selection_statement();
 
     switch (lex.peakNext().type)
     {
-        case IF: stmt->branch = IF_STAT; break;
-        case SWITCH: stmt->branch = SWITCH_STAT; break;
+        case IF:
+        case SWITCH: stmt->t = lex.getNext().type; break;
         default: SyntaxError("Selection Statement: unexpected token"); break;
     }
-    lex.getNext();
+
     EXPECT(LP);
-    stmt->expr = sn_comma_expression::parse(lex, env);
+    stmt->addChild(sn_comma_expression::parse(lex));
     EXPECT(RP);
-    stmt->stmt = sn_statement::parse(lex, env);
-    stmt->stmt2 = nullptr;
-    if (stmt->branch == IF_STAT && lex.peakNext().type == ELSE)
+    stmt->addChild(sn_statement::parse(lex));
+
+    if (stmt->t == IF && SKIP(ELSE))
     {
-        lex.getNext();
-        stmt->stmt2 = sn_statement::parse(lex, env);
+        stmt->addChild(sn_statement::parse(lex));
     }
 
     return stmt;
 }
-sn_statement *sn_iteration_statement::parse(Lexer &lex, Environment *env)
+sn_statement *sn_iteration_statement::parse(Lexer &lex)
 {
     sn_iteration_statement *stmt = new sn_iteration_statement();
-    stmt->expr = stmt->expr2 = stmt->expr3 = nullptr;
-    stmt->stmt = nullptr;
+
+    stmt->t = lex.peakNext().type;
     switch (lex.getNext().type)
     {
         case WHILE:
-            stmt->type = WHILE_LOOP;
             EXPECT(LP);
-            stmt->expr = sn_comma_expression::parse(lex, env);
+            stmt->addChild(sn_comma_expression::parse(lex));
             EXPECT(RP);
-            stmt->stmt = sn_statement::parse(lex, env);
+            stmt->addChild(sn_statement::parse(lex));
             break;
         case DO:
-            stmt->type = DO_LOOP;
-            stmt->stmt = sn_statement::parse(lex, env);
+            stmt->addChild(sn_statement::parse(lex));
             EXPECT(WHILE);
             EXPECT(LP);
-            stmt->expr = sn_comma_expression::parse(lex, env);
+            stmt->addChild(sn_comma_expression::parse(lex));
             EXPECT(RP);
             EXPECT(STMT_END);
             break;
         case FOR:
-            stmt->type = FOR_LOOP;
             EXPECT(LP);
             if (lex.peakNext().type != STMT_END)
-                stmt->expr = sn_comma_expression::parse(lex, env);
+                stmt->addChild(sn_comma_expression::parse(lex));
             EXPECT(STMT_END);
             if (lex.peakNext().type != STMT_END)
-                stmt->expr2 = sn_comma_expression::parse(lex, env);
+                stmt->addChild(sn_comma_expression::parse(lex));
             EXPECT(STMT_END);
             if (lex.peakNext().type != RP)
-                stmt->expr3 = sn_comma_expression::parse(lex, env);
+                stmt->addChild(sn_comma_expression::parse(lex));
             EXPECT(RP);
-            stmt->stmt = sn_statement::parse(lex, env);
+            stmt->addChild(sn_statement::parse(lex));
             break;
         default: SyntaxError("Iteration Statement: unexpected token"); break;
     }
+
     return stmt;
 }
-sn_statement *sn_jump_statement::parse(Lexer &lex, Environment *env)
+sn_statement *sn_jump_statement::parse(Lexer &lex)
 {
     sn_jump_statement *stmt = new sn_jump_statement();
-    stmt->data.expr = nullptr;
+
+    stmt->t = lex.peakNext().type;
     switch (lex.getNext().type)
     {
-        case GOTO:
-            stmt->type = JMP_GOTO;
-            stmt->data.id = sn_identifier::parse(lex, env);
-            break;
-        case CONTINUE: stmt->type = JMP_CONTINUE; break;
-        case BREAK: stmt->type = JMP_BREAK; break;
+        case BREAK:
+        case CONTINUE: break;
+        case GOTO: stmt->addChild(sn_identifier::parse(lex)); break;
         case RETURN:
-            stmt->type = JMP_RETURN;
             if (lex.peakNext().type != STMT_END)
-                stmt->data.expr = sn_comma_expression::parse(lex, env);
+                stmt->addChild(sn_comma_expression::parse(lex));
             break;
         default: SyntaxError("Jump Statement: unexpected token"); break;
     }
     EXPECT(STMT_END);
+
     return stmt;
 }
 
 // Expression
-sn_expression *sn_comma_expression::parse(Lexer &lex, Environment *env)
+sn_expression *sn_comma_expression::parse(Lexer &lex)
 {
-    sn_expression *e = sn_assign_expression::parse(lex, env);
-    if (lex.peakNext().type == OP_COMMA)
+    sn_expression *e = sn_assign_expression::parse(lex);
+    if (SKIP(OP_COMMA))
     {
-        lex.getNext();
         sn_comma_expression *expr = new sn_comma_expression();
-        expr->curr = e;
-        expr->next = sn_comma_expression::parse(lex, env);
-        if (expr->next)
-            expr->type_ = expr->next->type();
-        else
-            expr->type_ = e->type();
+
+        expr->addChild(e);
+        do
+        {
+            expr->addChild(sn_assign_expression::parse(lex));
+        } while (SKIP(OP_COMMA));
+        // expr->type_ = expr->getLastChild()->type();
+
         return expr;
     }
     else
         return e;
 }
-sn_expression *sn_assign_expression::parse(Lexer &lex, Environment *env)
+sn_expression *sn_assign_expression::parse(Lexer &lex)
 {
-    sn_expression *to = sn_cond_expression::parse(lex, env);
+    sn_expression *to = sn_cond_expression::parse(lex);
     if (to->nodeType() == SN_UNARY_EXPRESSION &&
         lex.peakNext().category == TOKEN_CATEGORY_ASSIGN_OPERATOR)
     {
         sn_assign_expression *expr = new sn_assign_expression();
-        expr->to = to;
+
+        expr->addChild(to);
         expr->op = lex.getNext().type;
-        expr->from = sn_assign_expression::parse(lex, env);
-        assert(expr->to != nullptr);
-        assert(expr->from != nullptr);
+        expr->addChild(sn_assign_expression::parse(lex));
+
         // EXPECT_TYPE_WITH(target->type(), TOp_ASSIGN);
         // const Type *t =
         //     AssignmentConversion(expr->from->type(), expr->to->type());
@@ -922,17 +864,17 @@ sn_expression *sn_assign_expression::parse(Lexer &lex, Environment *env)
         return to;
 }
 
-sn_expression *sn_cond_expression::parse(Lexer &lex, Environment *env)
+sn_expression *sn_cond_expression::parse(Lexer &lex)
 {
-    sn_expression *e = sn_or_expression::parse(lex, env);
-    if (lex.peakNext().type == OP_QMARK)
+    sn_expression *e = sn_or_expression::parse(lex);
+    if (SKIP(OP_QMARK))
     {
         sn_cond_expression *expr = new sn_cond_expression();
-        expr->cond = e;
-        lex.getNext();
-        expr->left = sn_comma_expression::parse(lex, env);
+
+        expr->addChild(e);
+        expr->addChild(sn_comma_expression::parse(lex));
         EXPECT(OP_COLON);
-        expr->right = sn_cond_expression::parse(lex, env);
+        expr->addChild(sn_cond_expression::parse(lex));
         // expr->type_ =
         //     CondResultConversion(expr->left->type(), expr->right->type());
         // if (!expr->left->type()->equal(*expr->type()))
@@ -946,45 +888,42 @@ sn_expression *sn_cond_expression::parse(Lexer &lex, Environment *env)
         return e;
     }
 }
-sn_expression *sn_or_expression::parse(Lexer &lex, Environment *env)
+sn_expression *sn_or_expression::parse(Lexer &lex)
 {
-    sn_expression *e = sn_and_expression::parse(lex, env);
-    if (lex.peakNext().type == BOOL_OR)
+    sn_expression *e = sn_and_expression::parse(lex);
+    if (SKIP(BOOL_OR))
     {
-        lex.getNext();
         sn_or_expression *expr = new sn_or_expression();
-        expr->left = e;
-        expr->right = sn_or_expression::parse(lex, env);
+        expr->addChild(e);
+        expr->addChild(sn_or_expression::parse(lex));
         // expr->type_ = TypeFactory::Primitive_Int();
         return expr;
     }
     else
         return e;
 }
-sn_expression *sn_and_expression::parse(Lexer &lex, Environment *env)
+sn_expression *sn_and_expression::parse(Lexer &lex)
 {
-    sn_expression *e = sn_bitor_expression::parse(lex, env);
-    if (lex.peakNext().type == BOOL_AND)
+    sn_expression *e = sn_bitor_expression::parse(lex);
+    if (SKIP(BOOL_AND))
     {
-        lex.getNext();
         sn_and_expression *expr = new sn_and_expression();
-        expr->left = e;
-        expr->right = sn_and_expression::parse(lex, env);
+        expr->addChild(e);
+        expr->addChild(sn_and_expression::parse(lex));
         // expr->type_ = TypeFactory::Primitive_Int();
         return expr;
     }
     else
         return e;
 }
-sn_expression *sn_bitor_expression::parse(Lexer &lex, Environment *env)
+sn_expression *sn_bitor_expression::parse(Lexer &lex)
 {
-    sn_expression *e = sn_bitxor_expression::parse(lex, env);
-    if (lex.peakNext().type == BIT_OR)
+    sn_expression *e = sn_bitxor_expression::parse(lex);
+    if (SKIP(BIT_OR))
     {
-        lex.getNext();
         sn_bitor_expression *expr = new sn_bitor_expression();
-        expr->left = e;
-        expr->right = sn_bitor_expression::parse(lex, env);
+        expr->addChild(e);
+        expr->addChild(sn_bitor_expression::parse(lex));
         // expr->type_ =
         //     UsualArithmeticConversion(expr->left->type(),
         //     expr->right->type());
@@ -998,15 +937,14 @@ sn_expression *sn_bitor_expression::parse(Lexer &lex, Environment *env)
     else
         return e;
 }
-sn_expression *sn_bitxor_expression::parse(Lexer &lex, Environment *env)
+sn_expression *sn_bitxor_expression::parse(Lexer &lex)
 {
-    sn_expression *e = sn_bitand_expression::parse(lex, env);
-    if (lex.peakNext().type == BIT_XOR)
+    sn_expression *e = sn_bitand_expression::parse(lex);
+    if (SKIP(BIT_XOR))
     {
-        lex.getNext();
         sn_bitxor_expression *expr = new sn_bitxor_expression();
-        expr->left = e;
-        expr->right = sn_bitxor_expression::parse(lex, env);
+        expr->addChild(e);
+        expr->addChild(sn_bitxor_expression::parse(lex));
         // expr->type_ =
         //     UsualArithmeticConversion(expr->left->type(),
         //     expr->right->type());
@@ -1020,15 +958,14 @@ sn_expression *sn_bitxor_expression::parse(Lexer &lex, Environment *env)
     else
         return e;
 }
-sn_expression *sn_bitand_expression::parse(Lexer &lex, Environment *env)
+sn_expression *sn_bitand_expression::parse(Lexer &lex)
 {
-    sn_expression *e = sn_eq_expression::parse(lex, env);
-    if (lex.peakNext().type == BIT_AND)
+    sn_expression *e = sn_eq_expression::parse(lex);
+    if (SKIP(BIT_AND))
     {
-        lex.getNext();
         sn_bitand_expression *expr = new sn_bitand_expression();
-        expr->left = e;
-        expr->right = sn_bitand_expression::parse(lex, env);
+        expr->addChild(e);
+        expr->addChild(sn_bitand_expression::parse(lex));
         // expr->type_ =
         //     UsualArithmeticConversion(expr->left->type(),
         //     expr->right->type());
@@ -1042,15 +979,15 @@ sn_expression *sn_bitand_expression::parse(Lexer &lex, Environment *env)
     else
         return e;
 }
-sn_expression *sn_eq_expression::parse(Lexer &lex, Environment *env)
+sn_expression *sn_eq_expression::parse(Lexer &lex)
 {
-    sn_expression *e = sn_rel_expression::parse(lex, env);
+    sn_expression *e = sn_rel_expression::parse(lex);
     if (lex.peakNext().type == REL_EQ || lex.peakNext().type == REL_NE)
     {
         sn_eq_expression *expr = new sn_eq_expression();
         expr->op = lex.getNext().type;
-        expr->left = e;
-        expr->right = sn_eq_expression::parse(lex, env);
+        expr->addChild(e);
+        expr->addChild(sn_eq_expression::parse(lex));
         // expr->type_ = TypeFactory::Primitive_Int();
         // if (expr->left->type()->isArithmetic() &&
         //     expr->right->type()->isArithmetic())
@@ -1070,16 +1007,16 @@ sn_expression *sn_eq_expression::parse(Lexer &lex, Environment *env)
     else
         return e;
 }
-sn_expression *sn_rel_expression::parse(Lexer &lex, Environment *env)
+sn_expression *sn_rel_expression::parse(Lexer &lex)
 {
-    sn_expression *e = sn_shift_expression::parse(lex, env);
+    sn_expression *e = sn_shift_expression::parse(lex);
     if (lex.peakNext().type == REL_LT || lex.peakNext().type == REL_LE ||
         lex.peakNext().type == REL_GT || lex.peakNext().type == REL_GE)
     {
         sn_rel_expression *expr = new sn_rel_expression();
         expr->op = lex.getNext().type;
-        expr->left = e;
-        expr->right = sn_rel_expression::parse(lex, env);
+        expr->addChild(e);
+        expr->addChild(sn_rel_expression::parse(lex));
         // expr->type_ = TypeFactory::Primitive_Int();
         // if (expr->left->type()->isArithmetic() &&
         //     expr->right->type()->isArithmetic())
@@ -1099,26 +1036,26 @@ sn_expression *sn_rel_expression::parse(Lexer &lex, Environment *env)
     else
         return e;
 }
-sn_expression *sn_shift_expression::parse(Lexer &lex, Environment *env)
+sn_expression *sn_shift_expression::parse(Lexer &lex)
 {
-    sn_expression *e = sn_add_expression::parse(lex, env);
+    sn_expression *e = sn_add_expression::parse(lex);
     if (lex.peakNext().type == BIT_SLEFT || lex.peakNext().type == BIT_SRIGHT)
     {
         sn_shift_expression *expr = new sn_shift_expression();
         expr->op = lex.getNext().type;
 
         sn_expression *l = e;
-        sn_expression *r = sn_shift_expression::parse(lex, env);
+        sn_expression *r = sn_shift_expression::parse(lex);
         // assert(l->type()->isIntegral());
         // assert(r->type()->isIntegral());
 
         // const Type *pl = IntegerPromotion(l->type());
         // const Type *pr = IntegerPromotion(r->type());
 
-        expr->left = l;
+        expr->addChild(l);
         // if (!pl->equal(*l->type()))
         //     expr->left = new sn_cast_expression(pl, l);
-        expr->right = r;
+        expr->addChild(r);
         // if (!pr->equal(*r->type()))
         //     expr->right = new sn_cast_expression(pr, r);
 
@@ -1128,17 +1065,15 @@ sn_expression *sn_shift_expression::parse(Lexer &lex, Environment *env)
     else
         return e;
 }
-sn_expression *sn_add_expression::parse(Lexer &lex, Environment *env,
-                                        sn_expression *left)
+sn_expression *sn_add_expression::parse(Lexer &lex)
 {
-    if (left == nullptr)
-        left = sn_mul_expression::parse(lex, env);
+    sn_expression *left = sn_mul_expression::parse(lex);
     if (lex.peakNext().type == OP_ADD || lex.peakNext().type == OP_SUB)
     {
         sn_add_expression *expr = new sn_add_expression();
         expr->op = lex.getNext().type;
-        expr->left = left;
-        expr->right = sn_mul_expression::parse(lex, env);
+        expr->addChild(left);
+        expr->addChild(sn_add_expression::parse(lex));
 
         // EXPECT_TYPE_WITH(expr->left->type(), TOp_ADD);
         // EXPECT_TYPE_WITH(expr->right->type(), TOp_ADD);
@@ -1193,21 +1128,21 @@ sn_expression *sn_add_expression::parse(Lexer &lex, Environment *env,
         //     SyntaxErrorEx("sn_add_expression: invalid combination");
         // } while (false);
 
-        return parse(lex, env, expr);
+        return expr;
     }
     else
         return left;
 }
-sn_expression *sn_mul_expression::parse(Lexer &lex, Environment *env)
+sn_expression *sn_mul_expression::parse(Lexer &lex)
 {
-    sn_expression *e = sn_cast_expression::parse(lex, env);
+    sn_expression *e = sn_cast_expression::parse(lex);
     TokenType tt = lex.peakNext().type;
     if (tt == OP_MUL || tt == OP_DIV || tt == OP_MOD)
     {
         sn_mul_expression *expr = new sn_mul_expression();
         expr->op = lex.getNext().type;
-        expr->left = e;
-        expr->right = sn_mul_expression::parse(lex, env);
+        expr->addChild(e);
+        expr->addChild(sn_mul_expression::parse(lex));
 
         // EXPECT_TYPE_WITH(expr->left->type(), TOp_MUL);
         // EXPECT_TYPE_WITH(expr->right->type(), TOp_MUL);
@@ -1236,49 +1171,46 @@ sn_expression *sn_mul_expression::parse(Lexer &lex, Environment *env)
         return e;
 }
 // Explicit Type Conversion
-sn_expression *sn_cast_expression::parse(Lexer &lex, Environment *env)
+sn_expression *sn_cast_expression::parse(Lexer &lex)
 {
-    if (lex.peakNext().type == LP && first(SN_TYPE_NAME, lex.peakNext(1), env))
+    if (lex.peakNext().type == LP && first(SN_TYPE_NAME, lex.peakNext(1)))
     {
         sn_cast_expression *ce = new sn_cast_expression();
         EXPECT(LP);
-        ce->to = sn_type_name::parse(lex, env);
+        ce->addChild(sn_type_name::parse(lex));
         EXPECT(RP);
-        ce->from = parse(lex, env);
+        ce->addChild(sn_cast_expression::parse(lex));
         return ce;
     }
     else
     {
-        return sn_unary_expression::parse(lex, env);
+        return sn_unary_expression::parse(lex);
     }
 }
 // unary expression <- Value Transformation
-sn_expression *sn_unary_expression::parse(Lexer &lex, Environment *env)
+sn_expression *sn_unary_expression::parse(Lexer &lex)
 {
-    if (first(SN_UNARY_EXPRESSION, lex.peakNext(), env))
+    if (first(SN_UNARY_EXPRESSION, lex.peakNext()))
     {
         sn_unary_expression *expr = new sn_unary_expression();
-        expr->e = nullptr;
-        expr->tn = nullptr;
+        expr->op = NONE;
         switch (lex.peakNext().type)
         {
             case OP_INC:
             case OP_DEC:
                 expr->op = lex.getNext().type;
-                expr->e = parse(lex, env);
-                // EXPECT_TYPE_WITH(expr->e->type(), TOp_INC);
+                expr->addChild(sn_unary_expression::parse(lex));
                 // expr->type_ = expr->e->type();
                 break;
             case SIZEOF:
                 expr->op = lex.getNext().type;
-                if (lex.peakNext().type == LP)
+                if (SKIP(LP))
                 {
-                    EXPECT(LP);
-                    expr->tn = sn_type_name::parse(lex, env);
+                    expr->addChild(sn_type_name::parse(lex));
                     EXPECT(RP);
                 }
                 else
-                    expr->e = sn_unary_expression::parse(lex, env);
+                    expr->addChild(sn_unary_expression::parse(lex));
                 break;
             case BIT_AND:  // unary op: & * + - ~ !
             case OP_MUL:
@@ -1287,22 +1219,22 @@ sn_expression *sn_unary_expression::parse(Lexer &lex, Environment *env)
             case BIT_NOT:
             case BOOL_NOT:
                 expr->op = lex.getNext().type;
-                expr->e = sn_cast_expression::parse(lex, env);
+                expr->addChild(sn_cast_expression::parse(lex));
                 // assert(expr->e != nullptr);
                 // EXPECT_TYPE_IS(expr->e->type(), T_POINTER);
                 // expr->type_ = expr->e->type()->asPointerType()->target();
                 break;
             default:
-                expr->e = sn_postfix_expression::parse(
-                    lex, env, sn_primary_expression::parse(lex, env));
+                expr->addChild(sn_postfix_expression::parse(
+                    lex, sn_primary_expression::parse(lex)));
                 break;
         }
         return expr;
     }
     else
     {
-        return sn_postfix_expression::parse(
-            lex, env, sn_primary_expression::parse(lex, env));
+        return sn_postfix_expression::parse(lex,
+                                            sn_primary_expression::parse(lex));
     }
 }
 /*
@@ -1315,23 +1247,19 @@ sn_expression *sn_unary_expression::parse(Lexer &lex, Environment *env)
  * postfix-expr '--'
  */
 // unary expression <- Value Transformation
-sn_expression *sn_postfix_expression::parse(Lexer &lex, Environment *env,
-                                            sn_expression *left)
+sn_expression *sn_postfix_expression::parse(Lexer &lex, sn_expression *left)
 {
-    if (first(SN_POSTFIX_EXPRESSION, lex.peakNext(), env))
+    if (first(SN_POSTFIX_EXPRESSION, lex.peakNext()))
     {
         sn_postfix_expression *expr = new sn_postfix_expression();
-        expr->left = left;
-        assert(left != nullptr);
-        // assert(target->type() != nullptr);
 
-        switch (lex.peakNext().type)
+        expr->addChild(left);
+        expr->op = lex.peakNext().type;
+        switch (lex.getNext().type)
         {
             case LSB:
-                EXPECT(LSB);
                 // EXPECT_TYPE_WITH(expr->target->type(), TOp_INDEX);
-                expr->op = POSTFIX_INDEX;
-                expr->data.e = sn_comma_expression::parse(lex, env);
+                expr->addChild(sn_comma_expression::parse(lex));
                 // EXPECT_TYPE_IS(expr->index->type(), T_INT);
                 // if (dynamic_cast<Indexable *>(expr->target->type()))
                 //     expr->type_ =
@@ -1340,53 +1268,41 @@ sn_expression *sn_postfix_expression::parse(Lexer &lex, Environment *env,
                 EXPECT(RSB);
                 break;
             case LP:
-                EXPECT(LP);
                 // EXPECT_TYPE_IS(expr->target->type(), T_FUNCTION);
                 // EXPECT_TYPE_WITH(expr->target->type(), TOp_CALL);
-                expr->op = POSTFIX_CALL;
-                expr->data.ael = nullptr;
                 if (lex.peakNext().type != RP)
-                    expr->data.ael =
-                        sn_argument_expression_list::parse(lex, env);
+                    expr->addChild(sn_argument_expression_list::parse(lex));
                 // expr->type_ =
                 //     dynamic_cast<FuncType *>(expr->target->type())->rtype();
                 EXPECT(RP);
                 break;
             case REFER_TO:
-                lex.getNext();
                 // EXPECT_TYPE_WITH(expr->target->type(), TOp_OFFSET);
-                expr->op = POSTFIX_OBJECT_OFFSET;
-                expr->data.id = sn_identifier::parse(lex, env);
+                expr->addChild(sn_identifier::parse(lex));
                 break;
             case POINT_TO:
-                lex.getNext();
                 // EXPECT_TYPE_IS(expr->target->type(), T_POINTER);
                 // EXPECT_TYPE_WITH(
                 //     expr->target->type()->asPointerType()->target(),
                 //     TOp_OFFSET);
-                expr->op = POSTFIX_POINTER_OFFSET;
-                expr->data.id = sn_identifier::parse(lex, env);
+                expr->addChild(sn_identifier::parse(lex));
                 // expr->type_ = dynamic_cast<StructType
                 // *>(expr->target->type())
                 //                   ->getMember(expr->member)
                 //                   ->type;
                 break;
             case OP_INC:
-                lex.getNext();
-                expr->op = POSTFIX_INC;
                 // EXPECT_TYPE_WITH(expr->target->type(), TOp_INC);
                 // expr->type_ = expr->target->type();
                 break;
             case OP_DEC:
-                lex.getNext();
-                expr->op = POSTFIX_DEC;
                 // EXPECT_TYPE_WITH(expr->target->type(), TOp_DEC);
                 // expr->type_ = expr->target->type();
                 break;
             default: SyntaxError("Should not reach here."); break;
         }
 
-        return parse(lex, env, expr);
+        return parse(lex, expr);
     }
     else
     {
@@ -1394,7 +1310,7 @@ sn_expression *sn_postfix_expression::parse(Lexer &lex, Environment *env,
     }
 }
 // unary expression <- Value Transformation
-sn_expression *sn_primary_expression::parse(Lexer &lex, Environment *env)
+sn_expression *sn_primary_expression::parse(Lexer &lex)
 {
     sn_primary_expression *p = new sn_primary_expression();
     p->t = lex.peakNext();
@@ -1404,13 +1320,10 @@ sn_expression *sn_primary_expression::parse(Lexer &lex, Environment *env)
         case CONST_INT:
         case CONST_FLOAT:
         case STRING: lex.getNext(); break;
-        case SYMBOL:
-            lex.getNext();
-            p->data.id = sn_identifier::parse(lex, env);
-            break;
+        case SYMBOL: p->addChild(sn_identifier::parse(lex)); break;
         case LP:
-            EXPECT(LP);
-            p->data.expr = sn_comma_expression::parse(lex, env);
+            lex.getNext();
+            p->addChild(sn_comma_expression::parse(lex));
             EXPECT(RP);
             break;
         default: SyntaxErrorEx("Unsupported primary expression"); break;
@@ -1419,959 +1332,870 @@ sn_expression *sn_primary_expression::parse(Lexer &lex, Environment *env)
     return p;
 }
 
-sn_argument_expression_list *sn_argument_expression_list::parse(
-    Lexer &lex, Environment *env)
+sn_argument_expression_list *sn_argument_expression_list::parse(Lexer &lex)
 {
     sn_argument_expression_list *ael = new sn_argument_expression_list();
-    ael->ae = sn_assign_expression::parse(lex, env);
-    ael->right = nullptr;
-    if (SKIP(OP_COMMA))
-        ael->right = parse(lex, env);
+
+    do
+    {
+        ael->addChild(sn_assign_expression::parse(lex));
+    } while (SKIP(OP_COMMA));
+
     return ael;
 }
 
-sn_const_expression *sn_const_expression::parse(Lexer &lex, Environment *env)
+sn_const_expression *sn_const_expression::parse(Lexer &lex)
 {
     sn_const_expression *ce = new sn_const_expression();
-    ce->e = sn_cond_expression::parse(lex, env);
+    ce->addChild(sn_cond_expression::parse(lex));
     return ce;
 }
 
-void sn_translation_unit::emit(Environment *env, EEmitGoal goal) const
-{
-    ed->emit(env, goal);
-    if (right) right->emit(env, goal);
-}
-void sn_external_declaration::emit(Environment *env, EEmitGoal goal) const
-{
-    if (branch == FUNCDEF)
-        data.fd->emit(env, goal);
-    else
-        data.d->emit(env, goal);
-}
+// --------------------------------------------------------------------------
+// visit()/afterChildren()
+// --------------------------------------------------------------------------
 
-// declaration code emittion
-void sn_declaration::emit(Environment *env, EEmitGoal goal) const
-{
-    // add declaration to env
-}
-void sn_declaration_list::emit(Environment *env, EEmitGoal goal) const
-{
-    d->emit(env, goal);
-    if (right) right->emit(env, goal);
-}
-void sn_init_declarator::emit(Environment *env, EEmitGoal goal) const
-{
-    // add declarator to env
-    d->emit(env, goal);
-    // emit initializer code
-    i->emit(env, goal);
-}
-void sn_init_declarator_list::emit(Environment *env, EEmitGoal goal) const
-{
-    id->emit(env, FOR_NOTHING);
-    if (right) right->emit(env, FOR_NOTHING);
-}
-void sn_declarator::emit(Environment *env, EEmitGoal goal) const
-{
-}
-void sn_direct_declarator::emit(Environment *env, EEmitGoal goal) const
-{
-}
-void sn_abstract_declarator::emit(Environment *env, EEmitGoal goal) const
-{
-}
-void sn_direct_abstract_declarator::emit(Environment *env, EEmitGoal goal) const
-{
-}
-void sn_initializer::emit(Environment *env, EEmitGoal goal) const
-{
-}
-void sn_initializer_list::emit(Environment *env, EEmitGoal goal) const
-{
-}
-void sn_parameter_type_list::emit(Environment *env, EEmitGoal goal) const
-{
-}
-void sn_parameter_list::emit(Environment *env, EEmitGoal goal) const
-{
-}
-void sn_parameter_declaration::emit(Environment *env, EEmitGoal goal) const
-{
-}
-void sn_declaration_specifiers::emit(Environment *env, EEmitGoal goal) const
-{
-}
-void sn_specifier_qualifier_list::emit(Environment *env, EEmitGoal goal) const
-{
-}
-void sn_storage_specifier::emit(Environment *env, EEmitGoal goal) const
-{
-}
-void sn_type_qualifier::emit(Environment *env, EEmitGoal goal) const
-{
-}
-void sn_type_qualifier_list::emit(Environment *env, EEmitGoal goal) const
-{
-}
-void sn_type_specifier::emit(Environment *env, EEmitGoal goal) const
-{
-}
-void sn_struct_union_specifier::emit(Environment *env, EEmitGoal goal) const
-{
-}
-void sn_enum_specifier::emit(Environment *env, EEmitGoal goal) const
-{
-}
-void sn_struct_declaration::emit(Environment *env, EEmitGoal goal) const
-{
-}
-void sn_struct_declaration_list::emit(Environment *env, EEmitGoal goal) const
-{
-}
-void sn_struct_declarator::emit(Environment *env, EEmitGoal goal) const
-{
-}
-void sn_struct_declarator_list::emit(Environment *env, EEmitGoal goal) const
-{
-}
-void sn_enumerator_list::emit(Environment *env, EEmitGoal goal) const
-{
-}
-void sn_enumerator::emit(Environment *env, EEmitGoal goal) const
-{
-}
-void sn_enumeration_constan::emit(Environment *env, EEmitGoal goal) const
-{
-}
-void sn_type_name::emit(Environment *env, EEmitGoal goal) const
-{
-}
-void sn_pointer::emit(Environment *env, EEmitGoal goal) const
-{
-}
-void sn_identifier::emit(Environment *env, EEmitGoal goal) const
-{
-}
-void sn_identifier_list::emit(Environment *env, EEmitGoal goal) const
-{
-}
-void sn_typedef_name::emit(Environment *env, EEmitGoal goal) const
-{
-}
+// helper classes and functions
 
-// function code emittion
-void sn_function_definition::emit(Environment *env, EEmitGoal goal) const
+class TypeSpecifiersBuilder
 {
-}
-void ::emit(Environment *env, EEmitGoal goal) const
+    // collect type-specifier set
+    // bits:
+    //      void,char,short,int,
+    //      long,float,double,signed
+    //      unsigned,struct/union,enum,typedef-name
+    int type_specifier_allow, type_specifier_has;
+    // for struct/union, enum, typedef-name
+    Type *_type;
 
-std::string SyntaxNode::debugString()
-{
-    return "~<?~>";
-}
-std::string sn_translation_unit::debugString()
-{
-    std::string s = "~<translation_unit~>";
-    s += "\n>\n";
-    for (auto *tu = this; tu; tu = tu->right)
-        s += tu->ed->debugString();
-    s += "<\n";
-    return s;
-}
-std::string sn_external_declaration::debugString()
-{
-    std::string s = "~<external_declaration~>";
-    s += "\n>\n";
-    s += branch == FUNCDEF ? data.fd->debugString() : data.d->debugString();
-    s += "<\n";
-    return s;
-}
-std::string sn_function_definition::debugString()
-{
-    std::string ds = "~<function_definition~>";
-    ds += "\n>\n";
-    if (s)
-        ds += s->debugString();
-    if (d)
-        ds += d->debugString();
-    if (dl)
-        ds += dl->debugString();
-    if (cs)
-        ds += "\n" + cs->debugString();
-    ds += "<\n";
-    return ds;
-}
-std::string sn_declaration::debugString()
-{
-    std::string ds = "~<declaration~>";
-    ds += "\n>\n";
-    if (s)
-        ds += s->debugString();
-    if (idl)
-        ds += idl->debugString();
-    ds += ";<\n";
-    return ds;
-}
-std::string sn_declaration_list::debugString()
-{
-    string s = "~<declaration_list~>";
-    s += "\n>\n";
-    for (auto *dl = this; dl; dl = dl->right)
-        s += dl->d->debugString();
-    s += "<\n";
-    return s;
-}
-std::string sn_init_declarator::debugString()
-{
-    string ds;  // = "~<init_declarator~>";
-    // ds += "\n>\n";
-    if (d)
-        ds += d->debugString();
-    if (i)
-        ds += " = " + i->debugString();
-    // ds += "<\n";
-    return ds;
-}
-std::string sn_init_declarator_list::debugString()
-{
-    string s;  // = "~<init_declarator_list~>";
-    // s += "\n>\n";
-    for (auto *idl = this; idl; idl = idl->right)
-        s += idl->id->debugString() + (idl->right ? "," : "");
-    // s += "<\n";
-    return s;
-}
-std::string sn_declarator::debugString()
-{
-    string s;  // = "~<declarator~>";
-    // s += "\n>\n";
-    if (p)
-        s += p->debugString();
-    s += dd->debugString();
-    // s += "<\n";
-    return s;
-}
-std::string sn_direct_declarator::debugString()
-{
-    string s;  // = "~<direct_declarator~>";
-    // s += "\n>\n";
-    for (auto *dd = this; dd; dd = dd->right)
+   public:
+    TypeSpecifiersBuilder()
+        : type_specifier_allow(0xffffFFFF),
+          type_specifier_has(0),
+          _type(nullptr)
     {
-        switch (dd->branch)
+    }
+    void feed_type_specifiers(TokenType t, Type *type, Environment *env);
+
+    Type *build() const;
+};
+
+class TypeQualifiersBuilder
+{
+    // collect type-qualifier
+    // bits:
+    //      const,volatile
+    int type_qualifier_has;
+
+   public:
+    TypeQualifiersBuilder() : type_qualifier_has(0)
+    {
+    }
+    void feed_type_qualifiers(TokenType t);
+
+    int build() const;
+};
+
+void TypeSpecifiersBuilder::feed_type_specifiers(TokenType t, Type *type,
+                                                 Environment *env)
+{
+#define __check_set(value)                                                     \
+    if ((type_specifier_allow & (value)) == 0 || type_specifier_has & (value)) \
+        SyntaxError("DeclarationSpecifiersBuilder: unexpected token");         \
+    else                                                                       \
+        type_specifier_has |= (value);
+
+    switch (t)
+    {
+        case TYPE_VOID:
+            __check_set(0x1);
+            type_specifier_allow &= 0x1;
+            break;
+        case TYPE_CHAR:
+            __check_set(0x2);
+            type_specifier_allow &= 0x182;  // char, signed, unsigned
+            break;
+        case TYPE_SHORT:
+            __check_set(0x4);
+            type_specifier_allow &= 0x18c;  // short, signed, unsigned, int
+            break;
+        case TYPE_INT:
+            __check_set(0x8);
+            type_specifier_allow &=
+                0x19c;  // int, signed, unsigned, short, long
+            break;
+        case TYPE_LONG:
+            __check_set(0x10);
+            type_specifier_allow &= 0x198;  // long, signed, unsigned, int
+            break;
+        case TYPE_FLOAT:
+            __check_set(0x20);
+            type_specifier_allow &= 0x20;
+            break;
+        case TYPE_DOUBLE:
+            __check_set(0x40);
+            type_specifier_allow &= 0x50;  // double, long
+            break;
+        case SIGNED:
+            __check_set(0x80);
+            type_specifier_allow &= 0x9e;  // signed, char, short, int, long
+            break;
+        case UNSIGNED:
+            __check_set(0x100);
+            type_specifier_allow &= 0x11e;  // unsigned, char, short, int, long
+            break;
+        case TYPE_STRUCT:
+        case TYPE_UNION:
+            __check_set(0x200);
+            type_specifier_allow &= 0x200;
+            _type = type;
+            break;
+        case TYPE_ENUM:
+            __check_set(0x400);
+            type_specifier_allow &= 0x400;
+            _type = type;
+            break;
+        case SYMBOL:
+            __check_set(0x800);
+            type_specifier_allow &= 0x800;
+            _type = type;
+            break;
+        default:
+            SyntaxError("DeclarationSpecifiersBuilder: unexpected token");
+            break;
+    }
+
+#undef __check_set
+
+    assert((~type_specifier_allow & type_specifier_has) == 0);
+}
+void TypeQualifiersBuilder::feed_type_qualifiers(TokenType t)
+{
+    switch (t)
+    {
+        case CONST:
+            if (type_qualifier_has & TP_CONST)
+                SyntaxWarning("duplicate type qualifier 'const'");
+            type_qualifier_has |= TP_CONST;
+            break;
+        case VOLATILE:
+            if (type_qualifier_has & TP_VOLATILE)
+                SyntaxWarning("duplicate type qualifier 'volatile'");
+            type_qualifier_has |= TP_VOLATILE;
+            break;
+        default:
+            SyntaxError("DeclarationSpecifiersBuilder: unexpected token");
+            break;
+    }
+}
+
+Type *TypeSpecifiersBuilder::build() const
+{
+    if (type_specifier_has & 0xe00)  // struct/union/enum/typedef
+        return _type;
+    else if (type_specifier_has == 0x1)  // void
+        return new VoidType();
+    else if (type_specifier_has == 0x2)  // char
+        return new CharType();
+    else if (type_specifier_has == 0x20)  // float
+        return new FloatingType("f");
+    else if (type_specifier_has & 0x40)  // double/long double
+        return new FloatingType((type_specifier_has & 0x10) ? "ld" : "d");
+    else
+    {
+        char *desc = new char[4];
+        char *d = desc;
+        if (type_specifier_has & 0x80)
+            *(d++) = 'S';
+        if (type_specifier_has & 0x100)
+            *(d++) = 'U';
+        if (type_specifier_has & 0x2)
+            *(d++) = 'c';
+        if (type_specifier_has & 0x4)
+            *(d++) = 's';
+        if (type_specifier_has & 0x10)
+            *(d++) = 'l';
+        if (type_specifier_has & 0x8)
+            *(d++) = 'i';
+        *d = '\0';
+        return new IntegerType(desc);
+    }
+}
+int TypeQualifiersBuilder::build() const
+{
+    return type_qualifier_has;
+}
+
+// --------------------------------------------------------------------------
+const char *DebugSyntaxNode(ESyntaxNodeType nt);
+
+ESymbolScope SyntaxNode::getScope() const
+{
+    // which is first meet ?
+    //  sn_struct_declaration_list,
+    //  sn_compound_statement       => block
+    //  parameter-type-list,
+    //  identifier_list             => func_proto (valid in function body)
+    //  sn_translation_unit         => file
+    ESymbolScope scope = SYMBOL_SCOPE_none;
+
+    SyntaxNode *node = parent();
+    bool done = false;
+    while (!done && node != nullptr)
+    {
+        done = true;
+        switch (node->nodeType())
         {
-            case ID: s += dd->data.id->debugString(); break;
-            case DECLARATOR: s += dd->data.d->debugString(); break;
-            case ARRAY: s += dd->data.arr->debugString(); break;
-            case PARAM_LIST: s += dd->data.ptlist->debugString(); break;
-            case ID_LIST:
-                if (dd->data.idlist)
-                    s += dd->data.idlist->debugString();
+            case SN_STRUCT_DECLARATION_LIST:
+            case SN_COMPOUND_STATEMENT: scope = SYMBOL_SCOPE_block; break;
+            case SN_PARAMETER_TYPE_LIST:
+            case SN_IDENTIFIER_LIST: scope = SYMBOL_SCOPE_func_proto; break;
+            case SN_TRANSLATION_UNIT: scope = SYMBOL_SCOPE_file; break;
+            case SN_LABEL_STATEMENT:  // XXX: may cause bug here
+                scope = SYMBOL_SCOPE_func;
+                break;
+            default: done = false; break;
+        }
+        node = node->parent();
+    }
+
+    return scope;
+}
+void SyntaxNode::visit(Environment *&env)
+{
+    beforeChildren(env);
+    for (auto *child : getChildren())
+    {
+        child->visit(env);
+    }
+    afterChildren(env);
+}
+
+void SyntaxNode::beforeChildren(Environment *&env)
+{
+    SyntaxWarning(std::string(DebugSyntaxNode(nodeType())) +
+                  ": beforeChildren() not implemented");
+}
+void SyntaxNode::afterChildren(Environment *&env)
+{
+    SyntaxWarning(std::string(DebugSyntaxNode(nodeType())) +
+                  ": afterChildren() not implemented");
+}
+
+// void sn_translation_unit::afterChildren(Environment *&env);
+// void sn_external_declaration::afterChildren(Environment *&env);
+
+// type, name, linkage, statement
+// TODO: finish this
+// void sn_function_definition::beforeChildren(Environment *&env);
+// void sn_function_definition::afterChildren(Environment *&env);
+
+// vector<linkage, type, name, expression>
+void sn_declaration::afterChildren(Environment *&env)
+{
+    // declaration_specifiers
+    Type *spec =
+        dynamic_cast<sn_declaration_specifiers *>(getFirstChild())->type_info_;
+    TokenType storage =
+        dynamic_cast<sn_declaration_specifiers *>(getFirstChild())
+            ->storage_info_;
+    if (getChildrenCount() != 2)
+    {
+        SyntaxWarning("sn_declarator: no symbol defined.");
+        return;
+    }
+
+    SymbolBuilder builder;
+    builder.setStorageSpecifier(storage);
+
+    // init_declarator_list
+    for (auto *child : getLastChild()->getChildren())
+    {
+        sn_init_declarator *init_declarator =
+            dynamic_cast<sn_init_declarator *>(child);
+
+        Type *type = TypeUtil::Concatenate(init_declarator->type_info_, spec);
+        StringRef name = init_declarator->name_info_;
+
+        const Symbol *same =
+            Environment::SameNameSymbolInFileScope(env, type, name);
+
+        builder.setScope(init_declarator->getScope());
+        builder.setType(type);
+        builder.setName(name, same ? same->linkage : SYMBOL_LINKAGE_external);
+        env->addSymbol(builder.build());
+        // TODO: deal with initialization code
+    }
+}
+// void sn_declaration_list::afterChildren(Environment *&env) {}
+
+// type, name, expression
+void sn_init_declarator::afterChildren(Environment *&env)
+{
+    type_info_ = dynamic_cast<sn_declarator *>(getFirstChild())->type_info_;
+    name_info_ = dynamic_cast<sn_declarator *>(getFirstChild())->name_info_;
+    SyntaxWarning("test: " + type_info_->toString());
+    if (getChildrenCount() == 2)
+        SyntaxError("initializer not implemented");
+}
+// vector<type, name, expression>
+// void sn_init_declarator_list::afterChildren(Environment *&env) {}
+
+// type, name
+void sn_declarator::afterChildren(Environment *&env)
+{
+    Type *type = nullptr;
+    if (getFirstChild()->nodeType() == SN_POINTER)
+    {
+        type = dynamic_cast<sn_pointer *>(getFirstChild())->type_info_;
+    }
+
+    sn_direct_declarator *dd =
+        dynamic_cast<sn_direct_declarator *>(getLastChild());
+
+    type_info_ = TypeUtil::Concatenate(dd->type_info_, type);
+    name_info_ = dd->name_info_;
+    // Env::CheckRedecl(name_info_);
+}
+void sn_direct_declarator::afterChildren(Environment *&env)
+{
+    type_info_ = nullptr;
+    for (auto *child : getChildren())
+    {
+        switch (child->nodeType())
+        {
+            case SN_IDENTIFIER:
+                assert(name_info_.empty());
+                name_info_ = dynamic_cast<sn_identifier *>(child)->name_info_;
+                break;
+            case SN_DECLARATOR:
+                type_info_ = dynamic_cast<sn_declarator *>(child)->type_info_;
+                name_info_ = dynamic_cast<sn_declarator *>(child)->name_info_;
+                break;
+            case SN_CONST_EXPRESSION:
+                if (((sn_const_expression *)child)->isLeaf())
+                    type_info_ =
+                        TypeUtil::Concatenate(type_info_, new ArrayType());
                 else
-                    s += "()";
+                    type_info_ = TypeUtil::Concatenate(
+                        type_info_,
+                        new ArrayType(dynamic_cast<sn_const_expression *>(child)
+                                          ->value()));
+                break;
+            case SN_PARAMETER_TYPE_LIST:
+                type_info_ = TypeUtil::Concatenate(
+                    type_info_,
+                    dynamic_cast<sn_parameter_type_list *>(child)->type_info_);
+                break;
+            case SN_IDENTIFIER_LIST:
+                type_info_ = TypeUtil::Concatenate(
+                    type_info_,
+                    dynamic_cast<sn_identifier_list *>(child)->type_info_);
                 break;
             default: break;
         }
     }
-    // s += "<\n";
-    return s;
 }
-std::string sn_abstract_declarator::debugString()
+
+// type
+void sn_abstract_declarator::afterChildren(Environment *&env)
 {
-    string s;  // = "~<abstract_declarator~>";
-    // s += "\n>\n";
-    if (p)
-        s += p->debugString();
-    if (dad)
-        s += dad->debugString();
-    // s += "<\n";
-    return s;
-}
-std::string sn_direct_abstract_declarator::debugString()
-{
-    string s;  // = "~<direct_abstract_declarator~>";
-    // s += "\n>\n";
-    for (auto *dad = this; dad; dad = dad->right)
+    type_info_ = nullptr;
+    // pointer
+    if (getFirstChild()->nodeType() == SN_POINTER)
     {
-        switch (dad->branch)
+        type_info_ = dynamic_cast<sn_pointer *>(getFirstChild())->type_info_;
+    }
+    // direct_abstract_declarator
+    if (getLastChild()->nodeType() == SN_DIRECT_ABSTRACT_DECLARATOR)
+    {
+        type_info_ = TypeUtil::Concatenate(
+            dynamic_cast<sn_direct_abstract_declarator *>(getLastChild())
+                ->type_info_,
+            type_info_);
+    }
+}
+void sn_direct_abstract_declarator::afterChildren(Environment *&env)
+{
+    type_info_ = nullptr;
+    if (getFirstChild()->nodeType() == SN_ABSTRACT_DECLARATOR)
+    {
+        type_info_ =
+            dynamic_cast<sn_abstract_declarator *>(getFirstChild())->type_info_;
+    }
+
+    for (auto *child : getChildren())
+    {
+        if (child->nodeType() == SN_CONST_EXPRESSION)
         {
-            case ABST_DECL: s += dad->data.ad->debugString(); break;
-            case ARRAY: s += dad->data.arr->debugString(); break;
-            case PARAM_LIST: s += dad->data.ptlist->debugString(); break;
-            default: break;
+            if (child->isLeaf())
+                type_info_ = TypeUtil::Concatenate(type_info_, new ArrayType());
+            else
+                type_info_ = TypeUtil::Concatenate(
+                    type_info_,
+                    new ArrayType(
+                        dynamic_cast<sn_const_expression *>(child)->value()));
+        }
+        else if (child->nodeType() == SN_PARAMETER_TYPE_LIST)
+        {
+            type_info_ = TypeUtil::Concatenate(
+                type_info_,
+                dynamic_cast<sn_parameter_type_list *>(child)->type_info_);
         }
     }
-    // s += "<\n";
-    return s;
 }
-std::string sn_initializer::debugString()
+
+// expression(constant-ness)
+// void sn_initializer::afterChildren(Environment *&env);
+// void sn_initializer_list::afterChildren(Environment *&env);
+
+// type(FuncType)
+void sn_parameter_type_list::afterChildren(Environment *&env)
 {
-    string s = "~<initializer~>";
-    s += "\n>\n";
-    if (e)
-        s += e->debugString();
-    if (il)
-        s += il->debugString();
-    s += "<\n";
-    return s;
-}
-std::string sn_initializer_list::debugString()
-{
-    string s = "~<initializer_list~>";
-    s += "\n>\n";
-    for (auto *il = this; il; il = il->right)
-        s += il->i->debugString();
-    s += "<\n";
-    return s;
-}
-std::string sn_parameter_type_list::debugString()
-{
-    string s = "~<parameter_type_list~>";
-    s += "\n>\n";
-    s += pl->debugString();
+    type_info_ = dynamic_cast<sn_parameter_list *>(getFirstChild())->type_info_;
     if (varlist)
-        s += "...\n";
-    s += "<\n";
-    return s;
+        dynamic_cast<FuncType *>(type_info_)->setVarArg();
 }
-std::string sn_parameter_list::debugString()
+void sn_parameter_list::afterChildren(Environment *&env)
 {
-    string s = "~<parameter_list~>";
-    s += "\n>\n";
-    for (auto *pl = this; pl; pl = pl->right)
-        s += pl->pd->debugString();
-    s += "<\n";
-    return s;
-}
-std::string sn_parameter_declaration::debugString()
-{
-    string s = "~<parameter_declaration~>";
-    s += "\n>\n";
-    switch (branch)
+    FuncType *func = new FuncType();
+    for (auto *child : getChildren())
     {
-        case DECL: s += data.d->debugString(); break;
-        case ABST_DECL: s += data.ad->debugString(); break;
-        default: break;
+        sn_parameter_declaration *pd =
+            dynamic_cast<sn_parameter_declaration *>(child);
+        func->addParam(pd->type_info_, pd->name_info_);
     }
-    s += "<\n";
-    return s;
+    type_info_ = func;
 }
-std::string sn_declaration_specifiers::debugString()
+// type, name
+void sn_parameter_declaration::afterChildren(Environment *&env)
 {
-    string s;  // = "~<declaration_specifiers~>";
-    // s += "\n>\n";
-    for (auto *ds = this; ds; ds = ds->right)
+    type_info_ =
+        dynamic_cast<sn_declaration_specifiers *>(getFirstChild())->type_info_;
+    // name_info_
+
+    if (getChildrenCount() == 2)
     {
-        switch (ds->branch)
+        if (getLastChild()->nodeType() == SN_DECLARATOR)
         {
-            case STORAGE: s += ds->data.ss->debugString(); break;
-            case TYPE_SPEC: s += ds->data.ts->debugString(); break;
-            case TYPE_QUAL: s += ds->data.tq->debugString(); break;
+            type_info_ = TypeUtil::Concatenate(
+                dynamic_cast<sn_declarator *>(getLastChild())->type_info_,
+                type_info_);
+            name_info_ =
+                dynamic_cast<sn_declarator *>(getLastChild())->name_info_;
+        }
+        else
+        {
+            type_info_ = TypeUtil::Concatenate(
+                dynamic_cast<sn_abstract_declarator *>(getLastChild())
+                    ->type_info_,
+                type_info_);
+        }
+    }
+}
+
+// type, linkage(storage_info_)
+void sn_declaration_specifiers::afterChildren(Environment *&env)
+{
+    TypeSpecifiersBuilder sb;
+    TypeQualifiersBuilder qb;
+
+    storage_info_ = NONE;
+    for (auto *child : getChildren())
+    {
+        switch (child->nodeType())
+        {
+            case SN_STORAGE_SPECIFIER:
+                storage_info_ = ((sn_storage_specifier *)child)->t;
+                break;
+            case SN_TYPE_SPECIFIER:
+                sb.feed_type_specifiers(
+                    ((sn_type_specifier *)child)->t,
+                    ((sn_type_specifier *)child)->type_info_, env);
+                break;
+            case SN_TYPE_QUALIFIER:
+                qb.feed_type_qualifiers(((sn_type_qualifier *)child)->t);
+                break;
             default: break;
         }
-        s += ' ';
     }
-    // s += "<\n";
-    return s;
+
+    type_info_ = sb.build();
+    type_info_->setQualifier(qb.build());
 }
-std::string sn_specifier_qualifier_list::debugString()
+// type
+void sn_specifier_qualifier_list::afterChildren(Environment *&env)
 {
-    string s = "~<specifiers_qualifier_list~>";
-    s += "\n>\n";
-    for (auto *sql = this; sql; sql = sql->right)
+    TypeSpecifiersBuilder sb;
+    TypeQualifiersBuilder qb;
+
+    for (auto *child : getChildren())
     {
-        switch (sql->branch)
+        switch (child->nodeType())
         {
-            case TYPE_SPEC: s += sql->data.ts->debugString(); break;
-            case TYPE_QUAL: s += sql->data.tq->debugString(); break;
+            case SN_TYPE_SPECIFIER:
+                sb.feed_type_specifiers(
+                    ((sn_type_specifier *)child)->t,
+                    ((sn_type_specifier *)child)->type_info_, env);
+                break;
+            case SN_TYPE_QUALIFIER:
+                qb.feed_type_qualifiers(((sn_type_qualifier *)child)->t);
+                break;
             default: break;
         }
     }
-    s += "<\n";
-    return s;
-}
-std::string sn_storage_specifier::debugString()
-{
-    return Token::DebugTokenType(t);
-}
-std::string sn_type_qualifier::debugString()
-{
-    return Token::DebugTokenType(t);
-}
-std::string sn_type_qualifier_list::debugString()
-{
-    string s;  // = "~<type_qualifier_list~>";
-    // s += "\n>\n";
-    for (auto *tql = this; tql; tql = tql->right)
-        s += tql->tq->debugString() + " ";
-    // s += "<\n";
-    return s;
-}
-std::string sn_type_specifier::debugString()
-{
-    string s;
-    switch (branch)
-    {
-        case TYPESPEC_SIMPLE: s += Token::DebugTokenType(data.t); break;
-        case TYPESPEC_STRUCT_UNION: s += data.sus->debugString(); break;
-        case TYPESPEC_ENUM: s += data.es->debugString(); break;
-        case TYPESPEC_TYPEDEF: s += data.tn->debugString(); break;
-        default: break;
-    }
-    return s;
-}
-std::string sn_struct_union_specifier::debugString()
-{
-    string s = Token::DebugTokenType(t);
-    if (tag)
-        s += tag->debugString();
-    else
-        s += " <anonymous>";
-    s += "\n>\n";
-    if (sdl)
-        s += sdl->debugString();
-    s += "<\n";
-    return s;
-}
-std::string sn_enum_specifier::debugString()
-{
-    string s = "enum";
-    if (tag)
-        s += tag->debugString();
-    else
-        s += " <anonymous>";
-    s += "\n>\n";
-    if (el)
-        s += el->debugString();
-    s += "<\n";
-    return s;
-}
-std::string sn_struct_declaration::debugString()
-{
-    string s;
-    if (sql)
-        s += sql->debugString();
-    s += ' ';
-    if (sdl)
-        s += sdl->debugString();
-    return s;
-}
-std::string sn_struct_declaration_list::debugString()
-{
-    string s = "{>\n";
-    for (auto *dl = this; dl; dl = dl->right)
-    {
-        s += dl->sd->debugString();
-        s += '\n';
-    }
-    s += "<}\n";
-    return s;
-}
-std::string sn_struct_declarator::debugString()
-{
-    string s = d ? d->debugString() : "<anonymous>";
-    if (bit_field)
-        s += ":" + bit_field->debugString();
-    return s;
-}
-std::string sn_struct_declarator_list::debugString()
-{
-    string s;
-    for (auto *sdl = this; sdl; sdl = sdl->right)
-    {
-        s += sdl->sd->debugString();
-        s += ',';
-    }
-    return s;
-}
-std::string sn_enumerator_list::debugString()
-{
-    string s;
-    for (auto *el = this; el; el = el->right)
-    {
-        s += el->e->debugString();
-        s += ',';
-    }
-    return s;
-}
-std::string sn_enumerator::debugString()
-{
-    string s;
-    s += ec->debugString();
-    if (value)
-        s += "=" + value->debugString();
-    return s;
-}
-std::string sn_enumeration_constant::debugString()
-{
-    string s;
-    s += id->debugString();
-    return s;
-}
 
-std::string sn_type_name::debugString()
-{
-    string s;
-    if (sql)
-        s += sql->debugString();
-    if (ad)
-        s += ad->debugString();
-    return s;
+    type_info_ = sb.build();
+    type_info_->setQualifier(qb.build());
 }
-std::string sn_identifier::debugString()
+// void sn_storage_specifier::afterChildren(Environment *&env) {}
+// void sn_type_qualifier::afterChildren(Environment *&env) {}
+// void sn_type_qualifier_list::afterChildren(Environment *&env) {}
+void sn_type_specifier::afterChildren(Environment *&env)
 {
-    return id.symbol.toString();
-}
-std::string sn_pointer::debugString()
-{
-    string s;
-    for (auto *p = this; p; p = p->right)
+    type_info_ = nullptr;
+    switch (t)
     {
-        s += "* ";
-        if (p->tql)
-            s += p->tql->debugString();
+        case TYPE_STRUCT:
+        case TYPE_UNION:
+            type_info_ =
+                dynamic_cast<sn_struct_union_specifier *>(getFirstChild())
+                    ->type_info_;
+            break;
+        case TYPE_ENUM:
+            type_info_ =
+                dynamic_cast<sn_enum_specifier *>(getFirstChild())->type_info_;
+            break;
+        case SYMBOL:
+            type_info_ =
+                dynamic_cast<sn_typedef_name *>(getFirstChild())->type_info_;
+            break;
+        default: break;
     }
-    return s;
 }
-std::string sn_identifier_list::debugString()
+void sn_struct_union_specifier::beforeChildren(Environment *&env)
 {
-    string s;
-    for (auto *il = this; il; il = il->right)
+    // tag info
+    StringRef tag;
     {
-        s += il->id->debugString();
-        s += ',';
+        if (getFirstChild()->nodeType() == SN_IDENTIFIER)
+            tag = dynamic_cast<sn_identifier *>(getFirstChild())->name_info_;
+        else
+            tag = TypeUtil::GenerateTag();
     }
-    return s;
-}
-std::string sn_typedef_name::debugString()
-{
-    return i->debugString();
-}
+    type_info_ = new TagType((t == TYPE_STRUCT ? T_STRUCT : T_UNION), tag);
 
-std::string sn_label_statement::debugString()
-{
-    return "~<sn_label_statement~>";
-}
-std::string sn_compound_statement::debugString()
-{
-    string s = "{>\n";
-    if (dl)
-        s += dl->debugString();
-    if (sl)
-        s += sl->debugString();
-    s += "<\n}\n";
-    return s;
-}
-std::string sn_expression_statement::debugString()
-{
-    std::string s = "~<expression~>";
-    s += "\n>\n";
-    if (expr)
-        s += expr->debugString();
-    s += "<\n";
-    return s;
-}
-// TODO: support switch
-std::string sn_selection_statement::debugString()
-{
-    std::string s;
-    s += "if>\n";
-    s += expr->debugString();
-    s += "<then>\n";
-    s += stmt->debugString();
-    if (stmt2)
-    {
-        s += "<else>\n";
-        s += stmt2->debugString();
-    }
-    s += "<\n";
-    return s;
-}
-std::string sn_iteration_statement::debugString()
-{
-    std::string s;
-    switch (type)
-    {
-        case WHILE_LOOP:
-            s += "while>\n";
-            if (expr)
-                s += expr->debugString();
-            s += "<\ndo>\n";
-            if (stmt)
-                s += stmt->debugString();
-            break;
-        case DO_LOOP:
-            s += "do>\n";
-            if (stmt)
-                s += stmt->debugString();
-            s += "<\nwhile>\n";
-            if (expr)
-                s += expr->debugString();
-            break;
-        case FOR_LOOP:
-            s += "for>\n";
-            if (expr)
-                s += expr->debugString();
-            if (expr2)
-                s += expr2->debugString();
-            if (expr3)
-                s += expr3->debugString();
-            if (stmt)
-                s += stmt->debugString();
-            break;
-        default: s += ">\n"; break;
-    }
-    s += "<\n";
-    return s;
-}
-std::string sn_jump_statement::debugString()
-{
-    std::string s;
-    switch (type)
-    {
-        case JMP_BREAK: s += "break"; break;
-        case JMP_CONTINUE: s += "continue"; break;
-        case JMP_GOTO: s += "goto"; break;
-        case JMP_RETURN: s += "return"; break;
-    }
-    s += ">\n";
-    if (data.expr)
-        s += data.expr->debugString();
-    s += "<\n";
-    return s;
-}
-std::string sn_comma_expression::debugString()
-{
-    std::string s = ",>\n";
-    s += curr->debugString();
-    if (next)
-        s += next->debugString();
-    s += "<\n";
-    return s;
-}
-std::string sn_assign_expression::debugString()
-{
-    std::string s = "=>\n";
-    // for (SyntaxNode *t : targets) s += t->debugString();
-    if (to)
-        s += to->debugString();
-    if (from)
-        s += from->debugString();
-    s += "<\n";
-    return s;
-}
-std::string sn_cond_expression::debugString()
-{
-    std::string s = "?:>\n";
-    if (cond)
-        s += cond->debugString();
-    if (left)
-        s += left->debugString();
-    if (right)
-        s += right->debugString();
-    s += "<\n";
-    return s;
-}
-std::string sn_or_expression::debugString()
-{
-    std::string s = "||>\n";
-    if (left)
-        s += left->debugString();
-    if (right)
-        s += right->debugString();
-    s += "<\n";
-    return s;
-}
-std::string sn_and_expression::debugString()
-{
-    std::string s = "&&>\n";
-    if (left)
-        s += left->debugString();
-    if (right)
-        s += right->debugString();
-    s += "<\n";
-    return s;
-}
-std::string sn_bitor_expression::debugString()
-{
-    std::string s = "|>\n";
-    if (left)
-        s += left->debugString();
-    if (right)
-        s += right->debugString();
-    s += "<\n";
-    return s;
-}
-std::string sn_bitxor_expression::debugString()
-{
-    std::string s = "^>\n";
-    if (left)
-        s += left->debugString();
-    if (right)
-        s += right->debugString();
-    s += "<\n";
-    return s;
-}
-std::string sn_bitand_expression::debugString()
-{
-    std::string s = "&>\n";
-    if (left)
-        s += left->debugString();
-    if (right)
-        s += right->debugString();
-    s += "<\n";
-    return s;
-}
-std::string sn_eq_expression::debugString()
-{
-    std::string s;
-    if (op == REL_EQ)
-        s += "==";
-    else
-        s += "!=";
-    s += ">\n";
-    if (left)
-        s += left->debugString();
-    if (right)
-        s += right->debugString();
-    s += "<\n";
-    return s;
-}
-std::string sn_rel_expression::debugString()
-{
-    std::string s;
-    switch (op)
-    {
-        case REL_GT: s += "~>"; break;
-        case REL_GE: s += "~>="; break;
-        case REL_LT: s += "~<"; break;
-        case REL_LE: s += "~<="; break;
-        default: break;
-    }
-    s += "\n>\n";
-    if (left)
-        s += left->debugString();
-    if (right)
-        s += right->debugString();
-    s += "<\n";
-    return s;
-}
-std::string sn_shift_expression::debugString()
-{
-    std::string s;
-    switch (op)
-    {
-        case BIT_SLEFT: s += "~<~<"; break;
-        case BIT_SRIGHT: s += "~>~>"; break;
-        default: break;
-    }
-    s += "\n>\n";
-    if (left)
-        s += left->debugString();
-    if (right)
-        s += right->debugString();
-    s += "<\n";
-    return s;
-}
-std::string sn_add_expression::debugString()
-{
-    std::string s;
-    switch (op)
-    {
-        case OP_ADD: s += "+"; break;
-        case OP_SUB: s += "-"; break;
-        default: break;
-    }
-    s += "\n>\n";
-    if (left)
-        s += left->debugString();
-    if (right)
-        s += right->debugString();
-    s += "<\n";
-    return s;
-}
-std::string sn_mul_expression::debugString()
-{
-    std::string s;
-    switch (op)
-    {
-        case OP_MUL: s += "*"; break;
-        case OP_DIV: s += "/"; break;
-        case OP_MOD: s += "%"; break;
-        default: break;
-    }
-    s += "\n>\n";
-    if (left)
-        s += left->debugString();
-    if (right)
-        s += right->debugString();
-    s += "<\n";
-    return s;
-}
-std::string sn_cast_expression::debugString()
-{
-    std::string s;
-    // s += implicit_ ? "imp:" : "exp:";
-    // s += from ? from->type()->toString() : "<null>";
-    // s += " -~> ";
-    // s += type_ ? type_->toString() : "<null>";
-    s += "~<cast_expression~>";
-    s += "\n>\n";
-    if (to)
-        s += to->debugString();
-    if (from)
-        s += from->debugString();
-    s += "<\n";
-    return s;
-}
-std::string sn_unary_expression::debugString()
-{
-    std::string s;
-    switch (op)
-    {
-        case OP_INC:
-        case OP_DEC:
-        case BIT_AND:
-        case OP_MUL:
-        case OP_ADD:
-        case OP_SUB:
-        case BIT_NOT:
-        case BOOL_NOT:
-        case SIZEOF: s += Token::DebugTokenType(op); break;
-        default: break;
-    }
-    s += "\n>\n";
-    if (e)
-        s += e->debugString();
-    else if (tn)
-        s += tn->debugString();
-    s += "<\n";
-    return s;
-}
-std::string sn_postfix_expression::debugString()
-{
-    std::string s;
-    // s += ">\n";
-    s += left->debugString();
-    // s += "<\n";
-    switch (op)
-    {
-        case POSTFIX_INDEX:
-            s += "[";
-            s += data.e->debugString();
-            s += "]";
-            break;
-        case POSTFIX_CALL:
-            s += "()>\n";
-            s += data.ael->debugString();
-            break;
-        case POSTFIX_OBJECT_OFFSET:
-            s += ".>\n";
-            s += data.id->debugString();
-            break;
-        case POSTFIX_POINTER_OFFSET:
-            s += "-~>>\n";
-            s += data.id->debugString();
-            break;
-        case POSTFIX_INC: s += "++(post)>\n"; break;
-        case POSTFIX_DEC: s += "--(post)>\n"; break;
-        default: break;
-    }
-    s += "<\n";
-    return s;
-}
-std::string sn_primary_expression::debugString()
-{
-    std::string s;
-    switch (t.type)
-    {
-        case SYMBOL: s += data.id->debugString(); break;
-        case CONST_CHAR:
-        case CONST_INT:
-        case CONST_FLOAT: s += Token::DebugTokenType(t.type); break;
-        case STRING:
-            s += '"';
-            s += t.string_.toString();
-            s += '"';
-            break;
-        case LP: s += data.expr->debugString(); break;
-        default: break;
-    }
-    s += '\n';
-    return s;
-}
-std::string sn_const_expression::debugString()
-{
-    string s;
-    s += "~<const~>>\n";
-    s += e->debugString();
-    s += "<\n";
-    return s;
-}
+    // add tag to env
+    SymbolBuilder builder;
+    builder.setScope(getScope());
+    builder.setName(tag);  // TODO: tag doesn't need linkage
+    builder.setType(type_info_);
+    env->addSymbol(builder.build());
 
-void Parser::__debugPrint(string &&s)
+    // create new environment for struct/union
+    Environment *block = new Environment();
+    block->setParent(env);
+    env = block;
+}
+void sn_struct_union_specifier::afterChildren(Environment *&env)
 {
-    std::string tabs = "  ";
-    std::string line = "  ";
-    bool escape = false, empty = true;
-    bool printenv = false;
-    // uintptr_t env = 0;
-    for (char c : s)
-    {
-        // if (printenv)
-        // {
-        //     if (c != '\n')
-        //     {
-        //         env *= 10;
-        //         env += c - '0';
-        //     }
-        //     else
-        //     {
-        //         ((const Environment *)env)->debugPrint(tabs.size());
-        //         printenv = false;
-        //         env = 0;
-        //     }
-        //     continue;
-        // }
+    // restore environment
+    env = env->parent();
 
-        if (c == '~')
+    // struct tag impl info
+    if (getLastChild()->nodeType() == SN_STRUCT_DECLARATION_LIST)
+    {
+        StructTypeImpl *st_impl = new StructTypeImpl(t == TYPE_UNION);
+        for (auto *child : getLastChild()->getChildren())
         {
-            escape = true;
-            continue;
-        }
-
-        if (!escape)
-        {
-            switch (c)
+            for (auto *symbol :
+                 dynamic_cast<sn_struct_declaration *>(child)->symbols_info_)
             {
-                case '>': tabs += "  "; break;
-                case '<':
-                    tabs.pop_back();
-                    tabs.pop_back();
-                    break;
-                case '@': printenv = true; break;
-                default: line.push_back(c); break;
+                st_impl->addMember(symbol->name, symbol->type);
             }
         }
+        dynamic_cast<TagType *>(type_info_)->setImpl(st_impl);
+    }
+}
+void sn_enum_specifier::beforeChildren(Environment *&env)
+{
+    // tag info
+    StringRef tag;
+    {
+        if (getFirstChild()->nodeType() == SN_IDENTIFIER)
+            tag = dynamic_cast<sn_identifier *>(getFirstChild())->name_info_;
         else
-        {
-            line.push_back(c);
-            escape = false;
-        }
-        if (!line.empty())
-            empty = (empty && isspace(line.back()));
+            tag = TypeUtil::GenerateTag();
+    }
+    type_info_ = new TagType(T_ENUM, tag);
 
-        if (c == '\n')
+    // add tag to env
+    SymbolBuilder builder;
+    builder.setScope(getScope());
+    builder.setName(tag);  // TODO: tag doesn't need linkage
+    builder.setType(type_info_);
+    env->addSymbol(builder.build());
+}
+void sn_enum_specifier::afterChildren(Environment *&env)
+{
+    // enum tag impl info
+    if (getLastChild()->nodeType() == SN_ENUMERATOR_LIST)
+    {
+        EnumTypeImpl *et_impl = new EnumTypeImpl();
+        int value = 0;
+
+        SymbolBuilder builder;
+        for (auto *child : getLastChild()->getChildren())
         {
-            if (!empty)
-                std::cout << line;
-            line = tabs;
-            empty = true;
+            sn_enumerator *e = dynamic_cast<sn_enumerator *>(child);
+            StringRef name = dynamic_cast<sn_identifier *>(
+                                 e->getFirstChild()->getFirstChild())
+                                 ->name_info_;
+            if (e->getLastChild()->nodeType() == SN_CONST_EXPRESSION)
+            {
+                value = dynamic_cast<sn_const_expression *>(e->getLastChild())
+                            ->value();
+            }
+
+            EnumConstType *e_const = new EnumConstType(name, value++);
+
+            // add enumeration const to env
+            builder.setScope(getScope());
+            builder.setName(name);
+            builder.setType(e_const);
+            env->addSymbol(builder.build());
+
+            et_impl->addMember(e_const);
         }
-        else
+        dynamic_cast<TagType *>(type_info_)->setImpl(et_impl);
+    }
+}
+void sn_struct_declaration::afterChildren(Environment *&env)
+{
+    // Note: member info is already in StructTypeImpl, but we need to put them
+    // in env so we can take advantage of env's symbol name conflict detection.
+    Type *spec = dynamic_cast<sn_specifier_qualifier_list *>(getFirstChild())
+                     ->type_info_;
+
+    SymbolBuilder builder;
+    for (auto *child : getLastChild()->getChildren())
+    {
+        sn_struct_declarator *d = dynamic_cast<sn_struct_declarator *>(child);
+
+        builder.setName(d->name_info_);
+        builder.setType(TypeUtil::Concatenate(d->type_info_, spec));
+        builder.setScope(d->getScope());
+
+        Symbol *s = builder.build();
+        env->addSymbol(s);
+        symbols_info_.push_back(s);
+    }
+}
+// void sn_struct_declaration_list::afterChildren(Environment *&env) {}
+void sn_struct_declarator::afterChildren(Environment *&env)
+{
+    type_info_ = nullptr;
+    if (getFirstChild()->nodeType() == SN_DECLARATOR)
+    {
+        type_info_ = dynamic_cast<sn_declarator *>(getFirstChild())->type_info_;
+        name_info_ = dynamic_cast<sn_declarator *>(getFirstChild())->name_info_;
+    }
+    if (getLastChild()->nodeType() == SN_CONST_EXPRESSION)
+    {
+        SyntaxError("bit-field not implemented.");
+    }
+}
+// void sn_struct_declarator_list::afterChildren(Environment *&env) {}
+// void sn_enumerator_list::afterChildren(Environment *&env) {}
+// void sn_enumerator::afterChildren(Environment *&env) {}
+// void sn_enumeration_constant::afterChildren(Environment *&env) {}
+void sn_type_name::afterChildren(Environment *&env)
+{
+    type_info_ = dynamic_cast<sn_specifier_qualifier_list *>(getFirstChild())
+                     ->type_info_;
+    if (getLastChild()->nodeType() == SN_ABSTRACT_DECLARATOR)
+    {
+        type_info_ = TypeUtil::Concatenate(
+            dynamic_cast<sn_abstract_declarator *>(getLastChild())->type_info_,
+            type_info_);
+    }
+}
+// type
+void sn_pointer::afterChildren(Environment *&env)
+{
+    type_info_ = new PointerType();
+
+    TypeQualifiersBuilder qb;
+    if (getChildrenCount() != 0)
+    {
+        if (getFirstChild()->nodeType() == SN_TYPE_QUALIFIER_LIST)
         {
-            if (empty && line.size() != tabs.size())
-                line = tabs;
+            for (auto *child : getFirstChild()->getChildren())
+            {
+                qb.feed_type_qualifiers(
+                    dynamic_cast<sn_type_qualifier *>(child)->t);
+            }
+        }
+        type_info_->setQualifier(qb.build());
+
+        if (getLastChild()->nodeType() == SN_POINTER)
+        {
+            assert(dynamic_cast<sn_pointer *>(getLastChild())->type_info_ != nullptr);
+            type_info_ = TypeUtil::Concatenate(
+                dynamic_cast<sn_pointer *>(getLastChild())->type_info_,
+                type_info_);
         }
     }
+}
+
+// name
+void sn_identifier::afterChildren(Environment *&env)
+{
+    name_info_ = id.symbol;
+}
+void sn_identifier_list::afterChildren(Environment *&env)
+{
+    FuncType *func = new FuncType();
+    for (auto *child : getChildren())
+    {
+        func->addParam(nullptr,
+                       dynamic_cast<sn_identifier *>(child)->name_info_);
+    }
+    type_info_ = func;
+}
+void sn_typedef_name::afterChildren(Environment *&env)
+{
+    StringRef name = dynamic_cast<sn_identifier *>(getFirstChild())->name_info_;
+    Symbol *s = env->findSymbol(SYMBOL_NAMESPACE_id, name);
+    if (s == nullptr)
+        SyntaxError("undefined symbol: " + name.toString());
+    if (s->type == nullptr || s->type->getClass() != T_TYPEDEF)
+        SyntaxError(name.toString() + " is not a type name.");
+
+    type_info_ = s->type;
+}
+
+// statement & expression: only do syntactical & semantic checking
+//      type correct ?
+//      symbol defined ?
+//      add implicit conversion ?
+
+// statement
+// void sn_statement::afterChildren(Environment *&env)
+// void sn_statement_list::afterChildren(Environment *&env);
+// void sn_label_statement::afterChildren(Environment *&env);
+// void sn_compound_statement::afterChildren(Environment *&env);
+// void sn_expression_statement::afterChildren(Environment *&env);
+// void sn_selection_statement::afterChildren(Environment *&env);
+// void sn_iteration_statement::afterChildren(Environment *&env);
+// void sn_jump_statement::afterChildren(Environment *&env);
+
+// expression(constant-ness)
+// void sn_expression::afterChildren(Environment *&env);
+// void sn_comma_expression::afterChildren(Environment *&env);
+// void sn_assign_expression::afterChildren(Environment *&env);
+// void sn_cond_expression::afterChildren(Environment *&env);
+// void sn_or_expression::afterChildren(Environment *&env);
+// void sn_and_expression::afterChildren(Environment *&env);
+// void sn_bitor_expression::afterChildren(Environment *&env);
+// void sn_bitxor_expression::afterChildren(Environment *&env);
+// void sn_bitand_expression::afterChildren(Environment *&env);
+// void sn_eq_expression::afterChildren(Environment *&env);
+// void sn_rel_expression::afterChildren(Environment *&env);
+// void sn_shift_expression::afterChildren(Environment *&env);
+// void sn_add_expression::afterChildren(Environment *&env);
+// void sn_mul_expression::afterChildren(Environment *&env);
+// void sn_cast_expression::afterChildren(Environment *&env);
+// void sn_unary_expression::afterChildren(Environment *&env);
+// void sn_postfix_expression::afterChildren(Environment *&env);
+// void sn_primary_expression::afterChildren(Environment *&env);
+// void sn_const_expression::afterChildren(Environment *&env);
+// void sn_argument_expression_list::afterChildren(Environment *&env);
+
+// --------------------------------------------------------------------------
+// toString()
+// --------------------------------------------------------------------------
+const char *DebugSyntaxNode(ESyntaxNodeType nt)
+{
+    static const char *names[] = {"none",
+                                  "translation_unit",
+                                  "external_declaration",
+                                  "function_definition",
+                                  "declaration",
+                                  "declaration_list",
+                                  "init_declarator",
+                                  "init_declarator_list",
+                                  "declarator",
+                                  "direct_declarator",
+                                  "abstract_declarator",
+                                  "direct_abstract_declarator",
+                                  "initializer",
+                                  "initializer_list",
+                                  "parameter_type_list",
+                                  "parameter_list",
+                                  "parameter_declaration",
+                                  "declaration_specifiers",
+                                  "specifier_qualifier_list",
+                                  "storage_specifier",
+                                  "type_qualifier",
+                                  "type_qualifier_list",
+                                  "type_specifier",
+                                  "struct_union_specifier",
+                                  "enum_specifier",
+                                  "struct_declaration",
+                                  "struct_declaration_list",
+                                  "struct_declarator",
+                                  "struct_declarator_list",
+                                  "enumerator_list",
+                                  "enumerator",
+                                  "enumeration_constant",
+                                  "type_name",
+                                  "pointer",
+                                  "identifier",
+                                  "identifier_list",
+                                  "typedef_name",
+                                  "statement",
+                                  "statement_list",
+                                  "label_statement",
+                                  "compound_statement",
+                                  "expression_statement",
+                                  "selection_statement",
+                                  "iteration_statement",
+                                  "jump_statement",
+                                  "expression",
+                                  "comma_expression",
+                                  "assign_expression",
+                                  "cond_expression",
+                                  "or_expression",
+                                  "and_expression",
+                                  "bitor_expression",
+                                  "bitxor_expression",
+                                  "bitand_expression",
+                                  "eq_expression",
+                                  "rel_expression",
+                                  "shift_expression",
+                                  "add_expression",
+                                  "mul_expression",
+                                  "cast_expression",
+                                  "unary_expression",
+                                  "postfix_expression",
+                                  "primary_expression",
+                                  "argument_expression_list",
+                                  "const_expression"};
+    unsigned long i = 0UL, e = nt;
+    while (e > 0UL)
+    {
+        ++i, e >>= 1;
+    }
+    return names[i];
+}
+
+std::string SyntaxNode::toString() const
+{
+    std::string s = DebugSyntaxNode(node_type_);
+    s += "\n>\n";
+    for (auto *child : getChildren())
+        s += child->toString();
+    s += "<\n";
+    return s;
 }

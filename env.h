@@ -1,9 +1,9 @@
 #pragma once
 
 #include "common.h"
-#include "lexer.h"
+// #include "lexer.h"
+// #include "type.h"
 #include "symbol.h"
-#include "type.h"
 // #include "codegen.h"
 
 // Environment do:
@@ -15,29 +15,29 @@ class Environment : public TreeLike<Environment>
     static int idgen;
     int id;
     vector<Symbol *> symbols;
-    vector<StringRef> slabels, elabels;
+    // vector<StringRef> slabels, elabels;
 
    public:
-    Environment() : id(idgen++) {}
-    // string toString() const;
+    Environment() : id(idgen++)
+    {
+    }
     void debugPrint(int indent = 0) const;
 
     // symbol, namespace, scope
-    Symbol *find(ESymbolNamespace space, StringRef name) const;
-    Symbol *recursiveFind(ESymbolNamespace space, StringRef name) const;
-    Symbol *findDefinition(StringRef name) const;
-    Symbol *recursiveFindDefinition(StringRef name) const;
-    Symbol *recursiveFindTypename(StringRef name) const;
-    void add(Symbol *s);
+    Symbol *findSymbol(ESymbolNamespace space, StringRef name) const;
+    // Symbol *recursiveFind(ESymbolNamespace space, StringRef name) const;
+    // Symbol *findDefinition(StringRef name) const;
+    // Symbol *recursiveFindDefinition(StringRef name) const;
+    // Symbol *recursiveFindTypename(StringRef name) const;
+    void addSymbol(Symbol *s);
+    static const Symbol *SameNameSymbolInFileScope(const Environment *env,
+                                                   const Type *type,
+                                                   const StringRef name);
 
     // code generation
-    void emit();
-    void pushLabel(StringRef start, StringRef end);
-    void popLabel();
-    StringRef startLabel() const;
-    StringRef endLabel() const;
-
-    static void ParseLocalDeclaration(Lexer &lex, Environment *env);
-    static void ParseGlobalDeclaration(Lexer &lex, Environment *env);
-    static TypeBase *ParseTypename(Lexer &lex, Environment *env);
+    // void emit();
+    // void pushLabel(StringRef start, StringRef end);
+    // void popLabel();
+    // StringRef startLabel() const;
+    // StringRef endLabel() const;
 };

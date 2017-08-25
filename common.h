@@ -201,24 +201,67 @@ class TreeLike
     virtual ~TreeLike<T>()
     {
     }
+
     bool isRoot() const
     {
         return parent_ == nullptr;
     }
+    bool isLeaf() const
+    {
+        return children.empty();
+    }
+
     void setParent(T *p)
     {
         parent_ = p;
         if (p)
             p->children.push_back(dynamic_cast<T *>(this));
     }
+    // TODO: s/parent/getParent
     T *parent() const
     {
         return parent_;
+    }
+    void addChild(T *c)
+    {
+        assert(c != nullptr);
+        c->parent_ = dynamic_cast<T *>(this);
+        children.push_back(c);
     }
     std::vector<T *> const &getChildren() const
     {
         return children;
     }
+    size_t getChildrenCount() const
+    {
+        return children.size();
+    }
+    T *getFirstChild() const
+    {
+        return children.front();
+    }
+    T *getLastChild() const
+    {
+        return children.back();
+    }
+    T *getChild(size_t i) const
+    {
+        assert(i < children.size());
+        return children[i];
+    }
+
+    // traversal
+    // TODO: need parameter passing
+    // virtual void onVisit() {}
+    // static void PostOrderTraversal(T *node)
+    // {
+    //     assert(node != nullptr);
+    //     for (T *child : node->children)
+    //     {
+    //         PostOrderTraversal(child);
+    //     }
+    //     node->onVisit();
+    // }
 };
 
 template <typename T>
@@ -264,6 +307,12 @@ class ListLike
             return object;
         }
     }
+};
+
+class Stringable
+{
+   public:
+    virtual std::string toString() const { return "Stringable::null"; }
 };
 
 #ifndef DEBUG_UTILS

@@ -37,3 +37,5 @@ tags
 .*
 
 compiler
+*.sublime-project
+*.sublime-workspace
