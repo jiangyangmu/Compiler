@@ -34,9 +34,9 @@
         > function body => code
 
 + more
-    front-end features
-        [ ] user: error report
-    std library
+    [ ] front-end features
+        > user: error report
+    [ ] std library
 
 -------------------------------------------------------------------------------
 ensure lexical correctness
@@ -291,21 +291,26 @@ ensure semantics correctness
                 tag/enum-const -> after itself
                 id -> after its declarator
             * outer layer name hidden
+        [在汇编级别，只有 function 和 file]
 
         linkage: treat identifiers in different scopes or in the same scope as the same object or function
             external - the same in whole program
             internal - the same in one translation unit
-            none - unique
+            none - denotes unique entities (typedef names, func param names, local variables)
             rules
-                file scope + 'static' => internal
-                'extern' + file scope has the same object with linkage L => L
-                'extern' + no file scope decl => external
-                function object default => like add 'extern' in effect
-                file scope object default => external
-                not object or function => none
-                function parameters => none
-                block scope object without 'extern' => none
+                # here [scope] can't be function
+                ---------------------------------------------------------
+                [object type]  [storage]  [scope]               linkage
+               1   func/obj    'static'    file                 internal
+               2   func/obj    'extern'     *              dup-file or external
+               3    func          --       file                    2
+               4     obj          --       file                 external
+               5   ^func/obj      *         *                     none
+               6      *           *     func-proto                none
+               7     obj       ^'extern'   block                  none
+                ---------------------------------------------------------
             * undefined: within a translation unit, the same identifier appears with both internal and external linkage.
+        [本质上是 scope 的延伸]
 
         namespace: separate name spaces for various categories of identifiers
             label

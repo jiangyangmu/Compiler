@@ -262,7 +262,10 @@ identifer, constant, string-literal, ...
 see C_Lexer.txt
 
 ------------------------------------------------------------------------
-C 的 specifiers 有效组合
+type specifiers 有效组合
+* order not matter
+* no need to be nearby, can mix with other declaration-specifiers
+* must be one of the following set:
 
 TC_VOID: void
 TC_CHAR: char
@@ -277,8 +280,8 @@ TC_ULONG: unsigned long (int)
 TC_FLOAT: float
 TC_DOUBLE: double
 TC_LDOUBLE: long double
-TC_STRUCT: struct {}
-TC_UNION: union {}
-TC_ENUM: enum {}
-TC_TYPENAME: typedef
+TC_STRUCT: struct {...}
+TC_UNION: union {...}
+TC_ENUM: enum {...}
+TC_TYPENAME: typedef-name
 
