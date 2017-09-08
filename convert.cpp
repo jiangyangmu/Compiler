@@ -69,12 +69,12 @@ int tmod_ok(int i1, int i2)
 }
 // warning-list: compare unsigned int with int
 
-// TypeBase *BooleanConversion(const TypeBase *t)
+// Type *BooleanConversion(const Type *t)
 // {
 //     return nullptr;
 // }
-// const TypeBase *IntegerConversion(const TypeBase *from, const TypeBase *to);
-// TypeBase *PointerConversion(const TypeBase *from, const TypeBase *to)
+// const Type *IntegerConversion(const Type *from, const Type *to);
+// Type *PointerConversion(const Type *from, const Type *to)
 // {
 //     assert(from != nullptr && to != nullptr);
 //     EXPECT_TYPE_IS(from, T_POINTER);
@@ -89,11 +89,11 @@ int tmod_ok(int i1, int i2)
 
 // char, short int, bit-field, enum => int/unsigned int
 // TODO: if int not large enough, use unsigned int
-const TypeBase *IntegerPromotion(const TypeBase *t)
+Type *IntegerPromotion(Type *t)
 {
     assert(t != nullptr);
 
-    const TypeBase *ret = nullptr;
+    Type *ret = nullptr;
     switch (t->type())
     {
         case T_CHAR:
@@ -117,7 +117,7 @@ const TypeBase *IntegerPromotion(const TypeBase *t)
 //    pointed to by the left has all the qualifiers of the type pointed to by
 //    the right; or
 // 5. the left operand is a pointer and the right is a null pointer constant.
-const TypeBase *AssignmentConversion(const TypeBase *from, const TypeBase *to)
+const Type *AssignmentConversion(const Type *from, const Type *to)
 {
     return to;
     // if (from->isArithmetic() && to->isArithmetic())
@@ -130,7 +130,7 @@ const TypeBase *AssignmentConversion(const TypeBase *from, const TypeBase *to)
     //     return nullptr;
     // }
 }
-// TypeBase *LvalueConversion(const TypeBase *t, const Environment *env)
+// Type *LvalueConversion(const Type *t, const Environment *env)
 // {
 //     assert(t != nullptr);
 //     if (t->type() == T_ARRAY)
@@ -152,7 +152,7 @@ const TypeBase *AssignmentConversion(const TypeBase *from, const TypeBase *to)
     else (equal big integer, or signed not large enough) => choose unsigned with
   signed integer
 */
-const TypeBase *UsualArithmeticConversion(const TypeBase *l, const TypeBase *r)
+const Type *UsualArithmeticConversion(const Type *l, const Type *r)
 {
     assert(l != nullptr && r != nullptr);
     assert(l->isArithmetic());
@@ -165,7 +165,7 @@ const TypeBase *UsualArithmeticConversion(const TypeBase *l, const TypeBase *r)
     if (l->equal(*r))
         return l;
 
-    const TypeBase *p = nullptr;
+    const Type *p = nullptr;
 
     // unsigned long int, * => unsigned long int
     if (l->equal(*TypeFactory::Primitive_ULong()))
@@ -212,7 +212,7 @@ const TypeBase *UsualArithmeticConversion(const TypeBase *l, const TypeBase *r)
 // one operand is a pointer and the other is a null pointer constant; or
 // one operand is a pointer to an object or incomplete type and the other is a
 // pointer to a qualified or unqualified version of void .
-const TypeBase *CondResultConversion(const TypeBase *left, const TypeBase *right)
+const Type *CondResultConversion(const Type *left, const Type *right)
 {
     SyntaxError("Not implemented.");
     return nullptr;

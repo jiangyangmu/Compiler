@@ -114,7 +114,7 @@ int main(int argc, char *argv[])
     p.parse();
     if (vflag)
     {
-        // p.debugPrint();
+        p.debugPrint();
         return 0;
     }
 

@@ -54,6 +54,7 @@ typedef enum TokenTypeCategory
 {
     TOKEN_CATEGORY_NONE = 0,
     TOKEN_CATEGORY_ASSIGN_OPERATOR = 1,
+    TOKEN_CATEGORY_RELATIONAL_OPERATOR = (1 << 1),
 } TokenTypeCategory;
 
 struct Token
@@ -67,7 +68,7 @@ struct Token
 		int ival;
 		char cval;
         float fval;
-        double dval;
+        // double dval;
 	};
     // debug
     int line;
@@ -529,7 +530,7 @@ class Lexer
                 break;
             case '<':
                 if (input.peak(1) == '=')
-                    t.type = REL_LE, oplen = 2;
+                    t.type = REL_LE, t.category |= TOKEN_CATEGORY_RELATIONAL_OPERATOR, oplen = 2;
                 else if (input.peak(1) == '<')
                 {
                     if (input.peak(2) == '=')
@@ -538,11 +539,11 @@ class Lexer
                         t.type = BIT_SLEFT, oplen = 2;
                 }
                 else
-                    t.type = REL_LT, oplen = 1;
+                    t.type = REL_LT, t.category |= TOKEN_CATEGORY_RELATIONAL_OPERATOR, oplen = 1;
                 break;
             case '>':
                 if (input.peak(1) == '=')
-                    t.type = REL_GE, oplen = 2;
+                    t.type = REL_GE, t.category |= TOKEN_CATEGORY_RELATIONAL_OPERATOR, oplen = 2;
                 else if (input.peak(1) == '>')
                 {
                     if (input.peak(2) == '=')
@@ -551,7 +552,7 @@ class Lexer
                         t.type = BIT_SRIGHT, oplen = 2;
                 }
                 else
-                    t.type = REL_GT, oplen = 1;
+                    t.type = REL_GT, t.category |= TOKEN_CATEGORY_RELATIONAL_OPERATOR, oplen = 1;
                 break;
             case '&':
                 if (input.peak(1) == '=')

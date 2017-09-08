@@ -152,6 +152,10 @@ class StringRef
         }
         return (p1 == end) && (p2 == other.end);
     }
+    bool operator!=(const StringRef &other) const
+    {
+        return !(*this == other);
+    }
 
     friend bool operator==(const StringRef &s1, const char *s2)
     {
@@ -217,16 +221,22 @@ class TreeLike
         if (p)
             p->children.push_back(dynamic_cast<T *>(this));
     }
-    // TODO: s/parent/getParent
-    T *parent() const
-    {
-        return parent_;
-    }
     void addChild(T *c)
     {
         assert(c != nullptr);
         c->parent_ = dynamic_cast<T *>(this);
         children.push_back(c);
+    }
+    void replaceChild(size_t i, T *c)
+    {
+        assert(i < children.size() && c != nullptr);
+        children[i] = c;
+    }
+
+    // TODO: s/parent/getParent
+    T *parent() const
+    {
+        return parent_;
     }
     std::vector<T *> const &getChildren() const
     {
@@ -238,10 +248,12 @@ class TreeLike
     }
     T *getFirstChild() const
     {
+        assert(!children.empty());
         return children.front();
     }
     T *getLastChild() const
     {
+        assert(!children.empty());
         return children.back();
     }
     T *getChild(size_t i) const
@@ -312,7 +324,10 @@ class ListLike
 class Stringable
 {
    public:
-    virtual std::string toString() const { return "Stringable::null"; }
+    virtual std::string toString() const
+    {
+        return "Stringable::null";
+    }
 };
 
 #ifndef DEBUG_UTILS
@@ -327,6 +342,12 @@ using namespace std;
     type() = default;        \
     type(type &&) = default; \
     type(const type &) = default;
+
+#define DebugLog(msg)                     \
+    do                                    \
+    {                                     \
+        cerr << "DEBUG: " << msg << endl; \
+    } while (0)
 
 #define SyntaxWarning(msg)                                      \
     do                                                          \

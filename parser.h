@@ -97,9 +97,9 @@ class SyntaxNode : public TreeLike<SyntaxNode>, public Stringable
     }
 
     // Visitor
-    virtual void visit(Environment *&env);
-    virtual void beforeChildren(Environment *&env);
-    virtual void afterChildren(Environment *&env);
+    virtual void visit(Environment *&env, const int pass);
+    virtual void beforeChildren(Environment *&env, const int pass);
+    virtual void afterChildren(Environment *&env, const int pass);
     // Visitor Helper, only used by declarations
     ESymbolScope getScope() const;
     // Stringable
@@ -119,7 +119,7 @@ class sn_translation_unit : public SyntaxNode
     static sn_translation_unit *parse(Lexer &lex);
 
     // Visitor
-    // virtual void afterChildren(Environment *&env);
+    // virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_external_declaration : public SyntaxNode
 {
@@ -130,10 +130,12 @@ class sn_external_declaration : public SyntaxNode
     static sn_external_declaration *parse(Lexer &lex);
 
     // Visitor
-    // virtual void afterChildren(Environment *&env);
+    // virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_function_definition : public SyntaxNode
 {
+    Environment *body_env_;
+
    public:
     sn_function_definition() : SyntaxNode(SN_FUNCTION_DEFINITION)
     {
@@ -143,7 +145,11 @@ class sn_function_definition : public SyntaxNode
                                          sn_declarator *d);
 
     // Visitor
-    // virtual void afterChildren(Environment *&env);
+    virtual void visit(Environment *&env, const int pass);
+    virtual void afterChildren(Environment *&env, const int pass);
+    // special impl
+    void beforeParamList(Environment *&env, const int pass);
+    void afterParamList(Environment *&env, const int pass);
 };
 class sn_declaration : public SyntaxNode
 {
@@ -157,7 +163,7 @@ class sn_declaration : public SyntaxNode
                                  sn_declarator *d);
 
     // Visitor
-    virtual void afterChildren(Environment *&env);
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_declaration_list : public SyntaxNode
 {
@@ -168,7 +174,7 @@ class sn_declaration_list : public SyntaxNode
     static sn_declaration_list *parse(Lexer &lex);
 
     // Visitor
-    // virtual void afterChildren(Environment *&env);
+    // virtual void afterChildren(Environment *&env, const int pass);
 };
 
 // Declaration
@@ -186,7 +192,7 @@ class sn_init_declarator : public SyntaxNode
     static sn_init_declarator *parse(Lexer &lex);
 
     // Visitor
-    virtual void afterChildren(Environment *&env);
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_init_declarator_list : public SyntaxNode
 {
@@ -198,7 +204,7 @@ class sn_init_declarator_list : public SyntaxNode
                                           sn_init_declarator *id = nullptr);
 
     // Visitor
-    // virtual void afterChildren(Environment *&env);
+    // virtual void afterChildren(Environment *&env, const int pass);
 };
 // declarator
 class sn_declarator : public SyntaxNode
@@ -215,7 +221,7 @@ class sn_declarator : public SyntaxNode
     static sn_declarator *parse(Lexer &lex);
 
     // Visitor
-    virtual void afterChildren(Environment *&env);
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_direct_declarator : public SyntaxNode
 {
@@ -231,7 +237,7 @@ class sn_direct_declarator : public SyntaxNode
     static sn_direct_declarator *parse(Lexer &lex);
 
     // Visitor
-    virtual void afterChildren(Environment *&env);
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_abstract_declarator : public SyntaxNode
 {
@@ -245,7 +251,7 @@ class sn_abstract_declarator : public SyntaxNode
     static sn_abstract_declarator *parse(Lexer &lex);
 
     // Visitor
-    virtual void afterChildren(Environment *&env);
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_direct_abstract_declarator : public SyntaxNode
 {
@@ -259,7 +265,7 @@ class sn_direct_abstract_declarator : public SyntaxNode
     static sn_direct_abstract_declarator *parse(Lexer &lex);
 
     // Visitor
-    virtual void afterChildren(Environment *&env);
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 // initializer
 class sn_initializer : public SyntaxNode
@@ -271,7 +277,7 @@ class sn_initializer : public SyntaxNode
     static sn_initializer *parse(Lexer &lex);
 
     // Visitor
-    // virtual void afterChildren(Environment *&env);
+    // virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_initializer_list : public SyntaxNode
 {
@@ -282,7 +288,7 @@ class sn_initializer_list : public SyntaxNode
     static sn_initializer_list *parse(Lexer &lex);
 
     // Visitor
-    // virtual void afterChildren(Environment *&env);
+    // virtual void afterChildren(Environment *&env, const int pass);
 };
 // declarator-tail
 class sn_parameter_type_list : public SyntaxNode
@@ -299,7 +305,7 @@ class sn_parameter_type_list : public SyntaxNode
     static sn_parameter_type_list *parse(Lexer &lex);
 
     // Visitor
-    virtual void afterChildren(Environment *&env);
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_parameter_list : public SyntaxNode
 {
@@ -313,7 +319,7 @@ class sn_parameter_list : public SyntaxNode
     static sn_parameter_list *parse(Lexer &lex);
 
     // Visitor
-    virtual void afterChildren(Environment *&env);
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_parameter_declaration : public SyntaxNode
 {
@@ -328,7 +334,7 @@ class sn_parameter_declaration : public SyntaxNode
     static sn_parameter_declaration *parse(Lexer &lex);
 
     // Visitor
-    virtual void afterChildren(Environment *&env);
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 // specifier
 class sn_declaration_specifiers : public SyntaxNode
@@ -345,7 +351,7 @@ class sn_declaration_specifiers : public SyntaxNode
     static sn_declaration_specifiers *parse(Lexer &lex);
 
     // Visitor
-    virtual void afterChildren(Environment *&env);
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_specifier_qualifier_list : public SyntaxNode
 {
@@ -360,7 +366,7 @@ class sn_specifier_qualifier_list : public SyntaxNode
     static sn_specifier_qualifier_list *parse(Lexer &lex);
 
     // Visitor
-    virtual void afterChildren(Environment *&env);
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_storage_specifier : public SyntaxNode
 {
@@ -374,7 +380,7 @@ class sn_storage_specifier : public SyntaxNode
     static sn_storage_specifier *parse(Lexer &lex);
 
     // Visitor
-    // virtual void afterChildren(Environment *&env);
+    // virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_type_qualifier : public SyntaxNode
 {
@@ -388,7 +394,7 @@ class sn_type_qualifier : public SyntaxNode
     static sn_type_qualifier *parse(Lexer &lex);
 
     // Visitor
-    // virtual void afterChildren(Environment *&env);
+    // virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_type_qualifier_list : public SyntaxNode
 {
@@ -399,7 +405,7 @@ class sn_type_qualifier_list : public SyntaxNode
     static sn_type_qualifier_list *parse(Lexer &lex);
 
     // Visitor
-    // virtual void afterChildren(Environment *&env);
+    // virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_type_specifier : public SyntaxNode
 {
@@ -417,7 +423,7 @@ class sn_type_specifier : public SyntaxNode
     static sn_type_specifier *parse(Lexer &lex);
 
     // Visitor
-    virtual void afterChildren(Environment *&env);
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_struct_union_specifier : public SyntaxNode
 {
@@ -436,8 +442,8 @@ class sn_struct_union_specifier : public SyntaxNode
     static sn_struct_union_specifier *parse(Lexer &lex);
 
     // Visitor
-    virtual void beforeChildren(Environment *&env);
-    virtual void afterChildren(Environment *&env);
+    virtual void beforeChildren(Environment *&env, const int pass);
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_enum_specifier : public SyntaxNode
 {
@@ -452,8 +458,8 @@ class sn_enum_specifier : public SyntaxNode
     static sn_enum_specifier *parse(Lexer &lex);
 
     // Visitor
-    virtual void beforeChildren(Environment *&env);
-    virtual void afterChildren(Environment *&env);
+    virtual void beforeChildren(Environment *&env, const int pass);
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 // struct/union/enum definition
 class sn_struct_declaration : public SyntaxNode
@@ -468,7 +474,7 @@ class sn_struct_declaration : public SyntaxNode
     static sn_struct_declaration *parse(Lexer &lex);
 
     // Visitor
-    virtual void afterChildren(Environment *&env);
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_struct_declaration_list : public SyntaxNode
 {
@@ -479,7 +485,7 @@ class sn_struct_declaration_list : public SyntaxNode
     static sn_struct_declaration_list *parse(Lexer &lex);
 
     // Visitor
-    // virtual void afterChildren(Environment *&env);
+    // virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_struct_declarator : public SyntaxNode
 {
@@ -494,7 +500,7 @@ class sn_struct_declarator : public SyntaxNode
     static sn_struct_declarator *parse(Lexer &lex);
 
     // Visitor
-    virtual void afterChildren(Environment *&env);
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_struct_declarator_list : public SyntaxNode
 {
@@ -505,7 +511,7 @@ class sn_struct_declarator_list : public SyntaxNode
     static sn_struct_declarator_list *parse(Lexer &lex);
 
     // Visitor
-    // virtual void afterChildren(Environment *&env);
+    // virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_enumerator_list : public SyntaxNode
 {
@@ -516,7 +522,7 @@ class sn_enumerator_list : public SyntaxNode
     static sn_enumerator_list *parse(Lexer &lex);
 
     // Visitor
-    // virtual void afterChildren(Environment *&env);
+    // virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_enumerator : public SyntaxNode
 {
@@ -527,7 +533,7 @@ class sn_enumerator : public SyntaxNode
     static sn_enumerator *parse(Lexer &lex);
 
     // Visitor
-    // virtual void afterChildren(Environment *&env);
+    // virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_enumeration_constant : public SyntaxNode
 {
@@ -538,7 +544,7 @@ class sn_enumeration_constant : public SyntaxNode
     static sn_enumeration_constant *parse(Lexer &lex);
 
     // Visitor
-    // virtual void afterChildren(Environment *&env);
+    // virtual void afterChildren(Environment *&env, const int pass);
 };
 // others
 class sn_type_name : public SyntaxNode
@@ -553,7 +559,7 @@ class sn_type_name : public SyntaxNode
     static sn_type_name *parse(Lexer &lex);
 
     // Visitor
-    virtual void afterChildren(Environment *&env);
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_pointer : public SyntaxNode
 {
@@ -567,7 +573,7 @@ class sn_pointer : public SyntaxNode
     static sn_pointer *parse(Lexer &lex);
 
     // Visitor
-    virtual void afterChildren(Environment *&env);
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_identifier : public SyntaxNode
 {
@@ -584,7 +590,7 @@ class sn_identifier : public SyntaxNode
     static sn_identifier *parse(Lexer &lex);
 
     // Visitor
-    virtual void afterChildren(Environment *&env);
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_identifier_list : public SyntaxNode
 {
@@ -599,7 +605,7 @@ class sn_identifier_list : public SyntaxNode
     static sn_identifier_list *parse(Lexer &lex);
 
     // Visitor
-    virtual void afterChildren(Environment *&env);
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_typedef_name : public SyntaxNode
 {
@@ -614,7 +620,7 @@ class sn_typedef_name : public SyntaxNode
     static sn_typedef_name *parse(Lexer &lex);
 
     // Visitor
-    virtual void afterChildren(Environment *&env);
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 
 // Statement
@@ -624,6 +630,10 @@ class sn_statement : public SyntaxNode
     sn_statement(ESyntaxNodeType nt = SN_STATEMENT) : SyntaxNode(nt)
     {
     }
+
+   public:
+    vector<Operation> code_info_;
+
    public:
     static sn_statement *parse(Lexer &lex);
 };
@@ -650,6 +660,9 @@ class sn_label_statement : public sn_statement
     {
     }
     static sn_statement *parse(Lexer &lex);
+
+    // Visitor
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_compound_statement : public sn_statement
 {
@@ -661,6 +674,9 @@ class sn_compound_statement : public sn_statement
     {
     }
     static sn_compound_statement *parse(Lexer &lex);
+
+    // Visitor
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_expression_statement : public sn_statement
 {
@@ -671,6 +687,9 @@ class sn_expression_statement : public sn_statement
     {
     }
     static sn_statement *parse(Lexer &lex);
+
+    // Visitor
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_selection_statement : public sn_statement
 {
@@ -684,6 +703,9 @@ class sn_selection_statement : public sn_statement
     {
     }
     static sn_statement *parse(Lexer &lex);
+
+    // Visitor
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_iteration_statement : public sn_statement
 {
@@ -698,6 +720,9 @@ class sn_iteration_statement : public sn_statement
     {
     }
     static sn_statement *parse(Lexer &lex);
+
+    // Visitor
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_jump_statement : public sn_statement
 {
@@ -712,23 +737,29 @@ class sn_jump_statement : public sn_statement
     {
     }
     static sn_statement *parse(Lexer &lex);
+
+    // Visitor
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 
 // Expression
 class sn_expression : public SyntaxNode
 {
-   protected:
-    const Type *type_;
+   public:
+    Type *type_;
+
+   public:
+    vector<Operation> code_info_;
+    OperandAddress result_info_;
 
    public:
     explicit sn_expression(ESyntaxNodeType nt = SN_EXPRESSION)
         : SyntaxNode(nt), type_(nullptr)
     {
     }
-    const Type *type() const
-    {
-        return type_;
-    }
+
+    // Visitor
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_comma_expression : public sn_expression
 {
@@ -739,6 +770,9 @@ class sn_comma_expression : public sn_expression
     {
     }
     static sn_expression *parse(Lexer &lex);
+
+    // Visitor
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_assign_expression : public sn_expression
 {
@@ -750,6 +784,9 @@ class sn_assign_expression : public sn_expression
     {
     }
     static sn_expression *parse(Lexer &lex);
+
+    // Visitor
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_cond_expression : public sn_expression
 {
@@ -762,6 +799,9 @@ class sn_cond_expression : public sn_expression
     {
     }
     static sn_expression *parse(Lexer &lex);
+
+    // Visitor
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_or_expression : public sn_expression
 {
@@ -772,6 +812,9 @@ class sn_or_expression : public sn_expression
     {
     }
     static sn_expression *parse(Lexer &lex);
+
+    // Visitor
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_and_expression : public sn_expression
 {
@@ -782,6 +825,9 @@ class sn_and_expression : public sn_expression
     {
     }
     static sn_expression *parse(Lexer &lex);
+
+    // Visitor
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_bitor_expression : public sn_expression
 {
@@ -792,6 +838,9 @@ class sn_bitor_expression : public sn_expression
     {
     }
     static sn_expression *parse(Lexer &lex);
+
+    // Visitor
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_bitxor_expression : public sn_expression
 {
@@ -802,6 +851,9 @@ class sn_bitxor_expression : public sn_expression
     {
     }
     static sn_expression *parse(Lexer &lex);
+
+    // Visitor
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_bitand_expression : public sn_expression
 {
@@ -812,6 +864,9 @@ class sn_bitand_expression : public sn_expression
     {
     }
     static sn_expression *parse(Lexer &lex);
+
+    // Visitor
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_eq_expression : public sn_expression
 {
@@ -823,6 +878,9 @@ class sn_eq_expression : public sn_expression
     {
     }
     static sn_expression *parse(Lexer &lex);
+
+    // Visitor
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_rel_expression : public sn_expression
 {
@@ -834,6 +892,9 @@ class sn_rel_expression : public sn_expression
     {
     }
     static sn_expression *parse(Lexer &lex);
+
+    // Visitor
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_shift_expression : public sn_expression
 {
@@ -845,6 +906,9 @@ class sn_shift_expression : public sn_expression
     {
     }
     static sn_expression *parse(Lexer &lex);
+
+    // Visitor
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_add_expression : public sn_expression
 {
@@ -856,6 +920,9 @@ class sn_add_expression : public sn_expression
     {
     }
     static sn_expression *parse(Lexer &lex);
+
+    // Visitor
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_mul_expression : public sn_expression
 {
@@ -867,6 +934,9 @@ class sn_mul_expression : public sn_expression
     {
     }
     static sn_expression *parse(Lexer &lex);
+
+    // Visitor
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_cast_expression : public sn_expression
 {
@@ -885,6 +955,9 @@ class sn_cast_expression : public sn_expression
     //     type_ = to;
     // }
     static sn_expression *parse(Lexer &lex);
+
+    // Visitor
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_unary_expression : public sn_expression
 {
@@ -899,6 +972,9 @@ class sn_unary_expression : public sn_expression
     {
     }
     static sn_expression *parse(Lexer &lex);
+
+    // Visitor
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_postfix_expression : public sn_expression
 {
@@ -933,6 +1009,9 @@ class sn_primary_expression : public sn_expression
     {
     }
     static sn_expression *parse(Lexer &lex);
+
+    // Visitor
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_argument_expression_list : public SyntaxNode
 {
@@ -976,11 +1055,15 @@ class Parser
     {
         tu = sn_translation_unit::parse(lex);
         env = new Environment();
-        tu->visit(env);
+        tu->visit(env, 0);
+        tu->visit(env, 1);
 
+        // SymbolFactory::check();
+    }
+    void debugPrint()
+    {
         __debugPrint(tu->toString());
         env->debugPrint();
-        // SymbolFactory::check();
     }
     void emit()
     {
