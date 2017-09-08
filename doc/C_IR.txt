@@ -1,0 +1,44 @@
+
+[CPU Storage]
+
+vector-like general registers
+flag register
+instruction register
+argument type: imm, register
+
+[CPU Instruction Set]
+
+> statement
+cmp,
+jmp,
+jl, jle,
+jg, jge,
+jb, jbe,
+ja, jae,
+
+> expression
+mov,
+or, xor, and, not, // bit-wise
+shl, shr, // shift
+add, sub,
+mul, div, mod,
+inc, dec, neg,
+ref, deref,
+
+// routine
+param,
+call,
+ret,
+
+[FPU Storage]
+
+stack-like general registers
+CPU's flag register
+
+[FPU Instruction Set]
+
+fld, fst, // load/store
+fabs,
+fchs, // change sign
+fadd, fsub, fmul, fdiv,
+

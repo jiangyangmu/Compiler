@@ -103,7 +103,7 @@ C 对 "自动类型转换" 的支持？
                 * as both operands of shift expression << and >>
 
             rank(integer) =>
-                * _Bool < signed/unsigned char < signed/unsigned short < signed/unsigned int < signed/unsigned long int < signed/unsigned long long int
+                * signed/unsigned char < signed/unsigned short < signed/unsigned int < signed/unsigned long int < signed/unsigned long long int
                 * __int8 < char, __int16 < short, __int32 < int, __int64 < long int, __int128 > long long (!!!)
                 * enum-constant = rank( which_int_type(enum-constant) )
                 * otherwise, implementation defined.
@@ -138,7 +138,7 @@ C 对 "自动类型转换" 的支持？
 发生 "自动类型转换" 的时机，应该采取的行动？
 
 赋值之时：
-    > Conversion as if by assignment:
+    > Conversion as if by assignment: (qualifier-loss)
         * assignment operator: ival = 1.0;
         * scalar initialization: int i = 1UL;
         * function-call parameter: foo(int i); foo('a');
