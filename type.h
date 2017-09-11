@@ -129,9 +129,13 @@ class Type : public Stringable
     {
         return _tc;
     }
-    size_t getSize() const
+    virtual size_t getSize() // TODO: -virtual/+const
     {
         return _size;
+    }
+    size_t getAlignment() const
+    {
+        return _align;
     }
 
     void setQualifier(int qualifiers)
@@ -167,9 +171,7 @@ class VoidType : public Type
     friend TypeUtil;
 
    public:
-    VoidType() : Type(T_VOID, TP_INCOMPLETE | TP_IS_OBJECT)
-    {
-    }
+    VoidType() : Type(T_VOID, TP_INCOMPLETE | TP_IS_OBJECT) {}
 
     // from Stringable
     virtual std::string toString() const
@@ -316,18 +318,31 @@ class ArrayType : public Type
 
    public:
     ArrayType()
-        : Type(T_ARRAY, TP_CONST | TP_INCOMPLETE | TP_IS_OBJECT), _t(nullptr)
-    , _n(0)
+        : Type(T_ARRAY, TP_CONST | TP_INCOMPLETE | TP_IS_OBJECT),
+          _t(nullptr),
+          _n(0)
     {
     }
     ArrayType(size_t n)
-        : Type(T_ARRAY, TP_CONST | TP_IS_OBJECT), _t(nullptr)  , _n(n)
+        : Type(T_ARRAY, TP_CONST | TP_INCOMPLETE | TP_IS_OBJECT), _t(nullptr), _n(n)
     {
     }
     // void setElementType(Type *t)
     // {
     //     _t = t;
     // }
+    virtual size_t getSize()
+    {
+        if (isIncomplete())
+        {
+            if (_n == 0 || _t == nullptr || _t->isIncomplete())
+                SyntaxError("Array: sizeof incomplete array.");
+            _size = _n * _t->getSize();
+            _align = _t->getAlignment();
+            unsetProp(TP_INCOMPLETE);
+        }
+        return _size;
+    }
 
     virtual bool equal(const Type &o) const
     {
@@ -509,9 +524,7 @@ class EnumTypeImpl : public Type
     vector<const EnumConstType *> _members;
 
    public:
-    EnumTypeImpl() : Type(T_ENUM, 0)
-    {
-    }
+    EnumTypeImpl() : Type(T_ENUM, 0) {}
     void addMember(const EnumConstType *member)
     {
         _members.push_back(member);
@@ -541,17 +554,18 @@ class StructTypeImpl : public Type
         : Type(share_storage ? T_UNION : T_STRUCT, 0, 1)
     {
     }
-    void addMember(StringRef name, const Type *t)
+    void addMember(StringRef name, const Type *ct)
     {
+        Type *t = const_cast<Type *>(ct);
         if (t->isIncomplete())
             SyntaxError("struct: can't add incomplete type.");
         _member_name.push_back(name);
         _member_type.push_back(t);
         if (_tc == T_STRUCT)
-            _size += t->_size;
+            _size += t->getSize();
         else
-            _size = (_size >= t->_size) ? _size : t->_size;
-        _align = (_align >= t->_align) ? _align : t->_align;
+            _size = (_size >= t->getSize()) ? _size : t->getSize();
+        _align = (_align >= t->getAlignment()) ? _align : t->getAlignment();
     }
     const Type *getMemberType(StringRef name) const
     {
@@ -614,9 +628,7 @@ class LabelType : public Type
     friend TypeUtil;
 
    public:
-    LabelType() : Type(T_LABEL, 0)
-    {
-    }
+    LabelType() : Type(T_LABEL, 0) {}
 
     // from Stringable
     virtual std::string toString() const
@@ -632,7 +644,7 @@ class TypeUtil
     // unbox derived type
     static Type *TargetType(Type *aggregate);
     static Type *Merge(Type *t1, Type *t2);
-    static Type *CloneTop(Type *T);
+    static Type *CloneTop(const Type *T);
     static bool Equal(const Type *t1, const Type *t2);
     static bool Compatible(const Type *t1, const Type *t2);
     // Is 'test' more strict qualified than 'base' ?

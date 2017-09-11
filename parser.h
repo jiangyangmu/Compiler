@@ -3,12 +3,14 @@
 // #include "codegen.h"
 // #include "env.h"
 #include "common.h"
-#include "lexer.h"
-#include "type.h"
-#include "symbol.h"
 #include "env.h"
+#include "lexer.h"
+#include "symbol.h"
+#include "type.h"
 
 #include <iostream>
+
+// TODO: support sn_const_expression
 
 enum ESyntaxNodeType
 {
@@ -88,9 +90,7 @@ class SyntaxNode : public TreeLike<SyntaxNode>, public Stringable
     // TODO: remove default value after implement all nodes,
     // default value only let it compiles when only implement
     // part of nodes.
-    SyntaxNode(ESyntaxNodeType node_type = SN_NONE) : node_type_(node_type)
-    {
-    }
+    SyntaxNode(ESyntaxNodeType node_type = SN_NONE) : node_type_(node_type) {}
     ESyntaxNodeType nodeType() const
     {
         return node_type_;
@@ -113,9 +113,7 @@ class sn_initializer;
 class sn_translation_unit : public SyntaxNode
 {
    public:
-    sn_translation_unit() : SyntaxNode(SN_TRANSLATION_UNIT)
-    {
-    }
+    sn_translation_unit() : SyntaxNode(SN_TRANSLATION_UNIT) {}
     static sn_translation_unit *parse(Lexer &lex);
 
     // Visitor
@@ -124,9 +122,7 @@ class sn_translation_unit : public SyntaxNode
 class sn_external_declaration : public SyntaxNode
 {
    public:
-    sn_external_declaration() : SyntaxNode(SN_EXTERNAL_DECLARATION)
-    {
-    }
+    sn_external_declaration() : SyntaxNode(SN_EXTERNAL_DECLARATION) {}
     static sn_external_declaration *parse(Lexer &lex);
 
     // Visitor
@@ -136,10 +132,13 @@ class sn_function_definition : public SyntaxNode
 {
     Environment *body_env_;
 
+    // Annotation
    public:
-    sn_function_definition() : SyntaxNode(SN_FUNCTION_DEFINITION)
-    {
-    }
+    Type *type_info_;
+    StringRef name_info_;
+
+   public:
+    sn_function_definition() : SyntaxNode(SN_FUNCTION_DEFINITION) {}
     static sn_function_definition *parse(Lexer &lex,
                                          sn_declaration_specifiers *s,
                                          sn_declarator *d);
@@ -154,12 +153,9 @@ class sn_function_definition : public SyntaxNode
 class sn_declaration : public SyntaxNode
 {
    public:
-    sn_declaration() : SyntaxNode(SN_DECLARATION)
-    {
-    }
+    sn_declaration() : SyntaxNode(SN_DECLARATION) {}
     static sn_declaration *parse(Lexer &lex);
-    static sn_declaration *parse(Lexer &lex,
-                                 sn_declaration_specifiers *s,
+    static sn_declaration *parse(Lexer &lex, sn_declaration_specifiers *s,
                                  sn_declarator *d);
 
     // Visitor
@@ -168,9 +164,7 @@ class sn_declaration : public SyntaxNode
 class sn_declaration_list : public SyntaxNode
 {
    public:
-    sn_declaration_list() : SyntaxNode(SN_DECLARATION_LIST)
-    {
-    }
+    sn_declaration_list() : SyntaxNode(SN_DECLARATION_LIST) {}
     static sn_declaration_list *parse(Lexer &lex);
 
     // Visitor
@@ -186,9 +180,7 @@ class sn_init_declarator : public SyntaxNode
     // vector<Operation> code_info_;
 
    public:
-    sn_init_declarator() : SyntaxNode(SN_INIT_DECLARATOR)
-    {
-    }
+    sn_init_declarator() : SyntaxNode(SN_INIT_DECLARATOR) {}
     static sn_init_declarator *parse(Lexer &lex);
 
     // Visitor
@@ -197,9 +189,7 @@ class sn_init_declarator : public SyntaxNode
 class sn_init_declarator_list : public SyntaxNode
 {
    public:
-    sn_init_declarator_list() : SyntaxNode(SN_INIT_DECLARATOR_LIST)
-    {
-    }
+    sn_init_declarator_list() : SyntaxNode(SN_INIT_DECLARATOR_LIST) {}
     static sn_init_declarator_list *parse(Lexer &lex,
                                           sn_init_declarator *id = nullptr);
 
@@ -215,9 +205,7 @@ class sn_declarator : public SyntaxNode
     StringRef name_info_;
 
    public:
-    sn_declarator() : SyntaxNode(SN_DECLARATOR)
-    {
-    }
+    sn_declarator() : SyntaxNode(SN_DECLARATOR) {}
     static sn_declarator *parse(Lexer &lex);
 
     // Visitor
@@ -231,9 +219,7 @@ class sn_direct_declarator : public SyntaxNode
     StringRef name_info_;
 
    public:
-    sn_direct_declarator() : SyntaxNode(SN_DIRECT_DECLARATOR)
-    {
-    }
+    sn_direct_declarator() : SyntaxNode(SN_DIRECT_DECLARATOR) {}
     static sn_direct_declarator *parse(Lexer &lex);
 
     // Visitor
@@ -245,9 +231,7 @@ class sn_abstract_declarator : public SyntaxNode
     Type *type_info_;
 
    public:
-    sn_abstract_declarator() : SyntaxNode(SN_ABSTRACT_DECLARATOR)
-    {
-    }
+    sn_abstract_declarator() : SyntaxNode(SN_ABSTRACT_DECLARATOR) {}
     static sn_abstract_declarator *parse(Lexer &lex);
 
     // Visitor
@@ -271,9 +255,7 @@ class sn_direct_abstract_declarator : public SyntaxNode
 class sn_initializer : public SyntaxNode
 {
    public:
-    sn_initializer() : SyntaxNode(SN_INITIALIZER)
-    {
-    }
+    sn_initializer() : SyntaxNode(SN_INITIALIZER) {}
     static sn_initializer *parse(Lexer &lex);
 
     // Visitor
@@ -282,9 +264,7 @@ class sn_initializer : public SyntaxNode
 class sn_initializer_list : public SyntaxNode
 {
    public:
-    sn_initializer_list() : SyntaxNode(SN_INITIALIZER_LIST)
-    {
-    }
+    sn_initializer_list() : SyntaxNode(SN_INITIALIZER_LIST) {}
     static sn_initializer_list *parse(Lexer &lex);
 
     // Visitor
@@ -299,9 +279,7 @@ class sn_parameter_type_list : public SyntaxNode
     Type *type_info_;
 
    public:
-    sn_parameter_type_list() : SyntaxNode(SN_PARAMETER_TYPE_LIST)
-    {
-    }
+    sn_parameter_type_list() : SyntaxNode(SN_PARAMETER_TYPE_LIST) {}
     static sn_parameter_type_list *parse(Lexer &lex);
 
     // Visitor
@@ -313,9 +291,7 @@ class sn_parameter_list : public SyntaxNode
     Type *type_info_;
 
    public:
-    sn_parameter_list() : SyntaxNode(SN_PARAMETER_LIST)
-    {
-    }
+    sn_parameter_list() : SyntaxNode(SN_PARAMETER_LIST) {}
     static sn_parameter_list *parse(Lexer &lex);
 
     // Visitor
@@ -328,9 +304,7 @@ class sn_parameter_declaration : public SyntaxNode
     StringRef name_info_;
 
    public:
-    sn_parameter_declaration() : SyntaxNode(SN_PARAMETER_DECLARATION)
-    {
-    }
+    sn_parameter_declaration() : SyntaxNode(SN_PARAMETER_DECLARATION) {}
     static sn_parameter_declaration *parse(Lexer &lex);
 
     // Visitor
@@ -345,9 +319,7 @@ class sn_declaration_specifiers : public SyntaxNode
     TokenType storage_info_;
 
    public:
-    sn_declaration_specifiers() : SyntaxNode(SN_DECLARATION_SPECIFIERS)
-    {
-    }
+    sn_declaration_specifiers() : SyntaxNode(SN_DECLARATION_SPECIFIERS) {}
     static sn_declaration_specifiers *parse(Lexer &lex);
 
     // Visitor
@@ -360,9 +332,7 @@ class sn_specifier_qualifier_list : public SyntaxNode
     Type *type_info_;
 
    public:
-    sn_specifier_qualifier_list() : SyntaxNode(SN_SPECIFIER_QUALIFIER_LIST)
-    {
-    }
+    sn_specifier_qualifier_list() : SyntaxNode(SN_SPECIFIER_QUALIFIER_LIST) {}
     static sn_specifier_qualifier_list *parse(Lexer &lex);
 
     // Visitor
@@ -374,9 +344,7 @@ class sn_storage_specifier : public SyntaxNode
     TokenType t;
 
    public:
-    sn_storage_specifier() : SyntaxNode(SN_STORAGE_SPECIFIER)
-    {
-    }
+    sn_storage_specifier() : SyntaxNode(SN_STORAGE_SPECIFIER) {}
     static sn_storage_specifier *parse(Lexer &lex);
 
     // Visitor
@@ -388,9 +356,7 @@ class sn_type_qualifier : public SyntaxNode
     TokenType t;
 
    public:
-    sn_type_qualifier() : SyntaxNode(SN_TYPE_QUALIFIER)
-    {
-    }
+    sn_type_qualifier() : SyntaxNode(SN_TYPE_QUALIFIER) {}
     static sn_type_qualifier *parse(Lexer &lex);
 
     // Visitor
@@ -399,9 +365,7 @@ class sn_type_qualifier : public SyntaxNode
 class sn_type_qualifier_list : public SyntaxNode
 {
    public:
-    sn_type_qualifier_list() : SyntaxNode(SN_TYPE_QUALIFIER_LIST)
-    {
-    }
+    sn_type_qualifier_list() : SyntaxNode(SN_TYPE_QUALIFIER_LIST) {}
     static sn_type_qualifier_list *parse(Lexer &lex);
 
     // Visitor
@@ -412,14 +376,12 @@ class sn_type_specifier : public SyntaxNode
    public:
     TokenType t;
 
-   // Annotation
+    // Annotation
    public:
     Type *type_info_;
 
    public:
-    sn_type_specifier() : SyntaxNode(SN_TYPE_SPECIFIER)
-    {
-    }
+    sn_type_specifier() : SyntaxNode(SN_TYPE_SPECIFIER) {}
     static sn_type_specifier *parse(Lexer &lex);
 
     // Visitor
@@ -431,14 +393,12 @@ class sn_struct_union_specifier : public SyntaxNode
                   // sn_identifier *tag; [optional]
                   // sn_struct_declaration_list *sdl; [optional]
 
-   // Annotation
+    // Annotation
    public:
     Type *type_info_;
 
    public:
-    sn_struct_union_specifier() : SyntaxNode(SN_STRUCT_UNION_SPECIFIER)
-    {
-    }
+    sn_struct_union_specifier() : SyntaxNode(SN_STRUCT_UNION_SPECIFIER) {}
     static sn_struct_union_specifier *parse(Lexer &lex);
 
     // Visitor
@@ -447,14 +407,12 @@ class sn_struct_union_specifier : public SyntaxNode
 };
 class sn_enum_specifier : public SyntaxNode
 {
-   // Annotation
+    // Annotation
    public:
     Type *type_info_;
 
    public:
-    sn_enum_specifier() : SyntaxNode(SN_ENUM_SPECIFIER)
-    {
-    }
+    sn_enum_specifier() : SyntaxNode(SN_ENUM_SPECIFIER) {}
     static sn_enum_specifier *parse(Lexer &lex);
 
     // Visitor
@@ -468,9 +426,7 @@ class sn_struct_declaration : public SyntaxNode
     vector<Symbol *> symbols_info_;
 
    public:
-    sn_struct_declaration() : SyntaxNode(SN_STRUCT_DECLARATION)
-    {
-    }
+    sn_struct_declaration() : SyntaxNode(SN_STRUCT_DECLARATION) {}
     static sn_struct_declaration *parse(Lexer &lex);
 
     // Visitor
@@ -479,9 +435,7 @@ class sn_struct_declaration : public SyntaxNode
 class sn_struct_declaration_list : public SyntaxNode
 {
    public:
-    sn_struct_declaration_list() : SyntaxNode(SN_STRUCT_DECLARATION_LIST)
-    {
-    }
+    sn_struct_declaration_list() : SyntaxNode(SN_STRUCT_DECLARATION_LIST) {}
     static sn_struct_declaration_list *parse(Lexer &lex);
 
     // Visitor
@@ -494,9 +448,7 @@ class sn_struct_declarator : public SyntaxNode
     StringRef name_info_;
 
    public:
-    sn_struct_declarator() : SyntaxNode(SN_STRUCT_DECLARATOR)
-    {
-    }
+    sn_struct_declarator() : SyntaxNode(SN_STRUCT_DECLARATOR) {}
     static sn_struct_declarator *parse(Lexer &lex);
 
     // Visitor
@@ -505,9 +457,7 @@ class sn_struct_declarator : public SyntaxNode
 class sn_struct_declarator_list : public SyntaxNode
 {
    public:
-    sn_struct_declarator_list() : SyntaxNode(SN_STRUCT_DECLARATOR_LIST)
-    {
-    }
+    sn_struct_declarator_list() : SyntaxNode(SN_STRUCT_DECLARATOR_LIST) {}
     static sn_struct_declarator_list *parse(Lexer &lex);
 
     // Visitor
@@ -516,9 +466,7 @@ class sn_struct_declarator_list : public SyntaxNode
 class sn_enumerator_list : public SyntaxNode
 {
    public:
-    sn_enumerator_list() : SyntaxNode(SN_ENUMERATOR_LIST)
-    {
-    }
+    sn_enumerator_list() : SyntaxNode(SN_ENUMERATOR_LIST) {}
     static sn_enumerator_list *parse(Lexer &lex);
 
     // Visitor
@@ -527,9 +475,7 @@ class sn_enumerator_list : public SyntaxNode
 class sn_enumerator : public SyntaxNode
 {
    public:
-    sn_enumerator() : SyntaxNode(SN_ENUMERATOR)
-    {
-    }
+    sn_enumerator() : SyntaxNode(SN_ENUMERATOR) {}
     static sn_enumerator *parse(Lexer &lex);
 
     // Visitor
@@ -538,9 +484,7 @@ class sn_enumerator : public SyntaxNode
 class sn_enumeration_constant : public SyntaxNode
 {
    public:
-    sn_enumeration_constant() : SyntaxNode(SN_ENUMERATION_CONSTANT)
-    {
-    }
+    sn_enumeration_constant() : SyntaxNode(SN_ENUMERATION_CONSTANT) {}
     static sn_enumeration_constant *parse(Lexer &lex);
 
     // Visitor
@@ -553,9 +497,7 @@ class sn_type_name : public SyntaxNode
     Type *type_info_;
 
    public:
-    sn_type_name() : SyntaxNode(SN_TYPE_NAME)
-    {
-    }
+    sn_type_name() : SyntaxNode(SN_TYPE_NAME) {}
     static sn_type_name *parse(Lexer &lex);
 
     // Visitor
@@ -567,9 +509,7 @@ class sn_pointer : public SyntaxNode
     Type *type_info_;
 
    public:
-    sn_pointer() : SyntaxNode(SN_POINTER)
-    {
-    }
+    sn_pointer() : SyntaxNode(SN_POINTER) {}
     static sn_pointer *parse(Lexer &lex);
 
     // Visitor
@@ -579,14 +519,12 @@ class sn_identifier : public SyntaxNode
 {
     Token id;
 
-   // Annotation
+    // Annotation
    public:
     StringRef name_info_;
 
    public:
-    sn_identifier() : SyntaxNode(SN_IDENTIFIER)
-    {
-    }
+    sn_identifier() : SyntaxNode(SN_IDENTIFIER) {}
     static sn_identifier *parse(Lexer &lex);
 
     // Visitor
@@ -594,14 +532,12 @@ class sn_identifier : public SyntaxNode
 };
 class sn_identifier_list : public SyntaxNode
 {
-   // Annotation
+    // Annotation
    public:
     Type *type_info_;
 
    public:
-    sn_identifier_list() : SyntaxNode(SN_IDENTIFIER_LIST)
-    {
-    }
+    sn_identifier_list() : SyntaxNode(SN_IDENTIFIER_LIST) {}
     static sn_identifier_list *parse(Lexer &lex);
 
     // Visitor
@@ -609,14 +545,12 @@ class sn_identifier_list : public SyntaxNode
 };
 class sn_typedef_name : public SyntaxNode
 {
-   // Annotation
+    // Annotation
    public:
     Type *type_info_;
 
    public:
-    sn_typedef_name() : SyntaxNode(SN_TYPEDEF_NAME)
-    {
-    }
+    sn_typedef_name() : SyntaxNode(SN_TYPEDEF_NAME) {}
     static sn_typedef_name *parse(Lexer &lex);
 
     // Visitor
@@ -627,9 +561,7 @@ class sn_typedef_name : public SyntaxNode
 class sn_statement : public SyntaxNode
 {
    protected:
-    sn_statement(ESyntaxNodeType nt = SN_STATEMENT) : SyntaxNode(nt)
-    {
-    }
+    sn_statement(ESyntaxNodeType nt = SN_STATEMENT) : SyntaxNode(nt) {}
 
    public:
     vector<Operation> code_info_;
@@ -642,9 +574,7 @@ class sn_statement_list : public SyntaxNode
     // vector<sn_statement *> s;
 
    public:
-    sn_statement_list() : SyntaxNode(SN_STATEMENT_LIST)
-    {
-    }
+    sn_statement_list() : SyntaxNode(SN_STATEMENT_LIST) {}
     static sn_statement_list *parse(Lexer &lex);
 };
 class sn_label_statement : public sn_statement
@@ -656,9 +586,7 @@ class sn_label_statement : public sn_statement
     // sn_statement *stat;
 
    public:
-    sn_label_statement() : sn_statement(SN_LABEL_STATEMENT)
-    {
-    }
+    sn_label_statement() : sn_statement(SN_LABEL_STATEMENT) {}
     static sn_statement *parse(Lexer &lex);
 
     // Visitor
@@ -670,12 +598,12 @@ class sn_compound_statement : public sn_statement
     // sn_statement_list *sl;
 
    public:
-    sn_compound_statement() : sn_statement(SN_COMPOUND_STATEMENT)
-    {
-    }
+    sn_compound_statement() : sn_statement(SN_COMPOUND_STATEMENT) {}
     static sn_compound_statement *parse(Lexer &lex);
 
     // Visitor
+    virtual void visit(Environment *&env, const int pass);
+    virtual void afterDeclarations(Environment *&env, const int pass);
     virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_expression_statement : public sn_statement
@@ -683,9 +611,7 @@ class sn_expression_statement : public sn_statement
     // sn_expression *expr;
 
    public:
-    sn_expression_statement() : sn_statement(SN_EXPRESSION_STATEMENT)
-    {
-    }
+    sn_expression_statement() : sn_statement(SN_EXPRESSION_STATEMENT) {}
     static sn_statement *parse(Lexer &lex);
 
     // Visitor
@@ -699,9 +625,7 @@ class sn_selection_statement : public sn_statement
                   // sn_statement *stmt2;
 
    public:
-    sn_selection_statement() : sn_statement(SN_SELECTION_STATEMENT)
-    {
-    }
+    sn_selection_statement() : sn_statement(SN_SELECTION_STATEMENT) {}
     static sn_statement *parse(Lexer &lex);
 
     // Visitor
@@ -716,9 +640,7 @@ class sn_iteration_statement : public sn_statement
                   // sn_statement *stmt;
 
    public:
-    sn_iteration_statement() : sn_statement(SN_ITERATION_STATEMENT)
-    {
-    }
+    sn_iteration_statement() : sn_statement(SN_ITERATION_STATEMENT) {}
     static sn_statement *parse(Lexer &lex);
 
     // Visitor
@@ -733,9 +655,7 @@ class sn_jump_statement : public sn_statement
                   // };
 
    public:
-    sn_jump_statement() : sn_statement(SN_JUMP_STATEMENT)
-    {
-    }
+    sn_jump_statement() : sn_statement(SN_JUMP_STATEMENT) {}
     static sn_statement *parse(Lexer &lex);
 
     // Visitor
@@ -750,7 +670,7 @@ class sn_expression : public SyntaxNode
 
    public:
     vector<Operation> code_info_;
-    OperandAddress result_info_;
+    IRAddress result_info_;
 
    public:
     explicit sn_expression(ESyntaxNodeType nt = SN_EXPRESSION)
@@ -766,9 +686,7 @@ class sn_comma_expression : public sn_expression
     // vector<sn_expression *> curr;
 
    public:
-    sn_comma_expression() : sn_expression(SN_COMMA_EXPRESSION)
-    {
-    }
+    sn_comma_expression() : sn_expression(SN_COMMA_EXPRESSION) {}
     static sn_expression *parse(Lexer &lex);
 
     // Visitor
@@ -780,9 +698,7 @@ class sn_assign_expression : public sn_expression
     TokenType op;
 
    public:
-    sn_assign_expression() : sn_expression(SN_ASSIGN_EXPRESSION)
-    {
-    }
+    sn_assign_expression() : sn_expression(SN_ASSIGN_EXPRESSION) {}
     static sn_expression *parse(Lexer &lex);
 
     // Visitor
@@ -795,9 +711,7 @@ class sn_cond_expression : public sn_expression
     // sn_expression *right;
 
    public:
-    sn_cond_expression() : sn_expression(SN_COND_EXPRESSION)
-    {
-    }
+    sn_cond_expression() : sn_expression(SN_COND_EXPRESSION) {}
     static sn_expression *parse(Lexer &lex);
 
     // Visitor
@@ -808,9 +722,7 @@ class sn_or_expression : public sn_expression
     // sn_expression *left, *right;
 
    public:
-    sn_or_expression() : sn_expression(SN_OR_EXPRESSION)
-    {
-    }
+    sn_or_expression() : sn_expression(SN_OR_EXPRESSION) {}
     static sn_expression *parse(Lexer &lex);
 
     // Visitor
@@ -821,9 +733,7 @@ class sn_and_expression : public sn_expression
     // sn_expression *left, *right;
 
    public:
-    sn_and_expression() : sn_expression(SN_AND_EXPRESSION)
-    {
-    }
+    sn_and_expression() : sn_expression(SN_AND_EXPRESSION) {}
     static sn_expression *parse(Lexer &lex);
 
     // Visitor
@@ -834,9 +744,7 @@ class sn_bitor_expression : public sn_expression
     // sn_expression *left, *right;
 
    public:
-    sn_bitor_expression() : sn_expression(SN_BITOR_EXPRESSION)
-    {
-    }
+    sn_bitor_expression() : sn_expression(SN_BITOR_EXPRESSION) {}
     static sn_expression *parse(Lexer &lex);
 
     // Visitor
@@ -847,9 +755,7 @@ class sn_bitxor_expression : public sn_expression
     // sn_expression *left, *right;
 
    public:
-    sn_bitxor_expression() : sn_expression(SN_BITXOR_EXPRESSION)
-    {
-    }
+    sn_bitxor_expression() : sn_expression(SN_BITXOR_EXPRESSION) {}
     static sn_expression *parse(Lexer &lex);
 
     // Visitor
@@ -860,9 +766,7 @@ class sn_bitand_expression : public sn_expression
     // sn_expression *left, *right;
 
    public:
-    sn_bitand_expression() : sn_expression(SN_BITAND_EXPRESSION)
-    {
-    }
+    sn_bitand_expression() : sn_expression(SN_BITAND_EXPRESSION) {}
     static sn_expression *parse(Lexer &lex);
 
     // Visitor
@@ -874,9 +778,7 @@ class sn_eq_expression : public sn_expression
     TokenType op;
 
    public:
-    sn_eq_expression() : sn_expression(SN_EQ_EXPRESSION)
-    {
-    }
+    sn_eq_expression() : sn_expression(SN_EQ_EXPRESSION) {}
     static sn_expression *parse(Lexer &lex);
 
     // Visitor
@@ -888,9 +790,7 @@ class sn_rel_expression : public sn_expression
     TokenType op;
 
    public:
-    sn_rel_expression() : sn_expression(SN_REL_EXPRESSION)
-    {
-    }
+    sn_rel_expression() : sn_expression(SN_REL_EXPRESSION) {}
     static sn_expression *parse(Lexer &lex);
 
     // Visitor
@@ -902,9 +802,7 @@ class sn_shift_expression : public sn_expression
     TokenType op;
 
    public:
-    sn_shift_expression() : sn_expression(SN_SHIFT_EXPRESSION)
-    {
-    }
+    sn_shift_expression() : sn_expression(SN_SHIFT_EXPRESSION) {}
     static sn_expression *parse(Lexer &lex);
 
     // Visitor
@@ -916,9 +814,7 @@ class sn_add_expression : public sn_expression
     TokenType op;
 
    public:
-    sn_add_expression() : sn_expression(SN_ADD_EXPRESSION)
-    {
-    }
+    sn_add_expression() : sn_expression(SN_ADD_EXPRESSION) {}
     static sn_expression *parse(Lexer &lex);
 
     // Visitor
@@ -930,9 +826,7 @@ class sn_mul_expression : public sn_expression
     TokenType op;
 
    public:
-    sn_mul_expression() : sn_expression(SN_MUL_EXPRESSION)
-    {
-    }
+    sn_mul_expression() : sn_expression(SN_MUL_EXPRESSION) {}
     static sn_expression *parse(Lexer &lex);
 
     // Visitor
@@ -945,9 +839,7 @@ class sn_cast_expression : public sn_expression
     // bool implicit_;
 
    public:
-    sn_cast_expression() : sn_expression(SN_CAST_EXPRESSION)
-    {
-    }
+    sn_cast_expression() : sn_expression(SN_CAST_EXPRESSION) {}
     // sn_cast_expression(const Type *to, sn_expression *from, bool
     // is_implicit = true)
     //     : target(from), implicit_(is_implicit)
@@ -968,9 +860,7 @@ class sn_unary_expression : public sn_expression
     // };
 
    public:
-    sn_unary_expression() : sn_expression(SN_UNARY_EXPRESSION)
-    {
-    }
+    sn_unary_expression() : sn_expression(SN_UNARY_EXPRESSION) {}
     static sn_expression *parse(Lexer &lex);
 
     // Visitor
@@ -987,15 +877,17 @@ class sn_postfix_expression : public sn_expression
     // };
 
    public:
-    sn_postfix_expression() : sn_expression(SN_POSTFIX_EXPRESSION)
-    {
-    }
-    static sn_expression *parse(Lexer &lex,
-                                sn_expression *left);
+    sn_postfix_expression() : sn_expression(SN_POSTFIX_EXPRESSION) {}
+    static sn_expression *parse(Lexer &lex, sn_expression *left);
+
+    // Visitor
+    virtual void afterChildren(Environment *&env, const int pass);
 };
+class sn_const_expression;
 class sn_primary_expression : public sn_expression
 {
     friend sn_postfix_expression;
+    friend sn_const_expression;
 
     Token t;
     // union {
@@ -1005,9 +897,7 @@ class sn_primary_expression : public sn_expression
     // };
 
    public:
-    sn_primary_expression() : sn_expression(SN_PRIMARY_EXPRESSION)
-    {
-    }
+    sn_primary_expression() : sn_expression(SN_PRIMARY_EXPRESSION) {}
     static sn_expression *parse(Lexer &lex);
 
     // Visitor
@@ -1018,27 +908,31 @@ class sn_argument_expression_list : public SyntaxNode
     // vector<sn_expression *> ae;
 
    public:
-    sn_argument_expression_list() : SyntaxNode(SN_ARGUMENT_EXPRESSION_LIST)
-    {
-    }
+    sn_argument_expression_list() : SyntaxNode(SN_ARGUMENT_EXPRESSION_LIST) {}
     static sn_argument_expression_list *parse(Lexer &lex);
 };
 
 class sn_const_expression : public sn_expression
 {
     // sn_expression *e;
+    int _value;
 
    public:
-    sn_const_expression() : sn_expression(SN_CONST_EXPRESSION)
+    sn_const_expression() : sn_expression(SN_CONST_EXPRESSION) {}
+    int value() const
     {
+        return _value;
     }
-    // TODO: finish this
-    int value() { return 0; }
     static sn_const_expression *parse(Lexer &lex);
+
+    // Visitor
+    virtual void afterChildren(Environment *&env, const int pass);
 };
 
 void __debugPrint(string &&s);
 
+// Pass 0: parse()
+// Pass 1: type derivation & code generation
 class Parser
 {
     // Environment env;
@@ -1046,11 +940,8 @@ class Parser
     sn_translation_unit *tu;
     Environment *env;
 
-
    public:
-    Parser(Lexer &l) : lex(l)
-    {
-    }
+    Parser(Lexer &l) : lex(l) {}
     void parse()
     {
         tu = sn_translation_unit::parse(lex);
@@ -1060,9 +951,10 @@ class Parser
 
         // SymbolFactory::check();
     }
-    void debugPrint()
+    void debugPrint(bool verbose)
     {
-        __debugPrint(tu->toString());
+        if (verbose)
+            __debugPrint(tu->toString());
         env->debugPrint();
     }
     void emit()

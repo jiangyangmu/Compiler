@@ -14,17 +14,21 @@ using namespace std;
 
 static bool lflag = false; // show Lexer output
 static bool vflag = false; // show Parser output
+static bool Vflag = false; // show Parser output
 
 void options(int &argc, char ** &argv)
 {
     int ch;
-    while ((ch = getopt(argc, argv, "lv")) != -1) {
+    while ((ch = getopt(argc, argv, "lvV")) != -1) {
         switch (ch) {
             case 'l':
                 lflag = true;
                 break;
             case 'v':
                 vflag = true;
+                break;
+            case 'V':
+                Vflag = true;
                 break;
             default:
                 break;
@@ -112,9 +116,9 @@ int main(int argc, char *argv[])
     if (vflag) cout << "-------------- parser --------------" << endl;
     Parser p(lex);
     p.parse();
-    if (vflag)
+    if (vflag || Vflag)
     {
-        p.debugPrint();
+        p.debugPrint(Vflag ? true : false);
         return 0;
     }
 

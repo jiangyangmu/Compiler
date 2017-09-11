@@ -22,9 +22,11 @@ class Environment : public TreeLike<Environment>
     int id;
     vector<Symbol *> symbols;
     // vector<StringRef> slabels, elabels;
+    IRStorage storage;
+    size_t next_temp;
 
    public:
-    Environment() : id(idgen++)
+    Environment() : id(idgen++), next_temp(0)
     {
     }
     void debugPrint(int indent = 0) const;
@@ -41,16 +43,18 @@ class Environment : public TreeLike<Environment>
                                                    const StringRef name);
 
     // object management
-    OperandAddress findObjectAddress(StringRef name) const;
+    IRAddress findObjectAddress(StringRef name) const;
 
     // constant management
     // int findConstantLocation(...) const;
 
     // temporary management (only live within a statement)
-    // int findTemporaryLocation(size_t index) const;
-    // OperandAddress allocTemporary();
+    IRAddress allocTemporary();
     // void freeTemporary(Operandaddress &addr);
-    // void freeAllTemporary();
+    void freeAllTemporary();
+
+    // code for allocation
+    vector<Operation> getCode() const;
 
     // code generation
     // void emit();

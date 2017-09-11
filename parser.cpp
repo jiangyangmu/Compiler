@@ -1179,9 +1179,27 @@ sn_expression *sn_unary_expression::parse(Lexer &lex)
  * postfix-expr '--'
  */
 // unary expression <- Value Transformation
+bool IsPostfixOperator(TokenType t)
+{
+    bool result = false;
+    switch (t)
+    {
+        case LSB:
+        case LP:
+        case REFER_TO:
+        case POINT_TO:
+        case OP_INC:
+        case OP_DEC: result = true; break;
+        default: break;
+    }
+    return result;
+}
 sn_expression *sn_postfix_expression::parse(Lexer &lex, sn_expression *left)
 {
-    if (first(SN_POSTFIX_EXPRESSION, lex.peakNext()))
+    assert(left != nullptr);
+
+    // if (first(SN_POSTFIX_EXPRESSION, lex.peakNext()))
+    if (IsPostfixOperator(lex.peakNext().type))
     {
         sn_postfix_expression *expr = new sn_postfix_expression();
 
@@ -1320,9 +1338,7 @@ class TypeQualifiersBuilder
     int type_qualifier_has;
 
    public:
-    TypeQualifiersBuilder() : type_qualifier_has(0)
-    {
-    }
+    TypeQualifiersBuilder() : type_qualifier_has(0) {}
     void feed_type_qualifiers(TokenType t);
 
     int build() const;
@@ -1567,6 +1583,37 @@ void sn_function_definition::afterParamList(Environment *&env, const int pass)
         // if need, match declarator with declaration_list
 
         // if need, add parameters information to FuncType
+    }
+    else if (pass == 1)
+    {
+        // type_info_
+        // name_info_
+        {
+            size_t i = 0;
+            SyntaxNode *child = getChild(i++);
+
+            if (child->nodeType() == SN_DECLARATION_SPECIFIERS)
+            {
+                type_info_ = dynamic_cast<sn_declaration_specifiers *>(child)
+                                 ->type_info_;
+                child = getChild(i++);
+            }
+
+            type_info_ = TypeUtil::Concatenate(
+                dynamic_cast<sn_declarator *>(child)->type_info_, type_info_);
+            name_info_ = dynamic_cast<sn_declarator *>(child)->name_info_;
+        }
+
+        const Symbol *same = Environment::SameNameSymbolInFileScope(
+            env->parent(), type_info_, name_info_);
+
+        SymbolBuilder builder;
+        assert(getScope() == SYMBOL_SCOPE_file);
+        builder.setScope(getScope());
+        builder.setType(type_info_);
+        builder.setName(name_info_,
+                        same ? same->linkage : SYMBOL_LINKAGE_external);
+        env->parent()->addSymbol(builder.build());
     }
 }
 void sn_function_definition::afterChildren(Environment *&env, const int pass)
@@ -2198,6 +2245,26 @@ void sn_label_statement::afterChildren(Environment *&env, const int pass)
         SyntaxError("not implemented.");
     }
 }
+void sn_compound_statement::visit(Environment *&env, const int pass)
+{
+    if (getChildrenCount() > 0)
+    {
+        if (getFirstChild()->nodeType() == SN_DECLARATION_LIST)
+            getFirstChild()->visit(env, pass);
+        afterDeclarations(env, pass);
+        if (getLastChild()->nodeType() == SN_STATEMENT_LIST)
+            getLastChild()->visit(env, pass);
+    }
+    afterChildren(env, pass);
+}
+void sn_compound_statement::afterDeclarations(Environment *&env, const int pass)
+{
+    if (pass == 1)
+    {
+        vector<Operation> code = env->getCode();
+        code_info_.insert(code_info_.end(), code.begin(), code.end());
+    }
+}
 void sn_compound_statement::afterChildren(Environment *&env, const int pass)
 {
     if (pass == 1)
@@ -2298,7 +2365,6 @@ void sn_jump_statement::afterChildren(Environment *&env, const int pass)
     }
 }
 
-// TODO: finish type derivation in pass 1
 // TODO: generate ir according to type size
 
 // expression(constant-ness)
@@ -2357,6 +2423,10 @@ void sn_assign_expression::afterChildren(Environment *&env, const int pass)
                 sn_cast_expression *cast_expr = new sn_cast_expression();
                 cast_expr->type_ = to->type_;
                 cast_expr->addChild(from);
+
+                // XXX: this is bad!! split code generation to pass 2
+                cast_expr->afterChildren(env, pass);
+
                 from = cast_expr;
                 replaceChild(1, from);  // XXX: syntax tree is modified here.
             }
@@ -2789,7 +2859,21 @@ void sn_cast_expression::afterChildren(Environment *&env, const int pass)
     {
         // type derivation
         {
-            type_ = dynamic_cast<sn_type_name *>(getFirstChild())->type_info_;
+            if (getFirstChild()->nodeType() == SN_TYPE_NAME)
+                type_ =
+                    dynamic_cast<sn_type_name *>(getFirstChild())->type_info_;
+            else
+                assert(type_ != nullptr);
+        }
+
+        // code generation
+        {
+            sn_expression *e = dynamic_cast<sn_expression *>(getLastChild());
+            code_info_.insert(code_info_.end(), e->code_info_.begin(),
+                              e->code_info_.end());
+            // TODO: type conversion code
+            // ...
+            result_info_ = e->result_info_;
         }
     }
 }
@@ -2836,22 +2920,20 @@ void sn_unary_expression::afterChildren(Environment *&env, const int pass)
         }
     }
 }
-// TODO: type & code gen
 void sn_postfix_expression::afterChildren(Environment *&env, const int pass)
 {
     if (pass == 1)
     {
+        sn_expression *left = dynamic_cast<sn_expression *>(getFirstChild());
+        sn_expression *right =
+            (getChildrenCount() == 2)
+                ? dynamic_cast<sn_expression *>(getLastChild())
+                : nullptr;
+
         // []: pointer to object type + integral type
         //
         // type derivation
         {
-            assert(type_ != nullptr);
-
-            sn_expression *left =
-                dynamic_cast<sn_expression *>(getFirstChild());
-            sn_expression *right = (getChildrenCount() == 2) ?
-                dynamic_cast<sn_expression *>(getLastChild()) : nullptr;
-
             // used in switch
             Type *left_type = nullptr;
             Type *right_type = nullptr;
@@ -2864,8 +2946,8 @@ void sn_postfix_expression::afterChildren(Environment *&env, const int pass)
                     left_type = left->type_;
                     right_type = right->type_;
                     if (!(left_type->getClass() == T_POINTER ||
-                            left_type->getClass() == T_ARRAY) ||
-                            !TypeUtil::TargetType(left_type)->isObject())
+                          left_type->getClass() == T_ARRAY) ||
+                        !TypeUtil::TargetType(left_type)->isObject())
                     {
                         SyntaxError("type not support array subscripting.");
                     }
@@ -2873,19 +2955,25 @@ void sn_postfix_expression::afterChildren(Environment *&env, const int pass)
                     {
                         SyntaxError("need integral type as array subscript.");
                     }
+                    type_ = TypeUtil::TargetType(left_type);
+                    type_->setQualifier(left_type->getQualifier());
                     break;
                 case REFER_TO:
                     left_type = left->type_;
                     right_type = right->type_;
-                    name = dynamic_cast<sn_identifier *>(right_type)->name_info_;
-                    if (!left_type->getClass() == T_TAG)
+                    name =
+                        dynamic_cast<sn_identifier *>(right_type)->name_info_;
+                    if (left_type->getClass() != T_TAG)
                     {
                         SyntaxError("expect struct and union type.");
                     }
                     impl_type = dynamic_cast<TagType *>(left_type)->getImpl();
-                    if (impl_type->getClass() == T_STRUCT || impl_type->getClass() == T_UNION)
+                    if (impl_type->getClass() == T_STRUCT ||
+                        impl_type->getClass() == T_UNION)
                     {
-                        type_ = dynamic_cast<StructTypeImpl *>(impl_type)->getMemberType(name);
+                        type_ = TypeUtil::CloneTop(
+                            dynamic_cast<const StructTypeImpl *>(impl_type)
+                                ->getMemberType(name));
                         type_->setQualifier(left_type->getQualifier());
                     }
                     else
@@ -2894,22 +2982,20 @@ void sn_postfix_expression::afterChildren(Environment *&env, const int pass)
                     }
                     break;
                 case POINT_TO:
-                    // if (!type_->getClass() == T_POINTER ||
-                    //         (!TypeUtil::TargetType(type_)->getClass() == T_STRUCT &&
-                    //         !TypeUtil::TargetType(type_)->getClass() == T_UNION))
-                    //     SyntaxError("expect pointer to struct and union type.");
-                    // break;
+                // if (...)
+                //     SyntaxError("expect pointer to struct and union type.");
+                // break;
                 case OP_INC:
                 case OP_DEC:
-                case LP:
-                    SyntaxError("too lazy to implement.");
-                    break;
+                case LP: SyntaxError("too lazy to implement."); break;
                 default: SyntaxError("Should not reach here."); break;
             }
         }
 
         // code generation
         {
+            Operation mov, mul, add;
+            IRAddress t1, t2, t3;
             switch (op)
             {
                 case LSB:
@@ -2917,44 +3003,43 @@ void sn_postfix_expression::afterChildren(Environment *&env, const int pass)
                     // mul sizeof(type_), t1, t2
                     // add value(base), t2, t3
 
-                    // t1 = env->allocTemporary();
-                    // t2 = env->allocTemporary();
-                    // t3 = env->allocTemporary();
-                    // mov = {OP_TYPE_mov,
-                    //        right->result_info_,
-                    //        t1,
-                    //        {}};
-                    // mul = {OP_TYPE_mul,
-                    //        {OP_ADDR_imm, type_->getSize()},
-                    //        t1,
-                    //        t2};
-                    // add = {OP_TYPE_add,
-                    //        left->result_info_,
-                    //        t2,
-                    //        t3};
+                    code_info_.insert(code_info_.end(),
+                                      left->code_info_.begin(),
+                                      left->code_info_.end());
+                    code_info_.insert(code_info_.end(),
+                                      right->code_info_.begin(),
+                                      right->code_info_.end());
+                    t1 = env->allocTemporary();
+                    t2 = env->allocTemporary();
+                    t3 = env->allocTemporary();
+                    mov = {OP_TYPE_mov, right->result_info_, t1, {}};
+                    mul = {
+                        OP_TYPE_mul, {OP_ADDR_imm, type_->getSize()}, t1, t2};
+                    add = {OP_TYPE_add, left->result_info_, t2, t3};
+                    code_info_.push_back(mov);
+                    code_info_.push_back(mul);
+                    code_info_.push_back(add);
+                    result_info_ = t3;
                     break;
                 case REFER_TO:
                     // mov offsetof(struct, member), t1
                     // add addr(base), t1, t2
 
-                    // t1 = env->allocTemporary();
-                    // t2 = env->allocTemporary();
-                    // mov = {OP_TYPE_mov,
-                    //        right->result_info_,
-                    //        t1,
-                    //        {}};
-                    // add = {OP_TYPE_add,
-                    //        {OP_ADDR_imm, left->result_info_.value},
-                    //        t1,
-                    //        t2};
+                    t1 = env->allocTemporary();
+                    t2 = env->allocTemporary();
+                    mov = {OP_TYPE_mov, right->result_info_, t1, {}};
+                    add = {OP_TYPE_add,
+                           {OP_ADDR_imm, left->result_info_.value},
+                           t1,
+                           t2};
+                    code_info_.push_back(mov);
+                    code_info_.push_back(add);
+                    result_info_ = t2;
                     break;
                 case POINT_TO:
-                    break;
                 case OP_INC:
                 case OP_DEC:
-                case LP:
-                    SyntaxError("too lazy to implement.");
-                    break;
+                case LP: SyntaxError("too lazy to implement."); break;
                 default: SyntaxError("Should not reach here."); break;
             }
         }
@@ -3035,7 +3120,23 @@ void sn_primary_expression::afterChildren(Environment *&env, const int pass)
         }
     }
 }
-// void sn_const_expression::afterChildren(Environment *&env, const int pass);
+void sn_const_expression::afterChildren(Environment *&env, const int pass)
+{
+    // TODO: remove sn_const_expression
+    if (pass == 0)
+    {
+        if (getFirstChild()->nodeType() == SN_PRIMARY_EXPRESSION)
+        {
+            sn_primary_expression *e =
+                dynamic_cast<sn_primary_expression *>(getFirstChild());
+            _value = e->t.ival;
+        }
+        else
+        {
+            SyntaxError("not implemented.");
+        }
+    }
+}
 // void sn_argument_expression_list::afterChildren(Environment *&env, const int
 // pass);
 

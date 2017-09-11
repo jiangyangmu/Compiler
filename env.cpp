@@ -63,17 +63,21 @@ Type *TypeUtil::Merge(Type *t1, Type *t2)
     SyntaxWarning("TypeUtil::Merge not fully implemented.");
     return nullptr;
 }
-Type *TypeUtil::CloneTop(Type *t)
+Type *TypeUtil::CloneTop(const Type *t)
 {
     Type *result = nullptr;
     switch (t->getClass())
     {
-        case T_VOID: result = new VoidType(*(VoidType *)t); break;
-        case T_CHAR: result = new CharType(*(CharType *)t); break;
-        case T_INT: result = new IntegerType(*(IntegerType *)t); break;
-        case T_FLOAT: result = new FloatingType(*(FloatingType *)t); break;
-        case T_POINTER: result = new PointerType(*(PointerType *)t); break;
-        case T_TAG: result = new TagType(*(TagType *)t); break;
+        case T_VOID: result = new VoidType(*(const VoidType *)t); break;
+        case T_CHAR: result = new CharType(*(const CharType *)t); break;
+        case T_INT: result = new IntegerType(*(const IntegerType *)t); break;
+        case T_FLOAT:
+            result = new FloatingType(*(const FloatingType *)t);
+            break;
+        case T_POINTER:
+            result = new PointerType(*(const PointerType *)t);
+            break;
+        case T_TAG: result = new TagType(*(const TagType *)t); break;
         default: SyntaxError("can't clone this type."); break;
     }
     return result;
@@ -114,8 +118,7 @@ StringRef TypeUtil::GenerateTag()
     return StringRef(tags.back().data());
 }
 
-Type *TypeConversion::CondExprConversion(Type *if_true,
-                                         Type *if_false)
+Type *TypeConversion::CondExprConversion(Type *if_true, Type *if_false)
 {
     SyntaxWarning("CondExprConversion: not fully implemented.");
     return if_true;
@@ -236,6 +239,43 @@ Type *TypeConversion::IntegerPromotion(Type *t)
 
 // -------- object management -------
 
+void IRStorage::alloc(StringRef symbol, size_t size, size_t align, bool replace)
+{
+    assert(align > 0 && size > 0);
+
+    // address: high -> low
+    _alloc += size;
+    if (_alloc % align)
+        _alloc += align - (_alloc % align);
+    _addr.push_back({OP_ADDR_reg, _alloc});
+    _name.push_back(symbol);
+}
+IRAddress IRStorage::find(StringRef symbol) const
+{
+    size_t i = 0;
+    while (i < _name.size() && _name[i] != symbol)
+        ++i;
+    if (i == _name.size())
+        SyntaxError("IRStorage: can't find symbol: " + symbol.toString());
+    return _addr[i];
+}
+uint64_t IRStorage::allocatedSize() const
+{
+    return _alloc;
+}
+std::string IRStorage::toString() const
+{
+    std::string s;
+    for (size_t i = 0; i < _name.size(); ++i)
+    {
+        s += _name[i].toString();
+        s += ':';
+        s += std::to_string(_addr[i].value);
+        s += '\n';
+    }
+    return s;
+}
+
 // -------- symbol management -------
 
 Symbol *Environment::findSymbol(ESymbolNamespace space, StringRef name) const
@@ -308,10 +348,20 @@ void Environment::addSymbol(Symbol *s)
         {
             assert(s->obj == nullptr);
         }
+
+        if (t->isObject())
+        {
+            storage.alloc(s->name, t->getSize(), t->getAlignment(), true);
+        }
     }
     else
     {
         symbols.push_back(s);
+
+        if (s->type->isObject())
+        {
+            storage.alloc(s->name, s->type->getSize(), s->type->getAlignment(), false);
+        }
     }
     DebugLog("add symbol: " + s->name.toString());
 }
@@ -333,36 +383,32 @@ const Symbol *Environment::SameNameSymbolInFileScope(const Environment *env,
         return nullptr;
 }
 
-OperandAddress Environment::findObjectAddress(StringRef name) const
+IRAddress Environment::findObjectAddress(StringRef name) const
 {
-    Symbol *obj = nullptr;
-    int loc = -1;
-    {
-        int i = 0;
-        for (Symbol *s : symbols)
-        {
-            if (s->space == SYMBOL_NAMESPACE_id && s->name == name)
-            {
-                obj = s;
-                loc = i;
-                break;
-            }
-            ++i;
-        }
-
-        if (obj == nullptr || obj->type == nullptr ||
-            (!obj->type->isObject() && !obj->type->isFunction()))
-        {
-            SyntaxError("can't find object:" + name.toString());
-        }
-    }
-
-    OperandAddress oa = {OP_ADDR_reg, (uint64_t)loc};
-    return oa;
+    // TODO: make sure name is an existed object
+    return storage.find(name);
+}
+IRAddress Environment::allocTemporary()
+{
+    next_temp = (next_temp < storage.allocatedSize()) ?
+        storage.allocatedSize() : next_temp;
+    IRAddress op = {OP_ADDR_reg, (uint64_t)(next_temp += 8)};
+    return op;
+}
+void Environment::freeAllTemporary()
+{
+    next_temp = storage.allocatedSize();
 }
 
 // -------- code generation --------
 int Environment::idgen = 0;
+
+vector<Operation> Environment::getCode() const
+{
+    Operation alloc = {
+        OP_TYPE_alloc, {OP_ADDR_imm, storage.allocatedSize()}, {}, {}};
+    return {alloc};
+}
 
 std::string Operation::toString() const
 {
@@ -398,6 +444,8 @@ std::string OperationUtil::OperationTypeToString(EOperationType type)
     std::string s;
     switch (type)
     {
+        case OP_TYPE_alloc: s = "alloc"; break;
+        case OP_TYPE_free: s = "free"; break;
         case OP_TYPE_cmp: s = "cmp"; break;
         case OP_TYPE_jmp: s = "jmp"; break;
         case OP_TYPE_je: s = "je"; break;
@@ -516,31 +564,14 @@ void Environment::debugPrint(int indent) const
         // printf("%lu types. %lu symbols\n", TypeFactory::size(),
         //        SymbolFactory::size());
     }
+    __debugPrint(storage.toString());
     for (Symbol *s : symbols)
     {
         __debugPrint(s->toString());
-        // printf("%*s %-12sType: %-*sObject: %s\n", indent + 5,
-        //        s->space == SYMBOL_NAMESPACE_id
-        //            ? "Name:"
-        //            : (s->space == SYMBOL_NAMESPACE_tag ? "Tag: " : "Labl:"),
-        //        s->name.toString().data(), 33 - indent,
-        //        s->type ? s->type->toString().data() : "<null>",
-        //        s->obj
-        //            ? (s->obj->toString() + ", " + to_string(s->obj->size()) +
-        //               " bytes.")
-        //                  .data()
-        //            : "<null>");
-        // if (s->obj)
-        // {
-        //     FuncObject *fo = dynamic_cast<FuncObject *>(s->obj);
-        //     if (fo)
-        //     {
-        //         // if (fo->getFuncEnv())
-        //         //     fo->getFuncEnv()->debugPrint(indent + 2);
-        //         if (fo->getFuncBody())
-        //             __debugPrint(fo->getFuncBody()->debugString());
-        //     }
-        // }
+    }
+    for (auto child : getChildren())
+    {
+        child->debugPrint(0);
     }
 }
 
