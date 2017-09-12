@@ -30,12 +30,12 @@ enum ESymbolScope
     SYMBOL_SCOPE_func_proto
 };
 
-enum ESymbolStorage
-{
-    SYMBOL_STORAGE_none,
-    SYMBOL_STORAGE_auto,
-    SYMBOL_STORAGE_static
-};
+// enum ESymbolStorage
+// {
+//     SYMBOL_STORAGE_none,
+//     SYMBOL_STORAGE_auto,
+//     SYMBOL_STORAGE_static
+// };
 
 class SymbolBuilder;
 

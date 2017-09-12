@@ -5,6 +5,9 @@
 
 #include "common.h"
 
+// s/Operation/Instruction
+
+// s/EOperationType/IROperationType
 enum EOperationType
 {
     // storage
@@ -59,11 +62,23 @@ enum EOperationType
     OP_TYPE_fdiv,
 };
 
+enum IRType
+{
+    IR_TYPE_invalid,
+    IR_TYPE_int,
+    IR_TYPE_uint,
+    IR_TYPE_float,
+    IR_TYPE_array,
+    IR_TYPE_string,
+};
+
+// s/EIRAddressMode/IRAddressMode
 enum EIRAddressMode
 {
     OP_ADDR_invalid,
-    OP_ADDR_reg,
+    OP_ADDR_mem,
     OP_ADDR_imm,
+    OP_ADDR_label,
 };
 
 struct IRAddress
@@ -72,9 +87,30 @@ struct IRAddress
     uint64_t value;
 };
 
-// TODO: Stringable
-// s/Operation/IROperation/
-struct Operation
+struct IRObject
+{
+    IRAddress addr;
+    IRType type;
+
+    size_t size;
+    size_t align;
+    void *value; // uninitialized if: value == nullptr
+
+    size_t element_size; // used by array, size % element_size == 0
+
+    std::string toString() const;
+};
+
+struct IRConstant
+{
+    TokenType type;
+    union {
+        float fval;
+        StringRef sval;
+    };
+};
+
+struct IROperation
 {
     EOperationType op;
     IRAddress arg1, arg2, arg3;
@@ -83,47 +119,58 @@ struct Operation
 };
 
 // storage management
+// 1. named: global, local
+// 2. un-named: temporary
+// 3. constant
 class IRStorage : public Stringable
 {
     std::vector<StringRef> _name;
-    std::vector<IRAddress> _addr;
+    std::vector<IRObject> _obj;
+    // named local
     uint64_t _alloc;
+
+    std::vector<IRObject> _unnamed_obj;
+    uint64_t _unnamed_alloc, _unnamed_alloc_max;
+
+    // std::vector<float> _flt_const;
+    // std::vector<StringRef> _str_const;
+
+    uint64_t __aligned_alloc(uint64_t &alloc, size_t size, size_t align)
+    {
+        alloc += size;
+        if (alloc % align != 0)
+            alloc += align - (alloc % align);
+        return alloc;
+    }
 
    public:
     IRStorage() : _alloc(0) {}
 
-    void alloc(StringRef symbol, size_t size, size_t align,
-               bool replace = false);
-    IRAddress find(StringRef symbol) const;
-    uint64_t allocatedSize() const;
+    // named
+    // TODO: don't use replace, let Environment has a callback to iterate objects
+    IRAddress alloc(StringRef label, IRObject object, bool replace);
+    IRAddress find(StringRef label) const;
+
+    // un-named
+    IRAddress allocUnnamed(IRObject object);
+    void freeAllUnnamed();
+
+    // TODO: constant pool (float, string)
+    // IRAddress alloc(IRConstant c);
+
+    // code for storage allocation
+    std::vector<IROperation> generateCode() const;
 
     // Stringable
     virtual std::string toString() const;
 };
 // code management
 
-class OperationUtil
+class Type;
+
+class IRUtil
 {
    public:
+    static IRObject TypeToIRObject(const Type *type, ESymbolLinkage linkage);
     static std::string OperationTypeToString(EOperationType type);
 };
-
-// class OperationBlock
-// {
-//    public:
-//     typedef size_t op_handle_t;
-
-//    public:
-//     //  add(arith_op, src_name, dst_name)
-//     //  add(arith_op, src1_name, src2_name, dst_name)
-//     //  add(jmp_op, dst_label)
-//     //
-//     //  add(jmp_op) -> op_handle_t
-//     //  fix(op_handle_t, dst_label)
-//     //
-//     data_address_t getNextAddress();
-//     op_handle_t addOperation(EOperationType t, data_address_t arg1 = 0,
-//                              data_address_t arg2 = 0, data_address_t arg3 =
-//                              0);
-//     void fixOperationArgument(op_handle_t op, data_address_t addr);
-// };

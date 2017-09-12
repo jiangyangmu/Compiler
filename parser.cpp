@@ -2261,7 +2261,7 @@ void sn_compound_statement::afterDeclarations(Environment *&env, const int pass)
 {
     if (pass == 1)
     {
-        vector<Operation> code = env->getCode();
+        vector<IROperation> code = env->getCode();
         code_info_.insert(code_info_.end(), code.begin(), code.end());
     }
 }
@@ -2308,7 +2308,7 @@ void sn_selection_statement::afterChildren(Environment *&env, const int pass)
             sn_expression *expr =
                 dynamic_cast<sn_expression *>(getFirstChild());
 
-            Operation cmp = {
+            IROperation cmp = {
                 OP_TYPE_cmp, {OP_ADDR_imm, 0}, expr->result_info_, {}};
             code_info_.push_back(cmp);
 
@@ -2316,7 +2316,7 @@ void sn_selection_statement::afterChildren(Environment *&env, const int pass)
             {
                 sn_statement *stmt = dynamic_cast<sn_statement *>(getChild(1));
 
-                Operation je = {
+                IROperation je = {
                     OP_TYPE_je, {OP_ADDR_imm, stmt->code_info_.size()}, {}, {}};
                 code_info_.push_back(je);
 
@@ -2328,7 +2328,7 @@ void sn_selection_statement::afterChildren(Environment *&env, const int pass)
                 sn_statement *stmt1 = dynamic_cast<sn_statement *>(getChild(1));
                 sn_statement *stmt2 = dynamic_cast<sn_statement *>(getChild(2));
 
-                Operation je = {OP_TYPE_je,
+                IROperation je = {OP_TYPE_je,
                                 {OP_ADDR_imm, stmt1->code_info_.size() + 1},
                                 {},
                                 {}};
@@ -2337,7 +2337,7 @@ void sn_selection_statement::afterChildren(Environment *&env, const int pass)
                 code_info_.insert(code_info_.end(), stmt1->code_info_.begin(),
                                   stmt1->code_info_.end());
 
-                Operation jmp = {OP_TYPE_jmp,
+                IROperation jmp = {OP_TYPE_jmp,
                                  {OP_ADDR_imm, stmt2->code_info_.size()},
                                  {},
                                  {}};
@@ -2441,7 +2441,7 @@ void sn_assign_expression::afterChildren(Environment *&env, const int pass)
             sn_expression *right =
                 dynamic_cast<sn_expression *>(getLastChild());
 
-            Operation mov;
+            IROperation mov;
             switch (op)
             {
                 case ASSIGN:
@@ -2994,7 +2994,7 @@ void sn_postfix_expression::afterChildren(Environment *&env, const int pass)
 
         // code generation
         {
-            Operation mov, mul, add;
+            IROperation mov, mul, add;
             IRAddress t1, t2, t3;
             switch (op)
             {
@@ -3009,9 +3009,9 @@ void sn_postfix_expression::afterChildren(Environment *&env, const int pass)
                     code_info_.insert(code_info_.end(),
                                       right->code_info_.begin(),
                                       right->code_info_.end());
-                    t1 = env->allocTemporary();
-                    t2 = env->allocTemporary();
-                    t3 = env->allocTemporary();
+                    t1 = env->allocTemporary(right->type_);
+                    t2 = env->allocTemporary(right->type_);
+                    t3 = env->allocTemporary(left->type_);
                     mov = {OP_TYPE_mov, right->result_info_, t1, {}};
                     mul = {
                         OP_TYPE_mul, {OP_ADDR_imm, type_->getSize()}, t1, t2};
@@ -3025,17 +3025,17 @@ void sn_postfix_expression::afterChildren(Environment *&env, const int pass)
                     // mov offsetof(struct, member), t1
                     // add addr(base), t1, t2
 
-                    t1 = env->allocTemporary();
-                    t2 = env->allocTemporary();
-                    mov = {OP_TYPE_mov, right->result_info_, t1, {}};
-                    add = {OP_TYPE_add,
+                    /* t1 = env->allocTemporary();
+                    t2 = env->allocTemporary(); */
+                    // mov = {OP_TYPE_mov, offsetof(...), t1, {}};
+                    /* add = {OP_TYPE_add,
                            {OP_ADDR_imm, left->result_info_.value},
                            t1,
                            t2};
                     code_info_.push_back(mov);
                     code_info_.push_back(add);
                     result_info_ = t2;
-                    break;
+                    break; */
                 case POINT_TO:
                 case OP_INC:
                 case OP_DEC:

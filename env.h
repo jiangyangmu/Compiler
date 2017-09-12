@@ -23,12 +23,9 @@ class Environment : public TreeLike<Environment>
     vector<Symbol *> symbols;
     // vector<StringRef> slabels, elabels;
     IRStorage storage;
-    size_t next_temp;
 
    public:
-    Environment() : id(idgen++), next_temp(0)
-    {
-    }
+    Environment() : id(idgen++) {}
     void debugPrint(int indent = 0) const;
 
     // symbol management
@@ -42,6 +39,8 @@ class Environment : public TreeLike<Environment>
                                                    const Type *type,
                                                    const StringRef name);
 
+    // TODO: delegate below functions to IRStorage
+
     // object management
     IRAddress findObjectAddress(StringRef name) const;
 
@@ -49,17 +48,10 @@ class Environment : public TreeLike<Environment>
     // int findConstantLocation(...) const;
 
     // temporary management (only live within a statement)
-    IRAddress allocTemporary();
+    IRAddress allocTemporary(const Type *type);
     // void freeTemporary(Operandaddress &addr);
     void freeAllTemporary();
 
     // code for allocation
-    vector<Operation> getCode() const;
-
-    // code generation
-    // void emit();
-    // void pushLabel(StringRef start, StringRef end);
-    // void popLabel();
-    // StringRef startLabel() const;
-    // StringRef endLabel() const;
+    vector<IROperation> getCode() const;
 };

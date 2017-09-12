@@ -177,7 +177,7 @@ class sn_init_declarator : public SyntaxNode
    public:
     Type *type_info_;
     StringRef name_info_;
-    // vector<Operation> code_info_;
+    // vector<IROperation> code_info_;
 
    public:
     sn_init_declarator() : SyntaxNode(SN_INIT_DECLARATOR) {}
@@ -564,7 +564,7 @@ class sn_statement : public SyntaxNode
     sn_statement(ESyntaxNodeType nt = SN_STATEMENT) : SyntaxNode(nt) {}
 
    public:
-    vector<Operation> code_info_;
+    vector<IROperation> code_info_;
 
    public:
     static sn_statement *parse(Lexer &lex);
@@ -669,7 +669,7 @@ class sn_expression : public SyntaxNode
     Type *type_;
 
    public:
-    vector<Operation> code_info_;
+    vector<IROperation> code_info_;
     IRAddress result_info_;
 
    public:

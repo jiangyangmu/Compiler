@@ -230,6 +230,11 @@ class IntegerType : public Type
         _align = _size;
     }
 
+    bool isSigned() const
+    {
+        return _signed;
+    }
+
     virtual bool equal(const Type &o) const
     {
         if (!Type::equal(o))
