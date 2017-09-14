@@ -1602,6 +1602,9 @@ void sn_function_definition::afterParamList(Environment *&env, const int pass)
             type_info_ = TypeUtil::Concatenate(
                 dynamic_cast<sn_declarator *>(child)->type_info_, type_info_);
             name_info_ = dynamic_cast<sn_declarator *>(child)->name_info_;
+
+            // TODO: should not mark complete here.
+            type_info_->markComplete();
         }
 
         const Symbol *same = Environment::SameNameSymbolInFileScope(
@@ -2261,7 +2264,7 @@ void sn_compound_statement::afterDeclarations(Environment *&env, const int pass)
 {
     if (pass == 1)
     {
-        vector<IROperation> code = env->getCode();
+        vector<IROperation> code = env->getStorage().generateCode();
         code_info_.insert(code_info_.end(), code.begin(), code.end());
     }
 }
@@ -2994,6 +2997,8 @@ void sn_postfix_expression::afterChildren(Environment *&env, const int pass)
 
         // code generation
         {
+            IRStorage &st = env->getStorage();
+
             IROperation mov, mul, add;
             IRAddress t1, t2, t3;
             switch (op)
@@ -3009,9 +3014,9 @@ void sn_postfix_expression::afterChildren(Environment *&env, const int pass)
                     code_info_.insert(code_info_.end(),
                                       right->code_info_.begin(),
                                       right->code_info_.end());
-                    t1 = env->allocTemporary(right->type_);
-                    t2 = env->allocTemporary(right->type_);
-                    t3 = env->allocTemporary(left->type_);
+                    t1 = st.find(st.put(IRObjectBuilder::FromType(right->type_)));
+                    t2 = st.find(st.put(IRObjectBuilder::FromType(right->type_)));
+                    t3 = st.find(st.put(IRObjectBuilder::FromType(left->type_)));
                     mov = {OP_TYPE_mov, right->result_info_, t1, {}};
                     mul = {
                         OP_TYPE_mul, {OP_ADDR_imm, type_->getSize()}, t1, t2};
@@ -3081,37 +3086,21 @@ void sn_primary_expression::afterChildren(Environment *&env, const int pass)
 
         // code generation
         {
+            IRStorage &st = env->getStorage();
             switch (t.type)
             {
                 case SYMBOL:
-                    if (type_->getClass() == T_ENUM_CONST)
-                    {
-                        result_info_ = {
-                            OP_ADDR_imm,
-                            (uint64_t) dynamic_cast<EnumConstType *>(s->type)
-                                ->getValue()};
-                    }
-                    else
-                    {
-                        result_info_ = env->findObjectAddress(t.symbol);
-                    }
+                    result_info_ = st.findByName(t.symbol);
                     break;
                 case CONST_CHAR:
                 case CONST_INT:
-                    result_info_ = {OP_ADDR_imm, (uint64_t)t.ival};
-                    break;
                 case CONST_FLOAT:
-                // result_info_ = {
-                //     OP_ADDR_reg,
-                //     env->findConstantLocation(t)
-                // };
-                // break;
                 case STRING:
-                // result_info_ = {
-                //     OP_ADDR_imm,
-                //     env->findConstantLocation(t)
-                // };
-                // break;
+                    result_info_ = st.find(st.put(
+                                IRObjectBuilder::FromTokenWithType(
+                                    &t, type_
+                                    )));
+                    break;
                 default:
                     // expr
                     SyntaxError("not implemented.");

@@ -70,6 +70,7 @@ enum IRType
     IR_TYPE_float,
     IR_TYPE_array,
     IR_TYPE_string,
+    IR_TYPE_routine,
 };
 
 // s/EIRAddressMode/IRAddressMode
@@ -79,12 +80,13 @@ enum EIRAddressMode
     OP_ADDR_mem,
     OP_ADDR_imm,
     OP_ADDR_label,
+    // OP_ADDR_extern,
 };
 
 struct IRAddress
 {
     EIRAddressMode mode;
-    uint64_t value;
+    uint64_t value;  // used to store value when mode == imm
 };
 
 struct IRObject
@@ -94,20 +96,11 @@ struct IRObject
 
     size_t size;
     size_t align;
-    void *value; // uninitialized if: value == nullptr
+    void *value;  // uninitialized if: value == nullptr
 
-    size_t element_size; // used by array, size % element_size == 0
+    size_t element_size;  // used by array, size % element_size == 0
 
     std::string toString() const;
-};
-
-struct IRConstant
-{
-    TokenType type;
-    union {
-        float fval;
-        StringRef sval;
-    };
 };
 
 struct IROperation
@@ -118,6 +111,7 @@ struct IROperation
     std::string toString() const;
 };
 
+typedef size_t IRObjectHandle;
 // storage management
 // 1. named: global, local
 // 2. un-named: temporary
@@ -132,9 +126,6 @@ class IRStorage : public Stringable
     std::vector<IRObject> _unnamed_obj;
     uint64_t _unnamed_alloc, _unnamed_alloc_max;
 
-    // std::vector<float> _flt_const;
-    // std::vector<StringRef> _str_const;
-
     uint64_t __aligned_alloc(uint64_t &alloc, size_t size, size_t align)
     {
         alloc += size;
@@ -144,33 +135,42 @@ class IRStorage : public Stringable
     }
 
    public:
-    IRStorage() : _alloc(0) {}
+    IRStorage() : _alloc(0), _unnamed_alloc(0), _unnamed_alloc_max(0) {}
 
-    // named
-    // TODO: don't use replace, let Environment has a callback to iterate objects
-    IRAddress alloc(StringRef label, IRObject object, bool replace);
-    IRAddress find(StringRef label) const;
+    // location: global, local
+    // addr.mode indicates where to put
+    // imm: if float or string: act as label
+    // label:
+    // mem: change _alloc or _tmp_alloc
+    IRObjectHandle put(IRObject object);
+    IRObjectHandle putWithName(IRObject object, StringRef label, bool merge);
+    IRAddress find(IRObjectHandle h);
+    IRAddress findByName(StringRef label);
 
-    // un-named
-    IRAddress allocUnnamed(IRObject object);
-    void freeAllUnnamed();
-
-    // TODO: constant pool (float, string)
-    // IRAddress alloc(IRConstant c);
-
-    // code for storage allocation
+    // code for local storage allocation
     std::vector<IROperation> generateCode() const;
 
     // Stringable
     virtual std::string toString() const;
 };
-// code management
 
+struct Token;
+struct Symbol;
 class Type;
+
+class IRObjectBuilder
+{
+   public:
+    // temporary
+    static IRObject FromType(const Type *type);
+    // constant
+    static IRObject FromTokenWithType(const Token *token, const Type *type);
+    // named object
+    static IRObject FromSymbol(const Symbol *symbol);
+};
 
 class IRUtil
 {
    public:
-    static IRObject TypeToIRObject(const Type *type, ESymbolLinkage linkage);
     static std::string OperationTypeToString(EOperationType type);
 };

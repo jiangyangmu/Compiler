@@ -152,6 +152,10 @@ class Type : public Stringable
         // TODO: check input
         _prop &= ~qualifiers;
     }
+    void markComplete()
+    {
+        unsetProp(TP_INCOMPLETE);
+    }
 
     virtual bool equal(const Type &o) const
     {

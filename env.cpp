@@ -4,6 +4,7 @@
 
 #include "parser.h"
 
+#include <algorithm>
 #include <cctype>
 #include <iostream>
 #include <string>
@@ -239,23 +240,41 @@ Type *TypeConversion::IntegerPromotion(Type *t)
 
 // -------- object management -------
 
-IRAddress IRStorage::alloc(StringRef label, IRObject object, bool replace)
+IRObjectHandle IRStorage::put(IRObject object)
 {
-    IRObject *pobj = nullptr;
-    if (replace)
+    // set address mode & value
+    assert(object.addr.mode != OP_ADDR_invalid);
+    if (object.addr.mode == OP_ADDR_mem)
     {
-        size_t i = 0;
-        while (i < _name.size())
-        {
-            if (_name[i] == label)
-                break;
-            ++i;
-        }
-        if (i == _name.size())
-            SyntaxError("IRStorage: can't find symbol: " + label.toString());
-        _obj[i] = object;
+        _unnamed_alloc += _alloc;
+        object.addr.value =
+            __aligned_alloc(_unnamed_alloc, object.size, object.align);
+        _unnamed_alloc -= _alloc;
 
-        pobj = &(_obj[i]);
+        _unnamed_alloc_max = (_unnamed_alloc_max < _unnamed_alloc)
+                                 ? _unnamed_alloc
+                                 : _unnamed_alloc_max;
+    }
+
+    _unnamed_obj.push_back(object);
+    return (_unnamed_obj.size() - 1) + _obj.size();
+}
+IRObjectHandle IRStorage::putWithName(IRObject object, StringRef label,
+                                      bool merge)
+{
+    assert(_unnamed_alloc == 0 && _unnamed_alloc_max == 0);
+
+    IRObjectHandle h = 0;
+    IRObject *pobj = nullptr;
+    if (merge)
+    {
+        SyntaxError("IRStorage: not implemented.");
+        // auto it = std::find(_name.begin(), _name.end(), label);
+        // if (it == _name.end())
+        //     SyntaxError("IRStorage: can't find symbol: " + label.toString());
+        // *it = object;
+
+        // pobj = &(*it);
     }
     else
     {
@@ -263,9 +282,10 @@ IRAddress IRStorage::alloc(StringRef label, IRObject object, bool replace)
         _obj.push_back(object);
 
         pobj = &(_obj.back());
+        h = _obj.size() - 1;
     }
-
     assert(pobj != nullptr);
+
     assert(pobj->addr.mode != OP_ADDR_invalid);
     switch (pobj->addr.mode)
     {
@@ -273,69 +293,35 @@ IRAddress IRStorage::alloc(StringRef label, IRObject object, bool replace)
             pobj->addr.value = __aligned_alloc(_alloc, pobj->size, pobj->align);
             break;
         default:  // label, imm
-            pobj->addr.value = 0;
+            assert(pobj->addr.value == 0);
             break;
     }
 
-    return pobj->addr;
+    return h;
 }
-IRAddress IRStorage::find(StringRef label) const
+IRAddress IRStorage::find(IRObjectHandle h)
 {
-    size_t i = 0;
-    while (i < _name.size() && _name[i] != label)
-        ++i;
-    if (i == _name.size())
+    assert(h < (_obj.size() + _unnamed_obj.size()));
+    if (h < _obj.size())
+        return _obj[h].addr;
+    else
+        return _unnamed_obj[h - _obj.size()].addr;
+}
+IRAddress IRStorage::findByName(StringRef label)
+{
+    auto it = std::find(_name.begin(), _name.end(), label);
+    if (it == _name.end())
         SyntaxError("IRStorage: can't find symbol: " + label.toString());
-    return _obj[i].addr;
-}
-
-IRAddress IRStorage::allocUnnamed(IRObject object)
-{
-    IRAddress addr;
-
-    addr.mode = OP_ADDR_mem;
-
-    _unnamed_alloc += _alloc;
-    addr.value = __aligned_alloc(_unnamed_alloc, object.size, object.align);
-    _unnamed_alloc -= _alloc;
-
-    _unnamed_alloc_max = (_unnamed_alloc_max < _unnamed_alloc)
-                             ? _unnamed_alloc
-                             : _unnamed_alloc_max;
-    return addr;
-}
-void IRStorage::freeAllUnnamed()
-{
-    _unnamed_alloc = 0;
+    return _obj[it - _name.begin()].addr;
 }
 std::vector<IROperation> IRStorage::generateCode() const
 {
     std::vector<IROperation> code;
-    if (_name.size() > 0)
+    if (_alloc + _unnamed_alloc_max > 0)
     {
-        if (_obj[0].addr.mode == OP_ADDR_mem)
-        {
-            for (size_t i = 0; i < _name.size(); ++i)
-            {
-                assert(_obj[i].addr.mode == OP_ADDR_mem);
-            }
-            IROperation alloc = {OP_TYPE_alloc,
-                                 {OP_ADDR_imm, _alloc + _unnamed_alloc_max},
-                                 {},
-                                 {}};
-            code.push_back(alloc);
-        }
-        else
-        {
-            for (size_t i = 0; i < _name.size(); ++i)
-            {
-                assert(_obj[i].addr.mode == OP_ADDR_label);
-            }
-            // TODO: data definition code
-            SyntaxWarning(
-                "IRStorage::generateCode(): data definition code not "
-                "implemented.");
-        }
+        IROperation alloc = {
+            OP_TYPE_alloc, {OP_ADDR_imm, _alloc + _unnamed_alloc_max}, {}, {}};
+        code.push_back(alloc);
     }
     return code;
 }
@@ -420,21 +406,25 @@ std::string IROperation::toString() const
     return s;
 }
 
-IRObject IRUtil::TypeToIRObject(const Type *ctype, ESymbolLinkage linkage)
+IRObject IRObjectBuilder::FromType(const Type *ctype)
 {
-    Type *type = const_cast<Type *>(ctype);
     IRObject o;
 
-    if (type == nullptr || !type->isObject() || type->getSize() == 0 ||
-        type->getAlignment() == 0 || type->isIncomplete())
+    Type *type = const_cast<Type *>(ctype);
+    assert(type != nullptr);
+    type->getSize();  // let array complete itself. TODO: remove this later
+    if (type->isIncomplete() || !(type->isObject() || type->isFunction()) ||
+        (type->isObject() &&
+         (type->getSize() == 0 || type->getAlignment() == 0)))
     {
         SyntaxError("IRUtil: invalid type.");
     }
+    // type is object or function
 
-    // addr.mode
-    o.addr.mode =
-        (linkage == SYMBOL_LINKAGE_unique) ? OP_ADDR_mem : OP_ADDR_label;
+    // addr
+    o.addr = {type->isObject() ? OP_ADDR_mem : OP_ADDR_label, 0};
     // type
+    o.element_size = 0;
     switch (type->getClass())
     {
         case T_CHAR:
@@ -450,6 +440,9 @@ IRObject IRUtil::TypeToIRObject(const Type *ctype, ESymbolLinkage linkage)
             o.type = IR_TYPE_array;
             o.element_size = TypeUtil::TargetType(type)->getSize();
             break;
+        case T_FUNCTION:
+            o.type = IR_TYPE_routine;
+            break;
         case T_TAG:
         default: SyntaxError("not supported or not implemented."); break;
     }
@@ -462,6 +455,36 @@ IRObject IRUtil::TypeToIRObject(const Type *ctype, ESymbolLinkage linkage)
 
     return o;
 }
+IRObject IRObjectBuilder::FromTokenWithType(const Token *token,
+                                            const Type *type)
+{
+    IRObject o = FromType(type);
+
+    // override address for constant
+    switch (token->type)
+    {
+        case CONST_CHAR: o.addr = {OP_ADDR_imm, (uint64_t)token->cval}; break;
+        case CONST_INT:
+            // TODO: get correct width value
+            o.addr = {OP_ADDR_imm, (uint64_t)token->ival};
+            break;
+        case CONST_FLOAT:
+        case STRING: o.addr = {OP_ADDR_label, 0}; break;
+        default: SyntaxError("IRObjectBuilder: unexpected token type."); break;
+    }
+
+    return o;
+}
+IRObject IRObjectBuilder::FromSymbol(const Symbol *symbol)
+{
+    IRObject o = FromType(symbol->type);
+
+    if (symbol->linkage == SYMBOL_LINKAGE_internal)
+        o.addr = {OP_ADDR_label, 0};
+
+    return o;
+}
+
 std::string IRUtil::OperationTypeToString(EOperationType type)
 {
     std::string s;
@@ -564,43 +587,27 @@ Symbol *Environment::recursiveFindTypename(StringRef name) const
 */
 void Environment::addSymbol(Symbol *s)
 {
-    assert(s != nullptr);
-    Symbol *origin = findSymbol(s->space, s->name);
-    if (origin != nullptr)
+    assert(s != nullptr && s->type != nullptr);
+
+    Symbol *existed_s = findSymbol(s->space, s->name);
+    bool need_merge = (existed_s != nullptr);
+    if (need_merge)
     {
         // merge type
-        Type *t1 = origin->type;
-        Type *t2 = s->type;
-        assert(t1 && t2);
-
-        Type *t = TypeUtil::Merge(t1, t2);
-        if (t == nullptr)
+        Type *merged_type = TypeUtil::Merge(existed_s->type, s->type);
+        if (merged_type == nullptr)
             SyntaxError("Symbol '" + s->name.toString() + "' already defined.");
-        origin->type = t;
+        existed_s->type = merged_type;
 
-        // merge object
-        if (origin->obj == nullptr)
-            origin->obj = s->obj;
-        else
-        {
-            assert(s->obj == nullptr);
-        }
-
-        if (t->isObject())
-        {
-            storage.alloc(s->name, IRUtil::TypeToIRObject(t, s->linkage), true);
-        }
+        s = existed_s;
     }
     else
     {
         symbols.push_back(s);
-
-        if (s->type->isObject())
-        {
-            storage.alloc(s->name, IRUtil::TypeToIRObject(s->type, s->linkage),
-                          false);
-        }
     }
+    storage.putWithName(IRObjectBuilder::FromType(s->type), s->name,
+                        need_merge);
+
     DebugLog("add symbol: " + s->name.toString());
 }
 const Symbol *Environment::SameNameSymbolInFileScope(const Environment *env,
@@ -621,28 +628,8 @@ const Symbol *Environment::SameNameSymbolInFileScope(const Environment *env,
         return nullptr;
 }
 
-IRAddress Environment::findObjectAddress(StringRef name) const
-{
-    // TODO: make sure name is an existed object
-    return storage.find(name);
-}
-IRAddress Environment::allocTemporary(const Type *type)
-{
-    return storage.allocUnnamed(
-        IRUtil::TypeToIRObject(type, SYMBOL_LINKAGE_unique));
-}
-void Environment::freeAllTemporary()
-{
-    storage.freeAllUnnamed();
-}
-
 // -------- code generation --------
 int Environment::idgen = 0;
-
-std::vector<IROperation> Environment::getCode() const
-{
-    return storage.generateCode();
-}
 
 // -------- debug  --------
 void __debugPrint(string &&s)

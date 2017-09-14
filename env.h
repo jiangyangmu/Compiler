@@ -39,19 +39,13 @@ class Environment : public TreeLike<Environment>
                                                    const Type *type,
                                                    const StringRef name);
 
-    // TODO: delegate below functions to IRStorage
-
-    // object management
-    IRAddress findObjectAddress(StringRef name) const;
-
-    // constant management
-    // int findConstantLocation(...) const;
-
-    // temporary management (only live within a statement)
-    IRAddress allocTemporary(const Type *type);
-    // void freeTemporary(Operandaddress &addr);
-    void freeAllTemporary();
-
-    // code for allocation
-    vector<IROperation> getCode() const;
+    // Delegate below functions to IRStorage
+    // > object management
+    // > constant management
+    // > temporary management (only live within a statement)
+    // > code generation
+    IRStorage &getStorage()
+    {
+        return storage;
+    }
 };
