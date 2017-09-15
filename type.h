@@ -129,7 +129,7 @@ class Type : public Stringable
     {
         return _tc;
     }
-    virtual size_t getSize() // TODO: -virtual/+const
+    size_t getSize() const
     {
         return _size;
     }
@@ -166,7 +166,7 @@ class Type : public Stringable
     // from Stringable
     virtual std::string toString() const
     {
-        return "~<Type~>";
+        return "Type";
     }
 };
 
@@ -180,7 +180,7 @@ class VoidType : public Type
     // from Stringable
     virtual std::string toString() const
     {
-        return "~<void~>";
+        return "void";
     }
 };
 class CharType : public Type
@@ -198,7 +198,7 @@ class CharType : public Type
     // from Stringable
     virtual std::string toString() const
     {
-        return "~<char~>";
+        return "char";
     }
 };
 class IntegerType : public Type
@@ -250,7 +250,7 @@ class IntegerType : public Type
     // from Stringable
     virtual std::string toString() const
     {
-        return "~<int~>";
+        return "int";
     }
 };
 class FloatingType : public Type
@@ -281,115 +281,116 @@ class FloatingType : public Type
     // from Stringable
     virtual std::string toString() const
     {
-        return "~<float~>";
+        return "float";
     }
 };
 // derived types
-class PointerType : public Type
+class DerivedType : public Type
 {
-    friend TypeUtil;
-
+   protected:
     Type *_t;
 
-   public:
-    PointerType()
-        : Type(T_POINTER, TP_IS_SCALAR | TP_IS_OBJECT, sizeof(void *),
-               sizeof(void *)),
-          _t(nullptr)
+    DerivedType(ETypeClass tc, int prop, size_t size = 0, size_t align = 0)
+        : Type(tc, prop, size, align), _t(nullptr)
     {
     }
-    // void setTargetType(Type *t)
-    // {
-    //     _t = t;
-    // }
+
+   public:
+    virtual void setTargetType(Type *t)
+    {
+        // assert(_t == nullptr);
+        assert(t != nullptr);
+        _t = t;
+    }
+    Type *getTargetType()
+    {
+        return _t;
+    }
 
     virtual bool equal(const Type &o) const
     {
         if (!Type::equal(o))
             return false;
-        const PointerType &p = dynamic_cast<const PointerType &>(o);
+        const DerivedType &p = dynamic_cast<const DerivedType &>(o);
         assert(_t && p._t);
         return _t->equal(*p._t);
     }
+};
+class PointerType : public DerivedType
+{
+    friend TypeUtil;
+
+   public:
+    PointerType()
+        : DerivedType(T_POINTER, TP_IS_SCALAR | TP_IS_OBJECT, sizeof(void *),
+                      sizeof(void *))
+    {
+    }
+
+    // virtual bool equal(const Type &o) const;
 
     // from Stringable
     virtual std::string toString() const
     {
-        return "~<pointer~> to " + (_t ? _t->toString() : "~<null~>");
+        return "pointer to " + (_t ? _t->toString() : "null");
     }
 };
-class ArrayType : public Type
+class ArrayType : public DerivedType
 {
     friend TypeUtil;
 
-    Type *_t;
     size_t _n;
 
    public:
     ArrayType()
-        : Type(T_ARRAY, TP_CONST | TP_INCOMPLETE | TP_IS_OBJECT),
-          _t(nullptr),
-          _n(0)
+        : DerivedType(T_ARRAY, TP_CONST | TP_INCOMPLETE | TP_IS_OBJECT), _n(0)
     {
     }
     ArrayType(size_t n)
-        : Type(T_ARRAY, TP_CONST | TP_INCOMPLETE | TP_IS_OBJECT), _t(nullptr), _n(n)
+        : DerivedType(T_ARRAY, TP_CONST | TP_INCOMPLETE | TP_IS_OBJECT), _n(n)
     {
     }
-    // void setElementType(Type *t)
-    // {
-    //     _t = t;
-    // }
-    virtual size_t getSize()
+
+    // from DerivedType
+    virtual void setTargetType(Type *t)
     {
-        if (isIncomplete())
+        DerivedType::setTargetType(t);
+        if (_n != 0 && !t->isIncomplete())
         {
-            if (_n == 0 || _t == nullptr || _t->isIncomplete())
-                SyntaxError("Array: sizeof incomplete array.");
-            _size = _n * _t->getSize();
-            _align = _t->getAlignment();
+            _size = t->getSize() * _n;
+            _align = t->getAlignment();
             unsetProp(TP_INCOMPLETE);
         }
-        return _size;
     }
 
     virtual bool equal(const Type &o) const
     {
-        if (!Type::equal(o))
+        if (!DerivedType::equal(o))
             return false;
         const ArrayType &a = dynamic_cast<const ArrayType &>(o);
-        if (_n != a._n)
-            return false;
-        assert(_t && a._t);
-        return _t->equal(*a._t);
+        return _n == a._n;
     }
 
     // from Stringable
     virtual std::string toString() const
     {
-        return "~<array~> of " + (_t ? _t->toString() : "~<null~>");
+        return "array of " + (_t ? _t->toString() : "null");
     }
 };
-class FuncType : public Type
+class FuncType : public DerivedType
 {
     friend TypeUtil;
 
-    Type *_t;
     vector<const Type *> _param_t;  // can be nullptr for identifier_list
     vector<StringRef> _param_name;  // can be "" for parameter_type_list
     bool _var_arg;
 
    public:
     FuncType()
-        : Type(T_FUNCTION, TP_CONST | TP_INCOMPLETE | TP_IS_FUNCTION),
-          _t(nullptr),
+        : DerivedType(T_FUNCTION, TP_CONST | TP_INCOMPLETE | TP_IS_FUNCTION),
           _var_arg(false)
     {
     }
-    // void setReturnType(Type *t)
-    // {
-    //     _t = t;
-    // }
     void addParam(const Type *t, StringRef name)
     {
         _param_t.push_back(t);
@@ -407,7 +408,7 @@ class FuncType : public Type
 
     virtual bool equal(const Type &o) const
     {
-        if (!Type::equal(o))
+        if (!DerivedType::equal(o))
             return false;
 
         const FuncType &f = dynamic_cast<const FuncType &>(o);
@@ -419,15 +420,13 @@ class FuncType : public Type
             if (!_param_t[i]->equal(*f._param_t[i]))
                 return false;
         }
-
-        assert(_t && f._t);
-        return _t->equal(*f._t);
+        return true;
     }
 
     // from Stringable
     virtual std::string toString() const
     {
-        return "~<function~> returns " + (_t ? _t->toString() : "~<null~>");
+        return "function returns " + (_t ? _t->toString() : "null");
     }
 };
 // tag types & impl
@@ -488,7 +487,18 @@ class TagType : public Type
     // from Stringable
     virtual std::string toString() const
     {
-        return "~<tag~>";
+        std::string s;
+        switch (_impl_type)
+        {
+            case T_ENUM: s += "enum"; break;
+            case T_STRUCT: s += "struct"; break;
+            case T_UNION: s += "union"; break;
+            case T_TYPEDEF: s += "typedef"; break;
+            default: s += "unknown_tag_type"; break;
+        }
+        s += ' ';
+        s += _name.toString();
+        return s;
     }
 };
 class EnumConstType : public Type
@@ -523,7 +533,7 @@ class EnumConstType : public Type
     // from Stringable
     virtual std::string toString() const
     {
-        return "~<enum-const~>";
+        return "enum-const";
     }
 };
 class EnumTypeImpl : public Type
@@ -548,7 +558,7 @@ class EnumTypeImpl : public Type
     // from Stringable
     virtual std::string toString() const
     {
-        return "~<enum-impl~>";
+        return "enum-impl";
     }
 };
 class StructTypeImpl : public Type
@@ -605,7 +615,7 @@ class StructTypeImpl : public Type
     // from Stringable
     virtual std::string toString() const
     {
-        return (getClass() == T_UNION) ? "~<union-impl~>" : "~<struct-impl~>";
+        return (getClass() == T_UNION) ? "union-impl" : "struct-impl";
     }
 };
 class TypedefTypeImpl : public Type
@@ -642,7 +652,7 @@ class LabelType : public Type
     // from Stringable
     virtual std::string toString() const
     {
-        return "~<label~>";
+        return "label";
     }
 };
 

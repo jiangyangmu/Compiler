@@ -153,6 +153,9 @@ class sn_function_definition : public SyntaxNode
 class sn_declaration : public SyntaxNode
 {
    public:
+    std::vector<Type *> type_infos_;
+
+   public:
     sn_declaration() : SyntaxNode(SN_DECLARATION) {}
     static sn_declaration *parse(Lexer &lex);
     static sn_declaration *parse(Lexer &lex, sn_declaration_specifiers *s,

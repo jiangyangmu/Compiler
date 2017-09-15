@@ -328,6 +328,10 @@ class Stringable
     {
         return "Stringable::null";
     }
+    virtual std::string DebugString() const
+    {
+        return "Stringable::null";
+    }
 };
 
 #ifndef DEBUG_UTILS

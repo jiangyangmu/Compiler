@@ -1686,6 +1686,7 @@ void sn_declaration::afterChildren(Environment *&env, const int pass)
             builder.setName(name,
                             same ? same->linkage : SYMBOL_LINKAGE_external);
             env->addSymbol(builder.build());
+            type_infos_.push_back(type);
             // TODO: deal with initialization code
         }
     }

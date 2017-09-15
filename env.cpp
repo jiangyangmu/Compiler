@@ -13,32 +13,23 @@ using namespace std;
 
 // -------- type management -------
 
-// XXX: maybe move this logic to AggregateType
 Type *TypeUtil::Concatenate(Type *front, Type *back)
 {
     if (front == nullptr)
         return back;
+    else if (back == nullptr)
+        return front;
 
-    Type *p = front;
-    Type **tref = &p;
-    while (true)
-    {
-        p = *tref;
-        switch (p->getClass())
-        {
-            case T_POINTER: tref = &dynamic_cast<PointerType *>(p)->_t; break;
-            case T_ARRAY: tref = &dynamic_cast<ArrayType *>(p)->_t; break;
-            case T_FUNCTION: tref = &dynamic_cast<FuncType *>(p)->_t; break;
-            default:
-                SyntaxError("TypeUtil::Concatenate: can't concatenate type.");
-                break;
-        }
-        if (*tref == nullptr)
-        {
-            *tref = back;
-            return front;
-        }
-    }
+    DerivedType *dt = dynamic_cast<DerivedType *>(front);
+    if (dt == nullptr)
+        SyntaxError("TypeUtil::Concatenate: can't concatenate type.");
+
+    // TODO: should use a stack during build, not here
+    if (dt->getTargetType() == nullptr)
+        dt->setTargetType(back);
+    else
+        dt->setTargetType(Concatenate(dt->getTargetType(), back));
+    return front;
 }
 Type *TypeUtil::TargetType(Type *t)
 {
@@ -412,7 +403,6 @@ IRObject IRObjectBuilder::FromType(const Type *ctype)
 
     Type *type = const_cast<Type *>(ctype);
     assert(type != nullptr);
-    type->getSize();  // let array complete itself. TODO: remove this later
     if (type->isIncomplete() || !(type->isObject() || type->isFunction()) ||
         (type->isObject() &&
          (type->getSize() == 0 || type->getAlignment() == 0)))
