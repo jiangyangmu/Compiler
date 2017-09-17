@@ -70,6 +70,7 @@ enum IRType
     IR_TYPE_float,
     IR_TYPE_array,
     IR_TYPE_string,
+    IR_TYPE_data_block, // data block
     IR_TYPE_routine,
 };
 

@@ -283,7 +283,9 @@ IRObjectHandle IRStorage::putWithName(IRObject object, StringRef label,
         case OP_ADDR_mem:
             pobj->addr.value = __aligned_alloc(_alloc, pobj->size, pobj->align);
             break;
-        default:  // label, imm
+        case OP_ADDR_imm:
+            break;
+        default:  // label
             assert(pobj->addr.value == 0);
             break;
     }
@@ -342,7 +344,7 @@ std::string IRObject::toString() const
             break;
         case OP_ADDR_imm: s += "imm:"; break;
         case OP_ADDR_label: s += "label:"; break;
-        default: break;
+        default: s += "???"; break;
     }
     switch (type)
     {
@@ -351,8 +353,9 @@ std::string IRObject::toString() const
         case IR_TYPE_uint: s += "uint:"; break;
         case IR_TYPE_float: s += "float:"; break;
         case IR_TYPE_array: s += "array:"; break;
+        case IR_TYPE_data_block: s += "block:"; break;
         case IR_TYPE_string: s += "string:"; break;
-        default: break;
+        default: s += "???"; break;
     }
     s += std::to_string(size);
     s += ':';
@@ -403,6 +406,19 @@ IRObject IRObjectBuilder::FromType(const Type *ctype)
 
     Type *type = const_cast<Type *>(ctype);
     assert(type != nullptr);
+
+    if (type->getClass() == T_ENUM_CONST)
+    {
+        o.addr = {OP_ADDR_imm,
+                  (uint64_t) dynamic_cast<EnumConstType *>(type)->getValue()};
+        o.element_size = 0;
+        o.type = IR_TYPE_int;
+        o.size = type->getSize();
+        o.align = type->getAlignment();
+        o.value = nullptr;
+        return o;
+    }
+
     if (type->isIncomplete() || !(type->isObject() || type->isFunction()) ||
         (type->isObject() &&
          (type->getSize() == 0 || type->getAlignment() == 0)))
@@ -415,10 +431,11 @@ IRObject IRObjectBuilder::FromType(const Type *ctype)
     o.addr = {type->isObject() ? OP_ADDR_mem : OP_ADDR_label, 0};
     // type
     o.element_size = 0;
+    const Type *impl_type = nullptr;
     switch (type->getClass())
     {
-        case T_CHAR:
-        case T_ENUM_CONST: o.type = IR_TYPE_int; break;
+        // case T_ENUM_CONST:
+        case T_CHAR: o.type = IR_TYPE_int; break;
         case T_POINTER: o.type = IR_TYPE_uint; break;
         case T_INT:
             o.type = dynamic_cast<const IntegerType *>(type)->isSigned()
@@ -430,10 +447,20 @@ IRObject IRObjectBuilder::FromType(const Type *ctype)
             o.type = IR_TYPE_array;
             o.element_size = TypeUtil::TargetType(type)->getSize();
             break;
-        case T_FUNCTION:
-            o.type = IR_TYPE_routine;
-            break;
+        case T_FUNCTION: o.type = IR_TYPE_routine; break;
         case T_TAG:
+            impl_type = dynamic_cast<const TagType *>(type)->getImpl();
+            if (impl_type->getClass() == T_STRUCT ||
+                impl_type->getClass() == T_UNION)
+            {
+                o.type = IR_TYPE_data_block;
+                break;
+            }
+            else if (impl_type->getClass() == T_ENUM)
+            {
+                o.type = IR_TYPE_int;
+                break;
+            }
         default: SyntaxError("not supported or not implemented."); break;
     }
     // size
@@ -521,7 +548,7 @@ std::string IRUtil::OperationTypeToString(EOperationType type)
         case OP_TYPE_fsub: s = "fsub"; break;
         case OP_TYPE_fmul: s = "fmul"; break;
         case OP_TYPE_fdiv: s = "fdiv"; break;
-        default: break;
+        default: s = "???"; break;
     }
     return s;
 }
@@ -595,10 +622,15 @@ void Environment::addSymbol(Symbol *s)
     {
         symbols.push_back(s);
     }
-    storage.putWithName(IRObjectBuilder::FromType(s->type), s->name,
-                        need_merge);
 
-    DebugLog("add symbol: " + s->name.toString());
+    if (!s->type->isIncomplete())
+    {
+        storage.putWithName(IRObjectBuilder::FromType(s->type), s->name,
+                            need_merge);
+    }
+
+    // DebugLog("add symbol: " + s->name.toString() + "\t" +
+    // s->type->toString());
 }
 const Symbol *Environment::SameNameSymbolInFileScope(const Environment *env,
                                                      const Type *type,

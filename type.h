@@ -166,7 +166,8 @@ class Type : public Stringable
     // from Stringable
     virtual std::string toString() const
     {
-        return "Type";
+        // TODO: properties
+        return "";
     }
 };
 
@@ -205,7 +206,7 @@ class IntegerType : public Type
 {
     friend TypeUtil;
 
-    // const char *_desc;
+    const char *_desc;
     bool _signed;
 
    public:
@@ -213,11 +214,12 @@ class IntegerType : public Type
         : Type(T_INT,
                TP_IS_INTEGRAL | TP_IS_ARITHMETIC | TP_IS_SCALAR | TP_IS_OBJECT,
                4, 4),
-          // _desc(desc),
+          _desc(desc),
           _signed(true)
     {
-        // desc is valid combination
+        // assume desc is valid combination
         assert(desc != nullptr);
+
         // sign
         if (*desc == 'S')
             ++desc;
@@ -250,38 +252,68 @@ class IntegerType : public Type
     // from Stringable
     virtual std::string toString() const
     {
-        return "int";
+        std::string s;
+        for (const char *p = _desc; *p != '\0'; ++p)
+        {
+            if (!s.empty())
+                s += ' ';
+            switch (*p)
+            {
+                case 'S': s += "signed"; break;
+                case 'U': s += "unsigned"; break;
+                case 'c': s += "char"; break;
+                case 's': s += "short"; break;
+                case 'l': s += "long"; break;
+                case 'i': s += "int"; break;
+                default: break;
+            }
+        }
+        return s;
     }
 };
 class FloatingType : public Type
 {
     friend TypeUtil;
 
-    // const char *_desc;
+    const char *_desc;
 
    public:
     FloatingType(const char *desc)
-        : Type(T_FLOAT, TP_IS_ARITHMETIC | TP_IS_SCALAR | TP_IS_OBJECT, 4, 4)
-    // , _desc(desc)
+        : Type(T_FLOAT, TP_IS_ARITHMETIC | TP_IS_SCALAR | TP_IS_OBJECT, 4, 4),
+          _desc(desc)
     {
-        // desc is valid combination
+        // assume desc is valid combination
         assert(desc != nullptr);
+
         // size
         switch (*desc)
         {
-            case 'd':
-                _size = 8;
+            case 'd': _align = _size = 8; break;
+            case 'l':  // long double
+                _size = 10;
+                _align = 16;
                 break;
-            // case 'l': _size = sizeof(long double); break;
             default: break;
         }
-        _align = _size;
     }
 
     // from Stringable
     virtual std::string toString() const
     {
-        return "float";
+        std::string s;
+        for (const char *p = _desc; *p != '\0'; ++p)
+        {
+            if (!s.empty())
+                s += ' ';
+            switch (*p)
+            {
+                case 'f': s += "float"; break;
+                case 'd': s += "double"; break;
+                case 'l': s += "long"; break;
+                default: break;
+            }
+        }
+        return s;
     }
 };
 // derived types
@@ -445,6 +477,13 @@ class TagType : public Type
           _impl_type(impl_type),
           _impl(nullptr)
     {
+        switch (impl_type)
+        {
+            case T_ENUM:
+            case T_STRUCT:
+            case T_UNION: setProp(TP_IS_OBJECT);
+            default: break;
+        }
     }
 
     void setImpl(const Type *impl)
@@ -456,15 +495,11 @@ class TagType : public Type
             SyntaxError("TagType: tag type mismatch.");
         }
 
-        switch (impl->getClass())
-        {
-            case T_ENUM:
-            case T_STRUCT:
-            case T_UNION: setProp(TP_IS_OBJECT);
-            case T_TYPEDEF: _impl = impl; break;
-            default: break;
-        }
+        _impl = impl;
+        _size = impl->getSize();
+        _align = impl->getAlignment();
         unsetProp(TP_INCOMPLETE);
+        DebugLog("TagType: set impl of: " + _name.toString());
     }
     const Type *getImpl() const
     {
@@ -498,6 +533,14 @@ class TagType : public Type
         }
         s += ' ';
         s += _name.toString();
+        s += " {";
+        if (_impl != nullptr)
+        {
+            s += ' ';
+            s += _impl->toString();
+            s += ' ';
+        }
+        s += '}';
         return s;
     }
 };
@@ -512,10 +555,15 @@ class EnumConstType : public Type
     EnumConstType(StringRef name, int value)
         : Type(T_ENUM_CONST, TP_IS_INTEGRAL | TP_IS_ARITHMETIC | TP_IS_SCALAR,
                4, 4),
+          _name(name),
           _value(value)
     {
     }
 
+    StringRef getName() const
+    {
+        return _name;
+    }
     int getValue() const
     {
         return _value;
@@ -543,7 +591,11 @@ class EnumTypeImpl : public Type
     vector<const EnumConstType *> _members;
 
    public:
-    EnumTypeImpl() : Type(T_ENUM, 0) {}
+    EnumTypeImpl()
+        : Type(T_ENUM, TP_IS_INTEGRAL | TP_IS_ARITHMETIC | TP_IS_SCALAR, 4, 4)
+    {
+    }
+
     void addMember(const EnumConstType *member)
     {
         _members.push_back(member);
@@ -558,7 +610,18 @@ class EnumTypeImpl : public Type
     // from Stringable
     virtual std::string toString() const
     {
-        return "enum-impl";
+        std::string s;
+        for (auto m : _members)
+        {
+            s += m->getName().toString();
+            s += '(';
+            s += std::to_string(m->getValue());
+            s += ')';
+            s += ',';
+        }
+        if (!s.empty())
+            s.pop_back();
+        return s;
     }
 };
 class StructTypeImpl : public Type
@@ -570,7 +633,7 @@ class StructTypeImpl : public Type
 
    public:
     StructTypeImpl(bool share_storage)
-        : Type(share_storage ? T_UNION : T_STRUCT, 0, 1)
+        : Type(share_storage ? T_UNION : T_STRUCT, 0, 0, 1)
     {
     }
     void addMember(StringRef name, const Type *ct)
@@ -615,7 +678,15 @@ class StructTypeImpl : public Type
     // from Stringable
     virtual std::string toString() const
     {
-        return (getClass() == T_UNION) ? "union-impl" : "struct-impl";
+        std::string s;
+        for (auto t : _member_type)
+        {
+            s += t->toString();
+            s += ':';
+        }
+        if (!s.empty())
+            s.pop_back();
+        return s;
     }
 };
 class TypedefTypeImpl : public Type

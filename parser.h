@@ -405,7 +405,9 @@ class sn_struct_union_specifier : public SyntaxNode
     static sn_struct_union_specifier *parse(Lexer &lex);
 
     // Visitor
-    virtual void beforeChildren(Environment *&env, const int pass);
+    virtual void visit(Environment *&env, const int pass);
+    virtual void beforeDefinition(Environment *&env, const int pass);
+    virtual void afterDefinition(Environment *&env, const int pass);
     virtual void afterChildren(Environment *&env, const int pass);
 };
 class sn_enum_specifier : public SyntaxNode
@@ -419,7 +421,8 @@ class sn_enum_specifier : public SyntaxNode
     static sn_enum_specifier *parse(Lexer &lex);
 
     // Visitor
-    virtual void beforeChildren(Environment *&env, const int pass);
+    virtual void visit(Environment *&env, const int pass);
+    virtual void beforeDefinition(Environment *&env, const int pass);
     virtual void afterChildren(Environment *&env, const int pass);
 };
 // struct/union/enum definition

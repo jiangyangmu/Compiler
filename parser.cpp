@@ -465,15 +465,15 @@ sn_type_specifier *sn_type_specifier::parse(Lexer &lex)
         case UNSIGNED: ts->t = lex.getNext().type; break;
         case TYPE_STRUCT:
         case TYPE_UNION:
-            ts->t = lex.getNext().type;
+            ts->t = lex.peakNext().type;
             ts->addChild(sn_struct_union_specifier::parse(lex));
             break;
         case TYPE_ENUM:
-            ts->t = lex.getNext().type;
+            ts->t = lex.peakNext().type;
             ts->addChild(sn_enum_specifier::parse(lex));
             break;
         case SYMBOL:
-            ts->t = lex.getNext().type;
+            ts->t = lex.peakNext().type;
             ts->addChild(sn_typedef_name::parse(lex));
             break;
         default: SyntaxError("Type Specifier: unexpected token"); break;
@@ -519,6 +519,7 @@ sn_struct_declaration *sn_struct_declaration::parse(Lexer &lex)
 
     sd->addChild(sn_specifier_qualifier_list::parse(lex));
     sd->addChild(sn_struct_declarator_list::parse(lex));
+    EXPECT(STMT_END);
 
     return sd;
 }
@@ -529,7 +530,7 @@ sn_struct_declaration_list *sn_struct_declaration_list::parse(Lexer &lex)
     do
     {
         sdl->addChild(sn_struct_declaration::parse(lex));
-    } while (SKIP(OP_COMMA));
+    } while (lex.peakNext().type != BLK_END);
 
     return sdl;
 }
@@ -1374,7 +1375,7 @@ void TypeSpecifiersBuilder::feed_type_specifiers(TokenType t, Type *type,
             break;
         case TYPE_LONG:
             __check_set(0x10);
-            type_specifier_allow &= 0x198;  // long, signed, unsigned, int
+            type_specifier_allow &= 0x1d8;  // long, signed, unsigned, int, double
             break;
         case TYPE_FLOAT:
             __check_set(0x20);
@@ -1982,7 +1983,26 @@ void sn_type_specifier::afterChildren(Environment *&env, const int pass)
         }
     }
 }
-void sn_struct_union_specifier::beforeChildren(Environment *&env,
+void sn_struct_union_specifier::visit(Environment *&env, const int pass)
+{
+    SyntaxNode *child = getFirstChild();
+
+    if (child->nodeType() == SN_IDENTIFIER)
+    {
+        child->visit(env, pass);
+        child = getChildrenCount() == 2 ? getLastChild() : nullptr;
+    }
+
+    if (child != nullptr && child->nodeType() == SN_STRUCT_DECLARATION_LIST)
+    {
+        beforeDefinition(env, pass);
+        child->visit(env, pass);
+        afterDefinition(env, pass);
+    }
+
+    afterChildren(env, pass);
+}
+void sn_struct_union_specifier::beforeDefinition(Environment *&env,
                                                const int pass)
 {
     if (pass == 0)
@@ -1996,6 +2016,7 @@ void sn_struct_union_specifier::beforeChildren(Environment *&env,
             else
                 tag = TypeUtil::GenerateTag();
         }
+        assert(!tag.empty());
         type_info_ = new TagType((t == TYPE_STRUCT ? T_STRUCT : T_UNION), tag);
 
         // add tag to env
@@ -2011,13 +2032,19 @@ void sn_struct_union_specifier::beforeChildren(Environment *&env,
         env = block;
     }
 }
-void sn_struct_union_specifier::afterChildren(Environment *&env, const int pass)
+void sn_struct_union_specifier::afterDefinition(Environment *&env,
+                                               const int pass)
 {
     if (pass == 0)
     {
         // restore environment
         env = env->parent();
-
+    }
+}
+void sn_struct_union_specifier::afterChildren(Environment *&env, const int pass)
+{
+    if (pass == 0)
+    {
         // struct tag impl info
         if (getLastChild()->nodeType() == SN_STRUCT_DECLARATION_LIST)
         {
@@ -2034,7 +2061,25 @@ void sn_struct_union_specifier::afterChildren(Environment *&env, const int pass)
         }
     }
 }
-void sn_enum_specifier::beforeChildren(Environment *&env, const int pass)
+void sn_enum_specifier::visit(Environment *&env, const int pass)
+{
+    SyntaxNode *child = getFirstChild();
+
+    if (child->nodeType() == SN_IDENTIFIER)
+    {
+        child->visit(env, pass);
+        child = getChildrenCount() == 2 ? getLastChild() : nullptr;
+    }
+
+    if (child != nullptr && child->nodeType() == SN_ENUMERATOR_LIST)
+    {
+        beforeDefinition(env, pass);
+        child->visit(env, pass);
+    }
+
+    afterChildren(env, pass);
+}
+void sn_enum_specifier::beforeDefinition(Environment *&env, const int pass)
 {
     if (pass == 0)
     {

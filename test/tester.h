@@ -40,13 +40,15 @@ class Tester
         TesterClassName##TestCaseName##_instance;                \
     void TesterClassName##TestCaseName::run()
 
-#define EXPECT_EQ(expect, actual)                             \
-    do                                                        \
-    {                                                         \
-        if (!((expect) == (actual)))                          \
-        {                                                     \
-            std::cerr << "Expect: " << (expect) << std::endl  \
-                      << "Actual: " << (actual) << std::endl; \
-            _has_error = true;                                \
-        }                                                     \
+#define EXPECT_EQ(expect, actual)                        \
+    do                                                   \
+    {                                                    \
+        auto e = (expect);                               \
+        auto a = (actual);                               \
+        if (!((e) == (a)))                               \
+        {                                                \
+            std::cerr << "Expect: " << (e) << std::endl  \
+                      << "Actual: " << (a) << std::endl; \
+            _has_error = true;                           \
+        }                                                \
     } while (false)
