@@ -283,10 +283,9 @@ IRObjectHandle IRStorage::putWithName(IRObject object, StringRef label,
         case OP_ADDR_mem:
             pobj->addr.value = __aligned_alloc(_alloc, pobj->size, pobj->align);
             break;
-        case OP_ADDR_imm:
-            break;
+        case OP_ADDR_imm: break;
         default:  // label
-            assert(pobj->addr.value == 0);
+            // assert(pobj->addr.value == 0);
             break;
     }
 
@@ -307,13 +306,38 @@ IRAddress IRStorage::findByName(StringRef label)
         SyntaxError("IRStorage: can't find symbol: " + label.toString());
     return _obj[it - _name.begin()].addr;
 }
+IRAddress IRStorage::findOrInsertString(StringRef str)
+{
+    IRAddress addr = IRAddress(OP_ADDR_label, 0);
+    bool found = false;
+    for (size_t i = 0; i < _strings.size(); ++i)
+    {
+        if (str == _strings[i])
+        {
+            addr.label = _string_labels[i];
+            found = true;
+            break;
+        }
+    }
+    if (!found)
+    {
+        _strings.push_back(str);
+        _string_labels.push_back(IRUtil::GenerateLabel());
+        addr.label = _string_labels.back();
+    }
+    return addr;
+}
+
 std::vector<IROperation> IRStorage::generateCode() const
 {
     std::vector<IROperation> code;
     if (_alloc + _unnamed_alloc_max > 0)
     {
         IROperation alloc = {
-            OP_TYPE_alloc, {OP_ADDR_imm, _alloc + _unnamed_alloc_max}, {}, {}};
+            OP_TYPE_alloc,
+            IRAddress(OP_ADDR_imm, _alloc + _unnamed_alloc_max),
+            {},
+            {}};
         code.push_back(alloc);
     }
     return code;
@@ -329,6 +353,21 @@ std::string IRStorage::toString() const
         s += _obj[i].toString();
         s += '\n';
     }
+    for (size_t i = 0; i < _unnamed_obj.size(); ++i)
+    {
+        s += "*:";
+        s += _unnamed_obj[i].toString();
+        s += '\n';
+    }
+    for (size_t i = 0; i < _strings.size(); ++i)
+    {
+        s += _string_labels[i].toString();
+        s += ':';
+        s += '"';
+        s += _strings[i].toString();
+        s += '"';
+        s += '\n';
+    }
     return s;
 }
 
@@ -339,12 +378,21 @@ std::string IRObject::toString() const
     {
         case OP_ADDR_invalid: s += "*:"; break;
         case OP_ADDR_mem:
+            s += "mem(";
             s += std::to_string(addr.value);
-            s += ':';
+            s += "):";
             break;
-        case OP_ADDR_imm: s += "imm:"; break;
-        case OP_ADDR_label: s += "label:"; break;
-        default: s += "???"; break;
+        case OP_ADDR_imm:
+            s += "imm(";
+            s += std::to_string(addr.value);
+            s += "):";
+            break;
+        case OP_ADDR_label:
+            s += "label(";
+            s.append(addr.label.data(), addr.label.size());
+            s += "):";
+            break;
+        default: s += "???:"; break;
     }
     switch (type)
     {
@@ -355,7 +403,8 @@ std::string IRObject::toString() const
         case IR_TYPE_array: s += "array:"; break;
         case IR_TYPE_data_block: s += "block:"; break;
         case IR_TYPE_string: s += "string:"; break;
-        default: s += "???"; break;
+        case IR_TYPE_routine: s += "routine:"; break;
+        default: s += "???:"; break;
     }
     s += std::to_string(size);
     s += ':';
@@ -400,23 +449,32 @@ std::string IROperation::toString() const
     return s;
 }
 
-IRObject IRObjectBuilder::FromType(const Type *ctype)
+IRObjectBuilder &IRObjectBuilder::Get()
 {
-    IRObject o;
-
+    static IRObjectBuilder builder;
+    builder.o.addr = IRAddress(OP_ADDR_invalid, 0);
+    builder.o.type = IR_TYPE_invalid;
+    builder.o.size = builder.o.align = 0;
+    builder.o.value = nullptr;
+    builder.o.element_size = 0;
+    return builder;
+}
+IRObjectBuilder &IRObjectBuilder::fromType(const Type *ctype)
+{
     Type *type = const_cast<Type *>(ctype);
     assert(type != nullptr);
 
     if (type->getClass() == T_ENUM_CONST)
     {
-        o.addr = {OP_ADDR_imm,
-                  (uint64_t) dynamic_cast<EnumConstType *>(type)->getValue()};
+        o.addr = IRAddress(
+            OP_ADDR_imm,
+            (uint64_t) dynamic_cast<EnumConstType *>(type)->getValue());
         o.element_size = 0;
         o.type = IR_TYPE_int;
         o.size = type->getSize();
         o.align = type->getAlignment();
         o.value = nullptr;
-        return o;
+        return (*this);
     }
 
     if (type->isIncomplete() || !(type->isObject() || type->isFunction()) ||
@@ -427,8 +485,8 @@ IRObject IRObjectBuilder::FromType(const Type *ctype)
     }
     // type is object or function
 
-    // addr
-    o.addr = {type->isObject() ? OP_ADDR_mem : OP_ADDR_label, 0};
+    // addr (object -> imm, function -> label)
+    o.addr = IRAddress(type->isObject() ? OP_ADDR_mem : OP_ADDR_label, 0);
     // type
     o.element_size = 0;
     const Type *impl_type = nullptr;
@@ -470,35 +528,44 @@ IRObject IRObjectBuilder::FromType(const Type *ctype)
     // value: TODO: value management
     o.value = nullptr;
 
-    return o;
+    return (*this);
 }
-IRObject IRObjectBuilder::FromTokenWithType(const Token *token,
-                                            const Type *type)
+IRObjectBuilder &IRObjectBuilder::withToken(const Token *token)
 {
-    IRObject o = FromType(type);
-
     // override address for constant
     switch (token->type)
     {
-        case CONST_CHAR: o.addr = {OP_ADDR_imm, (uint64_t)token->cval}; break;
+        case CONST_CHAR:
+            o.addr = IRAddress(OP_ADDR_imm, (uint64_t)token->cval);
+            break;
         case CONST_INT:
             // TODO: get correct width value
-            o.addr = {OP_ADDR_imm, (uint64_t)token->ival};
+            o.addr = IRAddress(OP_ADDR_imm, (uint64_t)token->ival);
             break;
         case CONST_FLOAT:
-        case STRING: o.addr = {OP_ADDR_label, 0}; break;
+        case STRING: o.addr = IRAddress(OP_ADDR_label, 0); break;
         default: SyntaxError("IRObjectBuilder: unexpected token type."); break;
     }
 
-    return o;
+    return (*this);
 }
-IRObject IRObjectBuilder::FromSymbol(const Symbol *symbol)
+IRObjectBuilder &IRObjectBuilder::withLinkage(const ESymbolLinkage linkage)
 {
-    IRObject o = FromType(symbol->type);
+    if (linkage == SYMBOL_LINKAGE_internal)
+        o.addr = IRAddress(OP_ADDR_label, 0);
 
-    if (symbol->linkage == SYMBOL_LINKAGE_internal)
-        o.addr = {OP_ADDR_label, 0};
+    return (*this);
+}
+IRObjectBuilder &IRObjectBuilder::withName(const StringRef name)
+{
+    // fill o.addr.label
+    if (o.addr.mode == OP_ADDR_label)
+        o.addr.label = name;
 
+    return (*this);
+}
+const IRObject &IRObjectBuilder::build() const
+{
     return o;
 }
 
@@ -551,6 +618,13 @@ std::string IRUtil::OperationTypeToString(EOperationType type)
         default: s = "???"; break;
     }
     return s;
+}
+StringRef IRUtil::GenerateLabel()
+{
+    static int label_id = 0;
+    static std::vector<std::string> labels;
+    labels.push_back("label_" + std::to_string(label_id++));
+    return StringRef(labels.back().data());
 }
 
 // -------- symbol management -------
@@ -623,10 +697,15 @@ void Environment::addSymbol(Symbol *s)
         symbols.push_back(s);
     }
 
-    if (!s->type->isIncomplete())
+    // TODO: what if s->space == SYMBOL_NAMESPACE_label
+    if (!s->type->isIncomplete() && s->space != SYMBOL_NAMESPACE_tag)
     {
-        storage.putWithName(IRObjectBuilder::FromType(s->type), s->name,
-                            need_merge);
+        storage.putWithName(IRObjectBuilder::Get()
+                                .fromType(s->type)
+                                .withLinkage(s->linkage)
+                                .withName(s->name)
+                                .build(),
+                            s->name, need_merge);
     }
 
     // DebugLog("add symbol: " + s->name.toString() + "\t" +
@@ -720,22 +799,32 @@ void __debugPrint(string &&s)
         }
     }
 }
-void Environment::debugPrint(int indent) const
+
+void Environment::debugPrint() const
 {
-    if (indent == 0)
-    {
-        // printf("%lu types. %lu symbols\n", TypeFactory::size(),
-        //        SymbolFactory::size());
-    }
-    __debugPrint(storage.toString());
-    for (Symbol *s : symbols)
-    {
-        __debugPrint(s->toString());
-    }
-    for (auto child : getChildren())
-    {
-        child->debugPrint(0);
-    }
+    __debugPrint(DebugString());
 }
 
-// -------- declaration parsing --------
+std::string Environment::DebugString() const
+{
+    const int buffer_size = 4096;
+    static char buffer[buffer_size];
+    const char fmt[] =
+        "environment %d = {>\n"
+        "symbols = {>\n%s<\n}\n"
+        "storage = {>\n%s<\n}\n"
+        "envs = {>\n%s<\n}<\n}\n";
+    std::string str_symbols;
+    std::for_each(symbols.begin(), symbols.end(), [&str_symbols](Symbol *s) {
+        str_symbols += s->toString();
+        str_symbols += '\n';
+    });
+    std::string str_envs;
+    auto children = getChildren();
+    std::for_each(
+        children.begin(), children.end(),
+        [&str_envs](Environment *e) { str_envs += e->DebugString(); });
+    snprintf(buffer, buffer_size, fmt, id, str_symbols.data(),
+             storage.toString().data(), str_envs.data());
+    return std::string(buffer);
+}

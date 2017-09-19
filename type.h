@@ -166,8 +166,25 @@ class Type : public Stringable
     // from Stringable
     virtual std::string toString() const
     {
-        // TODO: properties
         return "";
+        // std::string s;
+        // s += '<';
+        // if (isIncomplete()) s += 'I';
+        // if (isConst()) s += 'C';
+        // if (isVolatile()) s += 'B';
+        // if (isLvalue()) s += 'L';
+        // if (isIntegral()) s += 'i';
+        // if (isArithmetic()) s += 'A';
+        // if (isScalar()) s += 'S';
+        // if (isObject()) s += 'O';
+        // if (isFunction()) s += 'F';
+        // if (s.empty()) s += '-';
+        // s += ':';
+        // s += std::to_string(getSize());
+        // s += ':';
+        // s += std::to_string(getAlignment());
+        // s += '>';
+        // return s;
     }
 };
 
@@ -181,7 +198,7 @@ class VoidType : public Type
     // from Stringable
     virtual std::string toString() const
     {
-        return "void";
+        return "void" + Type::toString();
     }
 };
 class CharType : public Type
@@ -199,7 +216,7 @@ class CharType : public Type
     // from Stringable
     virtual std::string toString() const
     {
-        return "char";
+        return "char" + Type::toString();
     }
 };
 class IntegerType : public Type
@@ -268,7 +285,7 @@ class IntegerType : public Type
                 default: break;
             }
         }
-        return s;
+        return s + Type::toString();
     }
 };
 class FloatingType : public Type
@@ -313,7 +330,7 @@ class FloatingType : public Type
                 default: break;
             }
         }
-        return s;
+        return s + Type::toString();
     }
 };
 // derived types
@@ -364,7 +381,7 @@ class PointerType : public DerivedType
     // from Stringable
     virtual std::string toString() const
     {
-        return "pointer to " + (_t ? _t->toString() : "null");
+        return "pointer to " + (_t ? _t->toString() : "null") + Type::toString();
     }
 };
 class ArrayType : public DerivedType
@@ -406,7 +423,7 @@ class ArrayType : public DerivedType
     // from Stringable
     virtual std::string toString() const
     {
-        return "array of " + (_t ? _t->toString() : "null");
+        return "array of " + (_t ? _t->toString() : "null") + Type::toString();
     }
 };
 class FuncType : public DerivedType
@@ -458,7 +475,7 @@ class FuncType : public DerivedType
     // from Stringable
     virtual std::string toString() const
     {
-        return "function returns " + (_t ? _t->toString() : "null");
+        return "function returns " + (_t ? _t->toString() : "null") + Type::toString();
     }
 };
 // tag types & impl
@@ -499,7 +516,7 @@ class TagType : public Type
         _size = impl->getSize();
         _align = impl->getAlignment();
         unsetProp(TP_INCOMPLETE);
-        DebugLog("TagType: set impl of: " + _name.toString());
+        // DebugLog("TagType: set impl of: " + _name.toString());
     }
     const Type *getImpl() const
     {
@@ -533,6 +550,7 @@ class TagType : public Type
         }
         s += ' ';
         s += _name.toString();
+        s += Type::toString();
         s += " {";
         if (_impl != nullptr)
         {
@@ -621,7 +639,7 @@ class EnumTypeImpl : public Type
         }
         if (!s.empty())
             s.pop_back();
-        return s;
+        return s + Type::toString();
     }
 };
 class StructTypeImpl : public Type
@@ -686,7 +704,7 @@ class StructTypeImpl : public Type
         }
         if (!s.empty())
             s.pop_back();
-        return s;
+        return s + Type::toString();
     }
 };
 class TypedefTypeImpl : public Type

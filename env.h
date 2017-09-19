@@ -18,6 +18,8 @@
 //
 class Environment : public TreeLike<Environment>
 {
+    friend class TypeTester;
+
     static int idgen;
     int id;
     vector<Symbol *> symbols;
@@ -26,7 +28,8 @@ class Environment : public TreeLike<Environment>
 
    public:
     Environment() : id(idgen++) {}
-    void debugPrint(int indent = 0) const;
+    void debugPrint() const;
+    std::string DebugString() const;
 
     // symbol management
     Symbol *findSymbol(ESymbolNamespace space, StringRef name) const;

@@ -1375,7 +1375,8 @@ void TypeSpecifiersBuilder::feed_type_specifiers(TokenType t, Type *type,
             break;
         case TYPE_LONG:
             __check_set(0x10);
-            type_specifier_allow &= 0x1d8;  // long, signed, unsigned, int, double
+            type_specifier_allow &=
+                0x1d8;  // long, signed, unsigned, int, double
             break;
         case TYPE_FLOAT:
             __check_set(0x20);
@@ -1582,7 +1583,6 @@ void sn_function_definition::afterParamList(Environment *&env, const int pass)
     if (pass == 0)
     {
         // if need, match declarator with declaration_list
-
         // if need, add parameters information to FuncType
     }
     else if (pass == 1)
@@ -2003,7 +2003,7 @@ void sn_struct_union_specifier::visit(Environment *&env, const int pass)
     afterChildren(env, pass);
 }
 void sn_struct_union_specifier::beforeDefinition(Environment *&env,
-                                               const int pass)
+                                                 const int pass)
 {
     if (pass == 0)
     {
@@ -2021,6 +2021,7 @@ void sn_struct_union_specifier::beforeDefinition(Environment *&env,
 
         // add tag to env
         SymbolBuilder builder;
+        builder.setNamespace(SYMBOL_NAMESPACE_tag);
         builder.setScope(getScope());
         builder.setName(tag);  // TODO: tag doesn't need linkage
         builder.setType(type_info_);
@@ -2033,7 +2034,7 @@ void sn_struct_union_specifier::beforeDefinition(Environment *&env,
     }
 }
 void sn_struct_union_specifier::afterDefinition(Environment *&env,
-                                               const int pass)
+                                                const int pass)
 {
     if (pass == 0)
     {
@@ -2096,6 +2097,7 @@ void sn_enum_specifier::beforeDefinition(Environment *&env, const int pass)
 
         // add tag to env
         SymbolBuilder builder;
+        builder.setNamespace(SYMBOL_NAMESPACE_tag);
         builder.setScope(getScope());
         builder.setName(tag);  // TODO: tag doesn't need linkage
         builder.setType(type_info_);
@@ -2378,18 +2380,18 @@ void sn_selection_statement::afterChildren(Environment *&env, const int pass)
                 sn_statement *stmt2 = dynamic_cast<sn_statement *>(getChild(2));
 
                 IROperation je = {OP_TYPE_je,
-                                {OP_ADDR_imm, stmt1->code_info_.size() + 1},
-                                {},
-                                {}};
+                                  {OP_ADDR_imm, stmt1->code_info_.size() + 1},
+                                  {},
+                                  {}};
                 code_info_.push_back(je);
 
                 code_info_.insert(code_info_.end(), stmt1->code_info_.begin(),
                                   stmt1->code_info_.end());
 
                 IROperation jmp = {OP_TYPE_jmp,
-                                 {OP_ADDR_imm, stmt2->code_info_.size()},
-                                 {},
-                                 {}};
+                                   {OP_ADDR_imm, stmt2->code_info_.size()},
+                                   {},
+                                   {}};
                 code_info_.push_back(jmp);
             }
         }
@@ -3060,9 +3062,12 @@ void sn_postfix_expression::afterChildren(Environment *&env, const int pass)
                     code_info_.insert(code_info_.end(),
                                       right->code_info_.begin(),
                                       right->code_info_.end());
-                    t1 = st.find(st.put(IRObjectBuilder::FromType(right->type_)));
-                    t2 = st.find(st.put(IRObjectBuilder::FromType(right->type_)));
-                    t3 = st.find(st.put(IRObjectBuilder::FromType(left->type_)));
+                    t1 = st.find(st.put(
+                        IRObjectBuilder::Get().fromType(right->type_).build()));
+                    t2 = st.find(st.put(
+                        IRObjectBuilder::Get().fromType(right->type_).build()));
+                    t3 = st.find(st.put(
+                        IRObjectBuilder::Get().fromType(left->type_).build()));
                     mov = {OP_TYPE_mov, right->result_info_, t1, {}};
                     mul = {
                         OP_TYPE_mul, {OP_ADDR_imm, type_->getSize()}, t1, t2};
@@ -3073,20 +3078,20 @@ void sn_postfix_expression::afterChildren(Environment *&env, const int pass)
                     result_info_ = t3;
                     break;
                 case REFER_TO:
-                    // mov offsetof(struct, member), t1
-                    // add addr(base), t1, t2
+                // mov offsetof(struct, member), t1
+                // add addr(base), t1, t2
 
-                    /* t1 = env->allocTemporary();
-                    t2 = env->allocTemporary(); */
-                    // mov = {OP_TYPE_mov, offsetof(...), t1, {}};
-                    /* add = {OP_TYPE_add,
-                           {OP_ADDR_imm, left->result_info_.value},
-                           t1,
-                           t2};
-                    code_info_.push_back(mov);
-                    code_info_.push_back(add);
-                    result_info_ = t2;
-                    break; */
+                /* t1 = env->allocTemporary();
+                   t2 = env->allocTemporary(); */
+                // mov = {OP_TYPE_mov, offsetof(...), t1, {}};
+                /* add = {OP_TYPE_add,
+                   {OP_ADDR_imm, left->result_info_.value},
+                   t1,
+                   t2};
+                   code_info_.push_back(mov);
+                   code_info_.push_back(add);
+                   result_info_ = t2;
+                   break; */
                 case POINT_TO:
                 case OP_INC:
                 case OP_DEC:
@@ -3135,17 +3140,17 @@ void sn_primary_expression::afterChildren(Environment *&env, const int pass)
             IRStorage &st = env->getStorage();
             switch (t.type)
             {
-                case SYMBOL:
-                    result_info_ = st.findByName(t.symbol);
-                    break;
+                case SYMBOL: result_info_ = st.findByName(t.symbol); break;
                 case CONST_CHAR:
                 case CONST_INT:
                 case CONST_FLOAT:
+                    result_info_ = st.find(st.put(IRObjectBuilder::Get()
+                                                      .fromType(type_)
+                                                      .withToken(&t)
+                                                      .build()));
+                    break;
                 case STRING:
-                    result_info_ = st.find(st.put(
-                                IRObjectBuilder::FromTokenWithType(
-                                    &t, type_
-                                    )));
+                    result_info_ = st.findOrInsertString(t.symbol);
                     break;
                 default:
                     // expr

@@ -199,12 +199,8 @@ class TreeLike
     std::vector<T *> children;
 
    public:
-    TreeLike<T>() : parent_(nullptr)
-    {
-    }
-    virtual ~TreeLike<T>()
-    {
-    }
+    TreeLike<T>() : parent_(nullptr) {}
+    virtual ~TreeLike<T>() {}
 
     bool isRoot() const
     {
@@ -282,12 +278,8 @@ class ListLike
     T *next_, *prev_;
 
    public:
-    ListLike<T>() : next_(nullptr), prev_(nullptr)
-    {
-    }
-    virtual ~ListLike<T>()
-    {
-    }
+    ListLike<T>() : next_(nullptr), prev_(nullptr) {}
+    virtual ~ListLike<T>() {}
     T *next() const
     {
         return next_;

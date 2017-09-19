@@ -70,7 +70,7 @@ enum IRType
     IR_TYPE_float,
     IR_TYPE_array,
     IR_TYPE_string,
-    IR_TYPE_data_block, // data block
+    IR_TYPE_data_block,  // data block
     IR_TYPE_routine,
 };
 
@@ -87,7 +87,14 @@ enum EIRAddressMode
 struct IRAddress
 {
     EIRAddressMode mode;
-    uint64_t value;  // used to store value when mode == imm
+    union {
+        uint64_t value;   // used to store value when mode == imm
+        StringRef label;  // TODO: remove pointer
+    };
+
+    IRAddress() : mode(OP_ADDR_invalid), value(0) {}
+    IRAddress(EIRAddressMode m, uint64_t v) : mode(m), value(v) {}
+    IRAddress(EIRAddressMode m, StringRef s) : mode(m), label(s) {}
 };
 
 struct IRObject
@@ -112,11 +119,48 @@ struct IROperation
     std::string toString() const;
 };
 
-typedef size_t IRObjectHandle;
 // storage management
+// 1. local
+//      storage.putWithName(
+//          IRObjectBuilder::Get()
+//                          .fromType(type)
+//                          .withLinkage(linkage)
+//                              linkage == SYMBOL_LINKAGE_unique
+//                          .withName(name)
+//                          .build(),
+//          name);
+//      storage.findByName(name);
+// 2. global
+//      storage.putWithName(
+//          IRObjectBuilder::Get()
+//                          .fromType(type)
+//                          .withLinkage(linkage)
+//                              linkage == SYMBOL_LINKAGE_internal
+//                           || linkage == SYMBOL_LINKAGE_external
+//                          .withName(name)
+//                          .build(),
+//          name);
+//      storage.findByName(name);
+// 3. constant
+//      > integral
+//      storage.find(storage.put(
+//          IRObjectBuilder::Get()
+//                          .fromType(type)
+//                          .withToken(token)
+//                          .build()));
+//      > float, string
+//      storage.findOrInsertFloat(float)
+//      storage.findOrInsertString(string)
+// 4. temporary
+//      storage.find(storage.put(
+//          IRObjectBuilder::Get()
+//                          .fromType(type)
+//                          .build()));
+
 // 1. named: global, local
 // 2. un-named: temporary
 // 3. constant
+typedef size_t IRObjectHandle;
 class IRStorage : public Stringable
 {
     std::vector<StringRef> _name;
@@ -126,6 +170,9 @@ class IRStorage : public Stringable
 
     std::vector<IRObject> _unnamed_obj;
     uint64_t _unnamed_alloc, _unnamed_alloc_max;
+
+    std::vector<StringRef> _strings;
+    std::vector<StringRef> _string_labels;
 
     uint64_t __aligned_alloc(uint64_t &alloc, size_t size, size_t align)
     {
@@ -147,6 +194,8 @@ class IRStorage : public Stringable
     IRObjectHandle putWithName(IRObject object, StringRef label, bool merge);
     IRAddress find(IRObjectHandle h);
     IRAddress findByName(StringRef label);
+    // IRAddress findOrInsertFloat(float fval);
+    IRAddress findOrInsertString(StringRef str);
 
     // code for local storage allocation
     std::vector<IROperation> generateCode() const;
@@ -156,22 +205,28 @@ class IRStorage : public Stringable
 };
 
 struct Token;
-struct Symbol;
 class Type;
 
+// temporary
+// constant
+// named object
 class IRObjectBuilder
 {
+    IRObject o;
+
    public:
-    // temporary
-    static IRObject FromType(const Type *type);
-    // constant
-    static IRObject FromTokenWithType(const Token *token, const Type *type);
-    // named object
-    static IRObject FromSymbol(const Symbol *symbol);
+    static IRObjectBuilder &Get();
+
+    IRObjectBuilder &fromType(const Type *type);
+    IRObjectBuilder &withToken(const Token *token);
+    IRObjectBuilder &withLinkage(const ESymbolLinkage linkage);
+    IRObjectBuilder &withName(const StringRef name);
+    const IRObject &build() const;
 };
 
 class IRUtil
 {
    public:
     static std::string OperationTypeToString(EOperationType type);
+    static StringRef GenerateLabel();
 };

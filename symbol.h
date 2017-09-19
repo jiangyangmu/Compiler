@@ -52,25 +52,24 @@ struct Symbol : public Stringable
     Object *obj;  // if type is incomplete, obj == nullptr
 
    private:
-    Symbol()
-    {
-    }
+    Symbol() {}
     // friend std::ostream &operator<<(std::ostream &o, const Symbol &s);
 
    public:
     virtual std::string toString() const
     {
-        std::string s = "symbol [>\n";
-        s += "name: ";
+        std::string s;
+        s += (space == SYMBOL_NAMESPACE_id)
+                 ? " id  |"
+                 : (space == SYMBOL_NAMESPACE_label ? " lab |" : " tag |");
+        s += (linkage == SYMBOL_LINKAGE_unique)
+                 ? " unique   |"
+                 : (linkage == SYMBOL_LINKAGE_external ? " external |"
+                                                       : " internal |");
+        s += " \"";
         s.append(name.data(), name.size());
-        s += "\nspace: ";
-        s += (space == SYMBOL_NAMESPACE_id) ? "id" : (space == SYMBOL_NAMESPACE_label ? "label" : "tag");
-        s += "\nlinkage: ";
-        s += (linkage == SYMBOL_LINKAGE_unique) ? "unique" : (linkage == SYMBOL_LINKAGE_external ? "external" : "internal");
-        s += "\ntype: ";
+        s += "\" = ";
         s += type ? type->toString() : std::string("<null>");
-        s += "\nobj: ...";
-        s += "\n<]\n";
         return s;
     }
 };
@@ -79,6 +78,7 @@ class SymbolBuilder
 {
     TokenType _storage_token;  // none/typedef/extern/static/auto/register
     ESymbolScope _scope;       // func/file/block/func_proto
+    ESymbolNamespace _namespace;
     ESymbolLinkage _linkage_of_same_name_object_in_file_scope;
 
     Type *_type;
@@ -124,6 +124,7 @@ class SymbolBuilder
     SymbolBuilder()
         : _storage_token(NONE),
           _scope(SYMBOL_SCOPE_none),
+          _namespace(SYMBOL_NAMESPACE_id),
           _linkage_of_same_name_object_in_file_scope(SYMBOL_LINKAGE_unique),
           _type(nullptr)
     {
@@ -132,6 +133,10 @@ class SymbolBuilder
     {
         // TODO: verify input
         _storage_token = s;
+    }
+    void setNamespace(ESymbolNamespace space)
+    {
+        _namespace = space;
     }
     void setScope(ESymbolScope s)
     {
@@ -157,75 +162,7 @@ class SymbolBuilder
         s->linkage = __compute_linkage();
         s->type = _type;
         s->obj = nullptr;
-        s->space = NamespaceFromTypeClass(_type->getClass());
+        s->space = _namespace;
         return s;
-    }
-
-    static ESymbolNamespace NamespaceFromTypeClass(ETypeClass t)
-    {
-        ESymbolNamespace ns;
-        switch (t)
-        {
-            case T_LABEL: ns = SYMBOL_NAMESPACE_label; break;
-            case T_TAG: ns = SYMBOL_NAMESPACE_tag; break;
-            case T_VOID:
-            case T_CHAR:
-            case T_INT:
-            case T_FLOAT:
-            case T_POINTER:
-            case T_ARRAY:
-            case T_FUNCTION:
-            case T_ENUM_CONST: ns = SYMBOL_NAMESPACE_id; break;
-            default: SyntaxError("SymbolBuilder: unexpect symbol type"); break;
-        }
-        return ns;
     }
 };
-
-/*
-class SymbolFactory
-{
-    static vector<Symbol *> references;
-    static Symbol * get()
-    {
-        references.push_back(new Symbol());
-        return references.back();
-    }
-   public:
-    static size_t size()
-    {
-        return references.size();
-    }
-    static Symbol *newInstance()
-    {
-        Symbol *s = get();
-        s->type = TypeFactory::newInstance();
-        return s;
-    }
-    static Symbol *newInstance(const Symbol &t)
-    {
-        Symbol *s = get();
-        (*s) = t;
-        return s;
-    }
-    static Symbol *newTag(StringRef name, Type *type)
-    {
-        Symbol *s = get();
-        s->space = SYMBOL_NAMESPACE_tag;
-        s->name = name;
-        s->type = type;
-        return s;
-    }
-    static void check()
-    {
-        // for (Symbol *s : references)
-        // {
-        //     if (s->obj && (s->type == nullptr || s->type->isIncomplete()))
-        //     {
-        //         SyntaxWarning("Object '" + s->name.toString() + "' is never
-completed.");
-        //     }
-        // }
-    }
-};
-*/
