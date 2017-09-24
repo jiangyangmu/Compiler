@@ -231,391 +231,182 @@ Type *TypeConversion::IntegerPromotion(Type *t)
 
 // -------- object management -------
 
-IRObjectHandle IRStorage::put(IRObject object)
+std::vector<void *> IRValueFactory::_data;
+
+std::string IRAddress::toString() const
 {
-    // set address mode & value
-    assert(object.addr.mode != OP_ADDR_invalid);
-    if (object.addr.mode == OP_ADDR_mem)
+    std::string s;
+    if (mode == OP_ADDR_mem)
     {
-        _unnamed_alloc += _alloc;
-        object.addr.value =
-            __aligned_alloc(_unnamed_alloc, object.size, object.align);
-        _unnamed_alloc -= _alloc;
-
-        _unnamed_alloc_max = (_unnamed_alloc_max < _unnamed_alloc)
-                                 ? _unnamed_alloc
-                                 : _unnamed_alloc_max;
-    }
-
-    _unnamed_obj.push_back(object);
-    return (_unnamed_obj.size() - 1) + _obj.size();
-}
-IRObjectHandle IRStorage::putWithName(IRObject object, StringRef label,
-                                      bool merge)
-{
-    assert(_unnamed_alloc == 0 && _unnamed_alloc_max == 0);
-
-    IRObjectHandle h = 0;
-    IRObject *pobj = nullptr;
-    if (merge)
-    {
-        SyntaxError("IRStorage: not implemented.");
-        // auto it = std::find(_name.begin(), _name.end(), label);
-        // if (it == _name.end())
-        //     SyntaxError("IRStorage: can't find symbol: " + label.toString());
-        // *it = object;
-
-        // pobj = &(*it);
-    }
-    else
-    {
-        _name.push_back(label);
-        _obj.push_back(object);
-
-        pobj = &(_obj.back());
-        h = _obj.size() - 1;
-    }
-    assert(pobj != nullptr);
-
-    assert(pobj->addr.mode != OP_ADDR_invalid);
-    switch (pobj->addr.mode)
-    {
-        case OP_ADDR_mem:
-            pobj->addr.value = __aligned_alloc(_alloc, pobj->size, pobj->align);
-            break;
-        case OP_ADDR_imm: break;
-        default:  // label
-            // assert(pobj->addr.value == 0);
-            break;
-    }
-
-    return h;
-}
-IRAddress IRStorage::find(IRObjectHandle h)
-{
-    assert(h < (_obj.size() + _unnamed_obj.size()));
-    if (h < _obj.size())
-        return _obj[h].addr;
-    else
-        return _unnamed_obj[h - _obj.size()].addr;
-}
-IRAddress IRStorage::findByName(StringRef label)
-{
-    auto it = std::find(_name.begin(), _name.end(), label);
-    if (it == _name.end())
-        SyntaxError("IRStorage: can't find symbol: " + label.toString());
-    return _obj[it - _name.begin()].addr;
-}
-IRAddress IRStorage::findOrInsertString(StringRef str)
-{
-    IRAddress addr = IRAddress(OP_ADDR_label, 0);
-    bool found = false;
-    for (size_t i = 0; i < _strings.size(); ++i)
-    {
-        if (str == _strings[i])
+        switch (width)
         {
-            addr.label = _string_labels[i];
-            found = true;
+            case 1: s += "BYTE "; break;
+            case 2: s += "WORD "; break;
+            case 4: s += "DWORD "; break;
+            case 8: s += "QWORD "; break;
+            default: SyntaxError("IRAddress: invalid width."); break;
+        }
+    }
+    switch (mode)
+    {
+        case OP_ADDR_invalid: s += '-'; break;
+        case OP_ADDR_mem:
+            s += '[';
+            s += std::to_string(mem);
+            s += ']';
+            break;
+        case OP_ADDR_imm:
+            s += '#';
+            s += std::to_string(imm);
+            break;
+        case OP_ADDR_label: s.append(label->data(), label->size()); break;
+    }
+    return s;
+}
+std::string IRInstruction::toString() const
+{
+    std::string s = IRUtil::OpcodeToString(op);
+    s += ' ';
+    s += arg1.toString();
+    s += ',';
+    s += ' ';
+    s += arg2.toString();
+    s += ',';
+    s += ' ';
+    s += arg3.toString();
+    return s;
+}
+std::string IRObject::toString() const
+{
+    std::string s;
+    s += name.toString();
+    s += ':';
+    s += IRUtil::LinkageToString(linkage);
+    s += ':';
+    s += addr.toString();
+    s += ':';
+    s += "(value)";
+    return s;
+}
+std::string IRStorage::toString() const
+{
+    std::string s;
+    for (auto &o : _objects)
+    {
+        s += o.toString();
+        s += '\n';
+    }
+    return s;
+}
+
+void IRStorage::add(IRObject o)
+{
+    _objects.push_back(o);
+    __compute_address(_objects.back());
+}
+IRAddress IRStorage::addAndGetAddress(IRObject o)
+{
+    _objects.push_back(o);
+    __compute_address(_objects.back());
+    return _objects.back().addr;
+}
+IRAddress IRStorage::getAddressByName(StringRef name) const
+{
+    IRAddress addr;
+    for (auto const &o : _objects)
+    {
+        if (o.name == name)
+        {
+            addr = o.addr;
             break;
         }
     }
-    if (!found)
-    {
-        _strings.push_back(str);
-        _string_labels.push_back(IRUtil::GenerateLabel());
-        addr.label = _string_labels.back();
-    }
+    assert(addr.mode != OP_ADDR_invalid);
     return addr;
 }
-
-std::vector<IROperation> IRStorage::generateCode() const
+void IRStorage::collectTemporarySpace()  // call after expression
 {
-    std::vector<IROperation> code;
-    if (_alloc + _unnamed_alloc_max > 0)
+    _tmp_alloc = 0;
+}
+std::list<IRInstruction> IRStorage::generateCode() const
+{
+    std::list<IRInstruction> code;
+    if (_alloc + _tmp_alloc_max > 0)
     {
-        IROperation alloc = {
-            OP_TYPE_alloc,
-            IRAddress(OP_ADDR_imm, _alloc + _unnamed_alloc_max),
+        IRInstruction alloc = {
+            IR_OPCODE_alloc,
+            {OP_ADDR_imm, sizeof(void *), {_alloc + _tmp_alloc_max}},
             {},
-            {}};
+            {},
+            new StringRef("")};
         code.push_back(alloc);
     }
     return code;
 }
 
-std::string IRStorage::toString() const
+std::string IRUtil::OpcodeToString(EIROpcode op)
 {
     std::string s;
-    for (size_t i = 0; i < _name.size(); ++i)
+    switch (op)
     {
-        s += _name[i].toString();
-        s += ':';
-        s += _obj[i].toString();
-        s += '\n';
-    }
-    for (size_t i = 0; i < _unnamed_obj.size(); ++i)
-    {
-        s += "*:";
-        s += _unnamed_obj[i].toString();
-        s += '\n';
-    }
-    for (size_t i = 0; i < _strings.size(); ++i)
-    {
-        s += _string_labels[i].toString();
-        s += ':';
-        s += '"';
-        s += _strings[i].toString();
-        s += '"';
-        s += '\n';
-    }
-    return s;
-}
-
-std::string IRObject::toString() const
-{
-    std::string s;
-    switch (addr.mode)
-    {
-        case OP_ADDR_invalid: s += "*:"; break;
-        case OP_ADDR_mem:
-            s += "mem(";
-            s += std::to_string(addr.value);
-            s += "):";
-            break;
-        case OP_ADDR_imm:
-            s += "imm(";
-            s += std::to_string(addr.value);
-            s += "):";
-            break;
-        case OP_ADDR_label:
-            s += "label(";
-            s.append(addr.label.data(), addr.label.size());
-            s += "):";
-            break;
-        default: s += "???:"; break;
-    }
-    switch (type)
-    {
-        case IR_TYPE_invalid: s += "*:"; break;
-        case IR_TYPE_int: s += "int:"; break;
-        case IR_TYPE_uint: s += "uint:"; break;
-        case IR_TYPE_float: s += "float:"; break;
-        case IR_TYPE_array: s += "array:"; break;
-        case IR_TYPE_data_block: s += "block:"; break;
-        case IR_TYPE_string: s += "string:"; break;
-        case IR_TYPE_routine: s += "routine:"; break;
-        default: s += "???:"; break;
-    }
-    s += std::to_string(size);
-    s += ':';
-    s += std::to_string(align);
-    s += ':';
-    if (type == IR_TYPE_array)
-    {
-        s += std::to_string(element_size);
-        s += ':';
-    }
-    s += "(value)";
-    return s;
-}
-
-std::string IROperation::toString() const
-{
-    std::string s = IRUtil::OperationTypeToString(op);
-    s += ' ';
-    if (arg1.mode != OP_ADDR_invalid)
-    {
-        s += (arg1.mode == OP_ADDR_imm) ? "#" : "";
-        s += std::to_string(arg1.value);
-    }
-    else
-        s += '-';
-    s += ' ';
-    if (arg2.mode != OP_ADDR_invalid)
-    {
-        s += (arg2.mode == OP_ADDR_imm) ? "#" : "";
-        s += std::to_string(arg2.value);
-    }
-    else
-        s += '-';
-    s += ' ';
-    if (arg3.mode != OP_ADDR_invalid)
-    {
-        s += (arg3.mode == OP_ADDR_imm) ? "#" : "";
-        s += std::to_string(arg3.value);
-    }
-    else
-        s += '-';
-    return s;
-}
-
-IRObjectBuilder &IRObjectBuilder::Get()
-{
-    static IRObjectBuilder builder;
-    builder.o.addr = IRAddress(OP_ADDR_invalid, 0);
-    builder.o.type = IR_TYPE_invalid;
-    builder.o.size = builder.o.align = 0;
-    builder.o.value = nullptr;
-    builder.o.element_size = 0;
-    return builder;
-}
-IRObjectBuilder &IRObjectBuilder::fromType(const Type *ctype)
-{
-    Type *type = const_cast<Type *>(ctype);
-    assert(type != nullptr);
-
-    if (type->getClass() == T_ENUM_CONST)
-    {
-        o.addr = IRAddress(
-            OP_ADDR_imm,
-            (uint64_t) dynamic_cast<EnumConstType *>(type)->getValue());
-        o.element_size = 0;
-        o.type = IR_TYPE_int;
-        o.size = type->getSize();
-        o.align = type->getAlignment();
-        o.value = nullptr;
-        return (*this);
-    }
-
-    if (type->isIncomplete() || !(type->isObject() || type->isFunction()) ||
-        (type->isObject() &&
-         (type->getSize() == 0 || type->getAlignment() == 0)))
-    {
-        SyntaxError("IRUtil: invalid type.");
-    }
-    // type is object or function
-
-    // addr (object -> imm, function -> label)
-    o.addr = IRAddress(type->isObject() ? OP_ADDR_mem : OP_ADDR_label, 0);
-    // type
-    o.element_size = 0;
-    const Type *impl_type = nullptr;
-    switch (type->getClass())
-    {
-        // case T_ENUM_CONST:
-        case T_CHAR: o.type = IR_TYPE_int; break;
-        case T_POINTER: o.type = IR_TYPE_uint; break;
-        case T_INT:
-            o.type = dynamic_cast<const IntegerType *>(type)->isSigned()
-                         ? IR_TYPE_int
-                         : IR_TYPE_uint;
-            break;
-        case T_FLOAT: o.type = IR_TYPE_float; break;
-        case T_ARRAY:
-            o.type = IR_TYPE_array;
-            o.element_size = TypeUtil::TargetType(type)->getSize();
-            break;
-        case T_FUNCTION: o.type = IR_TYPE_routine; break;
-        case T_TAG:
-            impl_type = dynamic_cast<const TagType *>(type)->getImpl();
-            if (impl_type->getClass() == T_STRUCT ||
-                impl_type->getClass() == T_UNION)
-            {
-                o.type = IR_TYPE_data_block;
-                break;
-            }
-            else if (impl_type->getClass() == T_ENUM)
-            {
-                o.type = IR_TYPE_int;
-                break;
-            }
-        default: SyntaxError("not supported or not implemented."); break;
-    }
-    // size
-    o.size = type->getSize();
-    // align
-    o.align = type->getAlignment();
-    // value: TODO: value management
-    o.value = nullptr;
-
-    return (*this);
-}
-IRObjectBuilder &IRObjectBuilder::withToken(const Token *token)
-{
-    // override address for constant
-    switch (token->type)
-    {
-        case CONST_CHAR:
-            o.addr = IRAddress(OP_ADDR_imm, (uint64_t)token->cval);
-            break;
-        case CONST_INT:
-            // TODO: get correct width value
-            o.addr = IRAddress(OP_ADDR_imm, (uint64_t)token->ival);
-            break;
-        case CONST_FLOAT:
-        case STRING: o.addr = IRAddress(OP_ADDR_label, 0); break;
-        default: SyntaxError("IRObjectBuilder: unexpected token type."); break;
-    }
-
-    return (*this);
-}
-IRObjectBuilder &IRObjectBuilder::withLinkage(const ESymbolLinkage linkage)
-{
-    if (linkage == SYMBOL_LINKAGE_internal)
-        o.addr = IRAddress(OP_ADDR_label, 0);
-
-    return (*this);
-}
-IRObjectBuilder &IRObjectBuilder::withName(const StringRef name)
-{
-    // fill o.addr.label
-    if (o.addr.mode == OP_ADDR_label)
-        o.addr.label = name;
-
-    return (*this);
-}
-const IRObject &IRObjectBuilder::build() const
-{
-    return o;
-}
-
-std::string IRUtil::OperationTypeToString(EOperationType type)
-{
-    std::string s;
-    switch (type)
-    {
-        case OP_TYPE_alloc: s = "alloc"; break;
-        case OP_TYPE_free: s = "free"; break;
-        case OP_TYPE_cmp: s = "cmp"; break;
-        case OP_TYPE_jmp: s = "jmp"; break;
-        case OP_TYPE_je: s = "je"; break;
-        case OP_TYPE_jl: s = "jl"; break;
-        case OP_TYPE_jle: s = "jle"; break;
-        case OP_TYPE_jg: s = "jg"; break;
-        case OP_TYPE_jge: s = "jge"; break;
-        case OP_TYPE_jb: s = "jb"; break;
-        case OP_TYPE_jbe: s = "jbe"; break;
-        case OP_TYPE_ja: s = "ja"; break;
-        case OP_TYPE_jae: s = "jae"; break;
-        case OP_TYPE_mov: s = "mov"; break;
-        case OP_TYPE_or: s = "or"; break;
-        case OP_TYPE_xor: s = "xor"; break;
-        case OP_TYPE_and: s = "and"; break;
-        case OP_TYPE_not: s = "not"; break;
-        case OP_TYPE_shl: s = "shl"; break;
-        case OP_TYPE_shr: s = "shr"; break;
-        case OP_TYPE_add: s = "add"; break;
-        case OP_TYPE_sub: s = "sub"; break;
-        case OP_TYPE_mul: s = "mul"; break;
-        case OP_TYPE_div: s = "div"; break;
-        case OP_TYPE_mod: s = "mod"; break;
-        case OP_TYPE_inc: s = "inc"; break;
-        case OP_TYPE_dec: s = "dec"; break;
-        case OP_TYPE_neg: s = "neg"; break;
-        case OP_TYPE_ref: s = "ref"; break;
-        case OP_TYPE_deref: s = "deref"; break;
-        case OP_TYPE_param: s = "param"; break;
-        case OP_TYPE_call: s = "call"; break;
-        case OP_TYPE_ret: s = "ret"; break;
-        case OP_TYPE_fld: s = "fld"; break;
-        case OP_TYPE_fst: s = "fst"; break;
-        case OP_TYPE_fabs: s = "fabs"; break;
-        case OP_TYPE_fchs: s = "fchs"; break;
-        case OP_TYPE_fadd: s = "fadd"; break;
-        case OP_TYPE_fsub: s = "fsub"; break;
-        case OP_TYPE_fmul: s = "fmul"; break;
-        case OP_TYPE_fdiv: s = "fdiv"; break;
+        case IR_OPCODE_alloc: s = "alloc"; break;
+        case IR_OPCODE_free: s = "free"; break;
+        case IR_OPCODE_cmp: s = "cmp"; break;
+        case IR_OPCODE_jmp: s = "jmp"; break;
+        case IR_OPCODE_je: s = "je"; break;
+        case IR_OPCODE_jl: s = "jl"; break;
+        case IR_OPCODE_jle: s = "jle"; break;
+        case IR_OPCODE_jg: s = "jg"; break;
+        case IR_OPCODE_jge: s = "jge"; break;
+        case IR_OPCODE_jb: s = "jb"; break;
+        case IR_OPCODE_jbe: s = "jbe"; break;
+        case IR_OPCODE_ja: s = "ja"; break;
+        case IR_OPCODE_jae: s = "jae"; break;
+        case IR_OPCODE_mov: s = "mov"; break;
+        case IR_OPCODE_or: s = "or"; break;
+        case IR_OPCODE_xor: s = "xor"; break;
+        case IR_OPCODE_and: s = "and"; break;
+        case IR_OPCODE_not: s = "not"; break;
+        case IR_OPCODE_shl: s = "shl"; break;
+        case IR_OPCODE_shr: s = "shr"; break;
+        case IR_OPCODE_add: s = "add"; break;
+        case IR_OPCODE_sub: s = "sub"; break;
+        case IR_OPCODE_mul: s = "mul"; break;
+        case IR_OPCODE_div: s = "div"; break;
+        case IR_OPCODE_mod: s = "mod"; break;
+        case IR_OPCODE_inc: s = "inc"; break;
+        case IR_OPCODE_dec: s = "dec"; break;
+        case IR_OPCODE_neg: s = "neg"; break;
+        case IR_OPCODE_ref: s = "ref"; break;
+        case IR_OPCODE_deref: s = "deref"; break;
+        case IR_OPCODE_param: s = "param"; break;
+        case IR_OPCODE_call: s = "call"; break;
+        case IR_OPCODE_ret: s = "ret"; break;
+        case IR_OPCODE_fld: s = "fld"; break;
+        case IR_OPCODE_fst: s = "fst"; break;
+        case IR_OPCODE_fabs: s = "fabs"; break;
+        case IR_OPCODE_fchs: s = "fchs"; break;
+        case IR_OPCODE_fadd: s = "fadd"; break;
+        case IR_OPCODE_fsub: s = "fsub"; break;
+        case IR_OPCODE_fmul: s = "fmul"; break;
+        case IR_OPCODE_fdiv: s = "fdiv"; break;
         default: s = "???"; break;
+    }
+    return s;
+}
+std::string IRUtil::LinkageToString(EIRLinkage linkage)
+{
+    std::string s;
+    switch (linkage)
+    {
+        case IR_LINKAGE_invalid: s += "invalid"; break;
+        case IR_LINKAGE_inline: s += "inline"; break;
+        case IR_LINKAGE_local: s += "local"; break;
+        case IR_LINKAGE_static: s += "static"; break;
+        case IR_LINKAGE_static_const: s += "static_const"; break;
+        case IR_LINKAGE_static_export: s += "static_export"; break;
+        case IR_LINKAGE_extern: s += "extern"; break;
+        default: s += "???"; break;
     }
     return s;
 }
@@ -695,17 +486,6 @@ void Environment::addSymbol(Symbol *s)
     else
     {
         symbols.push_back(s);
-    }
-
-    // TODO: what if s->space == SYMBOL_NAMESPACE_label
-    if (!s->type->isIncomplete() && s->space != SYMBOL_NAMESPACE_tag)
-    {
-        storage.putWithName(IRObjectBuilder::Get()
-                                .fromType(s->type)
-                                .withLinkage(s->linkage)
-                                .withName(s->name)
-                                .build(),
-                            s->name, need_merge);
     }
 
     // DebugLog("add symbol: " + s->name.toString() + "\t" +

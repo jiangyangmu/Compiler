@@ -1608,16 +1608,36 @@ void sn_function_definition::afterParamList(Environment *&env, const int pass)
             type_info_->markComplete();
         }
 
-        const Symbol *same = Environment::SameNameSymbolInFileScope(
-            env->parent(), type_info_, name_info_);
+        Symbol *func_def = nullptr;
+        {
+            const Symbol *same = Environment::SameNameSymbolInFileScope(
+                env->parent(), type_info_, name_info_);
 
-        SymbolBuilder builder;
-        assert(getScope() == SYMBOL_SCOPE_file);
-        builder.setScope(getScope());
-        builder.setType(type_info_);
-        builder.setName(name_info_,
-                        same ? same->linkage : SYMBOL_LINKAGE_external);
-        env->parent()->addSymbol(builder.build());
+            SymbolBuilder builder;
+            assert(getScope() == SYMBOL_SCOPE_file);
+            builder.setScope(getScope());
+            builder.setType(type_info_);
+            builder.setName(name_info_,
+                            same ? same->linkage : SYMBOL_LINKAGE_external);
+            func_def = builder.build();
+        }
+        assert(func_def != nullptr);
+
+        TokenType storage_info = NONE;
+        if (getFirstChild()->nodeType() == SN_DECLARATION_SPECIFIERS)
+            storage_info =
+                dynamic_cast<sn_declaration_specifiers *>(getFirstChild())
+                    ->storage_info_;
+
+        env->parent()->addSymbol(func_def);
+        env->parent()->getStorage().add(
+            IRObjectBuilder()
+                .withSymbolLinkage(func_def->linkage)
+                .withSyntaxStorage(storage_info)
+                .withName(func_def->name)
+                .withValue(
+                    IRValueFactory::CreateZero(sizeof(void *), sizeof(void *)))
+                .build());
     }
 }
 void sn_function_definition::afterChildren(Environment *&env, const int pass)
@@ -1639,7 +1659,7 @@ void sn_function_definition::afterChildren(Environment *&env, const int pass)
         else
             std::cout << dynamic_cast<sn_declarator *>(getChild(1))->name_info_
                       << ':' << std::endl;
-        for (auto &op : stmt->code_info_)
+        for (auto &op : stmt->code_info_.get())
         {
             std::cout << '\t' << op.toString() << std::endl;
         }
@@ -1679,16 +1699,33 @@ void sn_declaration::afterChildren(Environment *&env, const int pass)
                 TypeUtil::Concatenate(init_declarator->type_info_, spec);
             StringRef name = init_declarator->name_info_;
 
-            const Symbol *same =
-                Environment::SameNameSymbolInFileScope(env, type, name);
+            Symbol *obj_def = nullptr;
+            {
+                const Symbol *same =
+                    Environment::SameNameSymbolInFileScope(env, type, name);
 
-            builder.setScope(init_declarator->getScope());
-            builder.setType(type);
-            builder.setName(name,
-                            same ? same->linkage : SYMBOL_LINKAGE_external);
-            env->addSymbol(builder.build());
+                builder.setScope(init_declarator->getScope());
+                builder.setType(type);
+                builder.setName(name,
+                                same ? same->linkage : SYMBOL_LINKAGE_external);
+                obj_def = builder.build();
+            }
+            assert(obj_def != nullptr);
+
+            env->addSymbol(obj_def);
+            if (type->isObject() && !type->isIncomplete())
+            {
+                // TODO: deal with initialization code
+                env->getStorage().add(
+                    IRObjectBuilder()
+                        .withSymbolLinkage(obj_def->linkage)
+                        .withSyntaxStorage(storage)
+                        .withName(obj_def->name)
+                        .withValue(IRValueFactory::CreateZero(
+                            type->getSize(), type->getAlignment()))
+                        .build());
+            }
             type_infos_.push_back(type);
-            // TODO: deal with initialization code
         }
     }
 }
@@ -2312,8 +2349,8 @@ void sn_compound_statement::afterDeclarations(Environment *&env, const int pass)
 {
     if (pass == 1)
     {
-        vector<IROperation> code = env->getStorage().generateCode();
-        code_info_.insert(code_info_.end(), code.begin(), code.end());
+        // auto code = env->getStorage().generateCode();
+        // code_info_.append(code);
     }
 }
 void sn_compound_statement::afterChildren(Environment *&env, const int pass)
@@ -2326,14 +2363,16 @@ void sn_compound_statement::afterChildren(Environment *&env, const int pass)
         // declaration_list
         // already handled by declaration
 
+        auto alloc_code = env->getStorage().generateCode();
+        code_info_.append(alloc_code);
+
         // statement_list
         if (getLastChild()->nodeType() == SN_STATEMENT_LIST)
         {
             for (auto *child : getLastChild()->getChildren())
             {
-                const auto &code =
-                    dynamic_cast<sn_statement *>(child)->code_info_;
-                code_info_.insert(code_info_.end(), code.begin(), code.end());
+                code_info_.append(
+                    dynamic_cast<sn_statement *>(child)->code_info_);
             }
         }
     }
@@ -2359,40 +2398,33 @@ void sn_selection_statement::afterChildren(Environment *&env, const int pass)
             sn_expression *expr =
                 dynamic_cast<sn_expression *>(getFirstChild());
 
-            IROperation cmp = {
-                OP_TYPE_cmp, {OP_ADDR_imm, 0}, expr->result_info_, {}};
-            code_info_.push_back(cmp);
+            code_info_.add(IRInstructionBuilder::Cmp(
+                {OP_ADDR_imm, expr->result_info_.width, {0}},
+                expr->result_info_));
 
             if (getChildrenCount() == 2)  // if (expr) stmt
             {
                 sn_statement *stmt = dynamic_cast<sn_statement *>(getChild(1));
 
-                IROperation je = {
-                    OP_TYPE_je, {OP_ADDR_imm, stmt->code_info_.size()}, {}, {}};
-                code_info_.push_back(je);
+                code_info_.add(IRInstructionBuilder::Je(
+                    {OP_ADDR_imm, sizeof(void *), {stmt->code_info_.size()}}));
 
-                code_info_.insert(code_info_.end(), stmt->code_info_.begin(),
-                                  stmt->code_info_.end());
+                code_info_.append(stmt->code_info_);
             }
             else  // if (expr) stmt else stmt
             {
                 sn_statement *stmt1 = dynamic_cast<sn_statement *>(getChild(1));
                 sn_statement *stmt2 = dynamic_cast<sn_statement *>(getChild(2));
 
-                IROperation je = {OP_TYPE_je,
-                                  {OP_ADDR_imm, stmt1->code_info_.size() + 1},
-                                  {},
-                                  {}};
-                code_info_.push_back(je);
+                code_info_.add(
+                    IRInstructionBuilder::Je({OP_ADDR_imm,
+                                              sizeof(void *),
+                                              {stmt1->code_info_.size() + 1}}));
+                code_info_.append(stmt1->code_info_);
 
-                code_info_.insert(code_info_.end(), stmt1->code_info_.begin(),
-                                  stmt1->code_info_.end());
-
-                IROperation jmp = {OP_TYPE_jmp,
-                                   {OP_ADDR_imm, stmt2->code_info_.size()},
-                                   {},
-                                   {}};
-                code_info_.push_back(jmp);
+                code_info_.add(IRInstructionBuilder::Jmp(
+                    {OP_ADDR_imm, sizeof(void *), {stmt2->code_info_.size()}}));
+                code_info_.append(stmt2->code_info_);
             }
         }
         else  // switch
@@ -2449,8 +2481,7 @@ void sn_comma_expression::afterChildren(Environment *&env, const int pass)
             for (auto *child : getChildren())
             {
                 sn_expression *expr = dynamic_cast<sn_expression *>(child);
-                code_info_.insert(code_info_.end(), expr->code_info_.begin(),
-                                  expr->code_info_.end());
+                code_info_.append(expr->code_info_);
             }
             result_info_ =
                 dynamic_cast<sn_expression *>(getLastChild())->result_info_;
@@ -2492,21 +2523,13 @@ void sn_assign_expression::afterChildren(Environment *&env, const int pass)
             sn_expression *right =
                 dynamic_cast<sn_expression *>(getLastChild());
 
-            IROperation mov;
             switch (op)
             {
                 case ASSIGN:
-                    code_info_.insert(code_info_.end(),
-                                      left->code_info_.begin(),
-                                      left->code_info_.end());
-                    code_info_.insert(code_info_.end(),
-                                      right->code_info_.begin(),
-                                      right->code_info_.end());
-                    mov = {OP_TYPE_mov,
-                           right->result_info_,
-                           left->result_info_,
-                           {}};
-                    code_info_.push_back(mov);
+                    code_info_.append(left->code_info_);
+                    code_info_.append(right->code_info_);
+                    code_info_.add(IRInstructionBuilder::Mov(
+                        right->result_info_, left->result_info_));
                     result_info_ = left->result_info_;
                     break;
                 default: SyntaxError("not implemented."); break;
@@ -2920,8 +2943,7 @@ void sn_cast_expression::afterChildren(Environment *&env, const int pass)
         // code generation
         {
             sn_expression *e = dynamic_cast<sn_expression *>(getLastChild());
-            code_info_.insert(code_info_.end(), e->code_info_.begin(),
-                              e->code_info_.end());
+            code_info_.append(e->code_info_);
             // TODO: type conversion code
             // ...
             result_info_ = e->result_info_;
@@ -3047,7 +3069,6 @@ void sn_postfix_expression::afterChildren(Environment *&env, const int pass)
         {
             IRStorage &st = env->getStorage();
 
-            IROperation mov, mul, add;
             IRAddress t1, t2, t3;
             switch (op)
             {
@@ -3056,33 +3077,48 @@ void sn_postfix_expression::afterChildren(Environment *&env, const int pass)
                     // mul sizeof(type_), t1, t2
                     // add value(base), t2, t3
 
-                    code_info_.insert(code_info_.end(),
-                                      left->code_info_.begin(),
-                                      left->code_info_.end());
-                    code_info_.insert(code_info_.end(),
-                                      right->code_info_.begin(),
-                                      right->code_info_.end());
-                    t1 = st.find(st.put(
-                        IRObjectBuilder::Get().fromType(right->type_).build()));
-                    t2 = st.find(st.put(
-                        IRObjectBuilder::Get().fromType(right->type_).build()));
-                    t3 = st.find(st.put(
-                        IRObjectBuilder::Get().fromType(left->type_).build()));
-                    mov = {OP_TYPE_mov, right->result_info_, t1, {}};
-                    mul = {
-                        OP_TYPE_mul, {OP_ADDR_imm, type_->getSize()}, t1, t2};
-                    add = {OP_TYPE_add, left->result_info_, t2, t3};
-                    code_info_.push_back(mov);
-                    code_info_.push_back(mul);
-                    code_info_.push_back(add);
+                    code_info_.append(left->code_info_);
+                    code_info_.append(right->code_info_);
+                    t1 = st.addAndGetAddress(
+                        IRObjectBuilder()
+                            .withName(StringRef(""))
+                            .withValue(IRValueFactory::CreateZero(
+                                type_->getSize(), type_->getAlignment()))
+                            .build());
+                    t2 = st.addAndGetAddress(
+                        IRObjectBuilder()
+                            .withName(StringRef(""))
+                            .withValue(IRValueFactory::CreateZero(
+                                right->type_->getSize(),
+                                right->type_->getAlignment()))
+                            .build());
+                    t3 = st.addAndGetAddress(
+                        IRObjectBuilder()
+                            .withName(StringRef(""))
+                            .withValue(IRValueFactory::CreateZero(
+                                left->type_->getSize(),
+                                left->type_->getAlignment()))
+                            .build());
+                    code_info_.add(
+                        IRInstructionBuilder::Mov(right->result_info_, t1));
+                    code_info_.add(IRInstructionBuilder::Mul(
+                        {OP_ADDR_imm, t1.width, {type_->getSize()}}, t1, t2));
+                    code_info_.add(
+                        IRInstructionBuilder::Add(left->result_info_, t2, t3));
+
                     result_info_ = t3;
                     break;
                 case REFER_TO:
                 // mov offsetof(struct, member), t1
                 // add addr(base), t1, t2
 
-                /* t1 = env->allocTemporary();
-                   t2 = env->allocTemporary(); */
+                // size_t
+                // t1 = st.find(st.put(IRObjectBuilder::Get()
+                //                         .fromType(TypeUtil::Type_size_t())
+                //                         .build()));
+                // reference to member, with qualifiers
+                // t2 = st.find(
+                //     st.put(IRObjectBuilder::Get().fromType(type_).build()));
                 // mov = {OP_TYPE_mov, offsetof(...), t1, {}};
                 /* add = {OP_TYPE_add,
                    {OP_ADDR_imm, left->result_info_.value},
@@ -3126,6 +3162,7 @@ void sn_primary_expression::afterChildren(Environment *&env, const int pass)
                 case STRING:
                     type_ = new CharType();
                     type_->setQualifier(TP_CONST);
+                    // TODO: maybe array?
                     type_ = TypeUtil::Concatenate(new PointerType(), type_);
                     break;
                 default:
@@ -3140,17 +3177,26 @@ void sn_primary_expression::afterChildren(Environment *&env, const int pass)
             IRStorage &st = env->getStorage();
             switch (t.type)
             {
-                case SYMBOL: result_info_ = st.findByName(t.symbol); break;
+                case SYMBOL:
+                    result_info_ = st.getAddressByName(t.symbol);
+                    break;
                 case CONST_CHAR:
                 case CONST_INT:
                 case CONST_FLOAT:
-                    result_info_ = st.find(st.put(IRObjectBuilder::Get()
-                                                      .fromType(type_)
-                                                      .withToken(&t)
-                                                      .build()));
+                    result_info_ = st.addAndGetAddress(
+                        IRObjectBuilder()
+                            .withLexType(t.type)
+                            .withValue(IRValueFactory::Create(
+                                type_->getSize(), type_->getAlignment(),
+                                &(t.ival)))
+                            .build());
                     break;
                 case STRING:
-                    result_info_ = st.findOrInsertString(t.symbol);
+                    result_info_ = st.addAndGetAddress(
+                        IRObjectBuilder()
+                            .withLexType(t.type)
+                            .withValue(IRValueFactory::CreateString(t.string_))
+                            .build());
                     break;
                 default:
                     // expr

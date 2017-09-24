@@ -748,6 +748,7 @@ class LabelType : public Type
 class TypeUtil
 {
    public:
+    static const Type *Type_size_t();
     static Type *Concatenate(Type *front, Type *back);
     // unbox derived type
     static Type *TargetType(Type *aggregate);

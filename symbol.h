@@ -14,13 +14,16 @@ enum ESymbolNamespace
     SYMBOL_NAMESPACE_label,
     SYMBOL_NAMESPACE_tag,
 };
+
+// linkage means "do these declarations refer to the same object?"
 enum ESymbolLinkage
 {
     SYMBOL_LINKAGE_unique,  // none linkage: auto/register/typedef
-    SYMBOL_LINKAGE_external,
-    SYMBOL_LINKAGE_internal,
+    SYMBOL_LINKAGE_external, // the same in whole program
+    SYMBOL_LINKAGE_internal, // the same in translation unit
 };
 
+// only used to compute ESymbolLinkage
 enum ESymbolScope
 {
     SYMBOL_SCOPE_none,
