@@ -259,7 +259,10 @@ std::string IRAddress::toString() const
             s += '#';
             s += std::to_string(imm);
             break;
-        case OP_ADDR_label: s.append(label->data(), label->size()); break;
+        case OP_ADDR_label:
+            assert(label->size() < 1000000);
+            s.append(label->data(), label->size());
+            break;
     }
     return s;
 }
@@ -298,7 +301,75 @@ std::string IRStorage::toString() const
     }
     return s;
 }
+std::string IRCode::toString() const
+{
+    std::string s;
+    for (auto &op : _code)
+    {
+        s += op.toString();
+        s += '\n';
+    }
+    return s;
+}
 
+IRObject IRObjectBuilder::build() const
+{
+    IRObject o;
+    // name
+    o.name = _name;
+
+    // linkage
+    // _name == "" && !lex_const    => temporary
+    //             && lex_const     => constant
+    // _name != ""                  => symbol
+    if (_name.empty())
+    {
+        switch (_lex_type)
+        {
+            case CONST_CHAR:
+            case CONST_INT:
+                o.linkage = IR_LINKAGE_inline;  // imm
+                break;
+            case CONST_FLOAT:
+            case STRING:
+                o.linkage = IR_LINKAGE_static_const;
+                o.name = IRUtil::GenerateLabel();
+                break;
+            default: o.linkage = IR_LINKAGE_local; break;
+        }
+    }
+    else
+    {
+        switch (_symbol_linkage)
+        {
+            case SYMBOL_LINKAGE_unique:
+                assert(_syntax_storage == NONE || _syntax_storage == AUTO ||
+                       _syntax_storage == REGISTER);
+                o.linkage = IR_LINKAGE_local;
+                break;
+            case SYMBOL_LINKAGE_internal:
+                assert(_syntax_storage == STATIC);
+                o.linkage = IR_LINKAGE_static;
+                break;
+            case SYMBOL_LINKAGE_external:
+                assert(_syntax_storage == NONE || _syntax_storage == EXTERN);
+                if (_syntax_storage == NONE)
+                    o.linkage = IR_LINKAGE_static_export;
+                else
+                    o.linkage = IR_LINKAGE_extern;
+                break;
+            default: assert(false); break;
+        }
+    }
+
+    // value
+    o.value = _value;
+    // addr
+    // TODO: addr.width = ?
+    o.addr = {OP_ADDR_invalid, 0, {0}};
+
+    return o;
+}
 void IRStorage::add(IRObject o)
 {
     _objects.push_back(o);
@@ -414,7 +485,7 @@ StringRef IRUtil::GenerateLabel()
 {
     static int label_id = 0;
     static std::vector<std::string> labels;
-    labels.push_back("label_" + std::to_string(label_id++));
+    labels.push_back("L._" + std::to_string(label_id++));
     return StringRef(labels.back().data());
 }
 
@@ -428,6 +499,17 @@ Symbol *Environment::findSymbol(ESymbolNamespace space, StringRef name) const
             return s;
     }
     return nullptr;
+}
+Symbol *Environment::findSymbolRecursive(ESymbolNamespace space, StringRef name) const
+{
+    const Environment *e = this;
+    Symbol *s = nullptr;
+    while (s == nullptr && !e->isRoot())
+    {
+        s = e->findSymbol(space, name);
+        e = e->parent();
+    }
+    return s;
 }
 /*
 Symbol *Environment::recursiveFind(ESymbolNamespace space, StringRef name) const

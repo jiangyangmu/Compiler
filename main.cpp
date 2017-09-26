@@ -15,11 +15,13 @@ using namespace std;
 static bool lflag = false; // show Lexer output
 static bool vflag = false; // show Parser output
 static bool Vflag = false; // show Parser output
+static bool sflag = false; // show Syntax output
+static bool eflag = false; // show Environment output
 
 void options(int &argc, char ** &argv)
 {
     int ch;
-    while ((ch = getopt(argc, argv, "lvV")) != -1) {
+    while ((ch = getopt(argc, argv, "lvseV")) != -1) {
         switch (ch) {
             case 'l':
                 lflag = true;
@@ -29,6 +31,12 @@ void options(int &argc, char ** &argv)
                 break;
             case 'V':
                 Vflag = true;
+                break;
+            case 's':
+                sflag = true;
+                break;
+            case 'e':
+                eflag = true;
                 break;
             default:
                 break;
@@ -116,11 +124,10 @@ int main(int argc, char *argv[])
     if (vflag) cout << "-------------- parser --------------" << endl;
     Parser p(lex);
     p.parse();
-    if (vflag || Vflag)
-    {
-        p.debugPrint(Vflag ? true : false);
-        return 0;
-    }
+    if (sflag)
+        p.DebugPrintSyntaxTree();
+    if (eflag)
+        p.DebugPrintEnvironment();
 
     // cout << "-------------- code --------------" << endl;
     // p.emit();

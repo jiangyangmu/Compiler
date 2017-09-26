@@ -18,6 +18,7 @@ enum ESymbolNamespace
 // linkage means "do these declarations refer to the same object?"
 enum ESymbolLinkage
 {
+    SYMBOL_LINKAGE_invalid,
     SYMBOL_LINKAGE_unique,  // none linkage: auto/register/typedef
     SYMBOL_LINKAGE_external, // the same in whole program
     SYMBOL_LINKAGE_internal, // the same in translation unit
@@ -65,10 +66,15 @@ struct Symbol : public Stringable
         s += (space == SYMBOL_NAMESPACE_id)
                  ? " id  |"
                  : (space == SYMBOL_NAMESPACE_label ? " lab |" : " tag |");
-        s += (linkage == SYMBOL_LINKAGE_unique)
-                 ? " unique   |"
-                 : (linkage == SYMBOL_LINKAGE_external ? " external |"
-                                                       : " internal |");
+        s += ' ';
+        switch (linkage)
+        {
+            case SYMBOL_LINKAGE_invalid: s += "------"; break;
+            case SYMBOL_LINKAGE_unique: s += "unique"; break;
+            case SYMBOL_LINKAGE_external: s += "extern"; break;
+            case SYMBOL_LINKAGE_internal: s += "intern"; break;
+        }
+        s += " |";
         s += " \"";
         s.append(name.data(), name.size());
         s += "\" = ";
@@ -120,7 +126,7 @@ class SymbolBuilder
         }
 
         SyntaxError("SymbolBuilder: can't determine linkage");
-        return SYMBOL_LINKAGE_unique;
+        return SYMBOL_LINKAGE_invalid;
     }
 
    public:
@@ -128,7 +134,7 @@ class SymbolBuilder
         : _storage_token(NONE),
           _scope(SYMBOL_SCOPE_none),
           _namespace(SYMBOL_NAMESPACE_id),
-          _linkage_of_same_name_object_in_file_scope(SYMBOL_LINKAGE_unique),
+          _linkage_of_same_name_object_in_file_scope(SYMBOL_LINKAGE_invalid),
           _type(nullptr)
     {
     }

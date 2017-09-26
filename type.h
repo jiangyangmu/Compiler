@@ -3,6 +3,9 @@
 #include "common.h"
 
 // TODO: type compatibility
+// TODO: type equal-ness
+// TODO: type incomplete-ness
+// TODO: type lvalue
 
 // enum ETypeOperations
 /*
@@ -164,28 +167,7 @@ class Type : public Stringable
     }
 
     // from Stringable
-    virtual std::string toString() const
-    {
-        return "";
-        // std::string s;
-        // s += '<';
-        // if (isIncomplete()) s += 'I';
-        // if (isConst()) s += 'C';
-        // if (isVolatile()) s += 'B';
-        // if (isLvalue()) s += 'L';
-        // if (isIntegral()) s += 'i';
-        // if (isArithmetic()) s += 'A';
-        // if (isScalar()) s += 'S';
-        // if (isObject()) s += 'O';
-        // if (isFunction()) s += 'F';
-        // if (s.empty()) s += '-';
-        // s += ':';
-        // s += std::to_string(getSize());
-        // s += ':';
-        // s += std::to_string(getAlignment());
-        // s += '>';
-        // return s;
-    }
+    virtual std::string toString() const;
 };
 
 class VoidType : public Type
@@ -196,10 +178,7 @@ class VoidType : public Type
     VoidType() : Type(T_VOID, TP_INCOMPLETE | TP_IS_OBJECT) {}
 
     // from Stringable
-    virtual std::string toString() const
-    {
-        return "void" + Type::toString();
-    }
+    virtual std::string toString() const;
 };
 class CharType : public Type
 {
@@ -214,10 +193,7 @@ class CharType : public Type
     }
 
     // from Stringable
-    virtual std::string toString() const
-    {
-        return "char" + Type::toString();
-    }
+    virtual std::string toString() const;
 };
 class IntegerType : public Type
 {
@@ -267,26 +243,7 @@ class IntegerType : public Type
     }
 
     // from Stringable
-    virtual std::string toString() const
-    {
-        std::string s;
-        for (const char *p = _desc; *p != '\0'; ++p)
-        {
-            if (!s.empty())
-                s += ' ';
-            switch (*p)
-            {
-                case 'S': s += "signed"; break;
-                case 'U': s += "unsigned"; break;
-                case 'c': s += "char"; break;
-                case 's': s += "short"; break;
-                case 'l': s += "long"; break;
-                case 'i': s += "int"; break;
-                default: break;
-            }
-        }
-        return s + Type::toString();
-    }
+    virtual std::string toString() const;
 };
 class FloatingType : public Type
 {
@@ -315,23 +272,7 @@ class FloatingType : public Type
     }
 
     // from Stringable
-    virtual std::string toString() const
-    {
-        std::string s;
-        for (const char *p = _desc; *p != '\0'; ++p)
-        {
-            if (!s.empty())
-                s += ' ';
-            switch (*p)
-            {
-                case 'f': s += "float"; break;
-                case 'd': s += "double"; break;
-                case 'l': s += "long"; break;
-                default: break;
-            }
-        }
-        return s + Type::toString();
-    }
+    virtual std::string toString() const;
 };
 // derived types
 class DerivedType : public Type
@@ -379,10 +320,7 @@ class PointerType : public DerivedType
     // virtual bool equal(const Type &o) const;
 
     // from Stringable
-    virtual std::string toString() const
-    {
-        return "pointer to " + (_t ? _t->toString() : "null") + Type::toString();
-    }
+    virtual std::string toString() const;
 };
 class ArrayType : public DerivedType
 {
@@ -401,30 +339,12 @@ class ArrayType : public DerivedType
     }
 
     // from DerivedType
-    virtual void setTargetType(Type *t)
-    {
-        DerivedType::setTargetType(t);
-        if (_n != 0 && !t->isIncomplete())
-        {
-            _size = t->getSize() * _n;
-            _align = t->getAlignment();
-            unsetProp(TP_INCOMPLETE);
-        }
-    }
+    virtual void setTargetType(Type *t);
 
-    virtual bool equal(const Type &o) const
-    {
-        if (!DerivedType::equal(o))
-            return false;
-        const ArrayType &a = dynamic_cast<const ArrayType &>(o);
-        return _n == a._n;
-    }
+    virtual bool equal(const Type &o) const;
 
     // from Stringable
-    virtual std::string toString() const
-    {
-        return "array of " + (_t ? _t->toString() : "null") + Type::toString();
-    }
+    virtual std::string toString() const;
 };
 class FuncType : public DerivedType
 {
@@ -440,43 +360,14 @@ class FuncType : public DerivedType
           _var_arg(false)
     {
     }
-    void addParam(const Type *t, StringRef name)
-    {
-        _param_t.push_back(t);
-        _param_name.push_back(name);
-    }
-    void fixParamType(size_t i, const Type *t)
-    {
-        assert(i < _param_t.size());
-        _param_t[i] = t;
-    }
-    void setVarArg()
-    {
-        _var_arg = true;
-    }
+    void addParam(const Type *t, StringRef name);
+    void fixParamType(size_t i, const Type *t);
+    void setVarArg();
 
-    virtual bool equal(const Type &o) const
-    {
-        if (!DerivedType::equal(o))
-            return false;
-
-        const FuncType &f = dynamic_cast<const FuncType &>(o);
-        if (_var_arg != f._var_arg || _param_t.size() != f._param_t.size())
-            return false;
-        for (size_t i = 0; i < _param_t.size(); ++i)
-        {
-            assert(_param_t[i] && f._param_t[i]);
-            if (!_param_t[i]->equal(*f._param_t[i]))
-                return false;
-        }
-        return true;
-    }
+    virtual bool equal(const Type &o) const;
 
     // from Stringable
-    virtual std::string toString() const
-    {
-        return "function returns " + (_t ? _t->toString() : "null") + Type::toString();
-    }
+    virtual std::string toString() const;
 };
 // tag types & impl
 class TagType : public Type
@@ -503,64 +394,13 @@ class TagType : public Type
         }
     }
 
-    void setImpl(const Type *impl)
-    {
-        assert(impl != nullptr);  // && t->getClass() == T_ENUM_IMPL);
+    void setImpl(const Type *impl);
+    const Type *getImpl() const;
 
-        if (impl->getClass() != _impl_type)
-        {
-            SyntaxError("TagType: tag type mismatch.");
-        }
-
-        _impl = impl;
-        _size = impl->getSize();
-        _align = impl->getAlignment();
-        unsetProp(TP_INCOMPLETE);
-        // DebugLog("TagType: set impl of: " + _name.toString());
-    }
-    const Type *getImpl() const
-    {
-        return _impl;
-    }
-
-    virtual bool equal(const Type &o) const
-    {
-        if (!Type::equal(o))
-            return false;
-
-        const TagType &t = dynamic_cast<const TagType &>(o);
-        if (_name != t._name || _impl_type != t._impl_type)
-            return false;
-
-        assert(_impl && t._impl);
-        return _impl->equal(*t._impl);
-    }
+    virtual bool equal(const Type &o) const;
 
     // from Stringable
-    virtual std::string toString() const
-    {
-        std::string s;
-        switch (_impl_type)
-        {
-            case T_ENUM: s += "enum"; break;
-            case T_STRUCT: s += "struct"; break;
-            case T_UNION: s += "union"; break;
-            case T_TYPEDEF: s += "typedef"; break;
-            default: s += "unknown_tag_type"; break;
-        }
-        s += ' ';
-        s += _name.toString();
-        s += Type::toString();
-        s += " {";
-        if (_impl != nullptr)
-        {
-            s += ' ';
-            s += _impl->toString();
-            s += ' ';
-        }
-        s += '}';
-        return s;
-    }
+    virtual std::string toString() const;
 };
 class EnumConstType : public Type
 {
@@ -587,20 +427,10 @@ class EnumConstType : public Type
         return _value;
     }
 
-    virtual bool equal(const Type &o) const
-    {
-        if (!Type::equal(o))
-            return false;
-
-        const EnumConstType &e = dynamic_cast<const EnumConstType &>(o);
-        return _name == e._name && _value == e._value;
-    }
+    virtual bool equal(const Type &o) const;
 
     // from Stringable
-    virtual std::string toString() const
-    {
-        return "enum-const";
-    }
+    virtual std::string toString() const;
 };
 class EnumTypeImpl : public Type
 {
@@ -619,28 +449,10 @@ class EnumTypeImpl : public Type
         _members.push_back(member);
     }
 
-    virtual bool equal(const Type &o) const
-    {
-        SyntaxError("not implemented.");
-        return false;
-    }
+    virtual bool equal(const Type &o) const;
 
     // from Stringable
-    virtual std::string toString() const
-    {
-        std::string s;
-        for (auto m : _members)
-        {
-            s += m->getName().toString();
-            s += '(';
-            s += std::to_string(m->getValue());
-            s += ')';
-            s += ',';
-        }
-        if (!s.empty())
-            s.pop_back();
-        return s + Type::toString();
-    }
+    virtual std::string toString() const;
 };
 class StructTypeImpl : public Type
 {
@@ -648,64 +460,21 @@ class StructTypeImpl : public Type
 
     vector<StringRef> _member_name;
     vector<const Type *> _member_type;
+    vector<size_t> _member_offset;
 
    public:
     StructTypeImpl(bool share_storage)
         : Type(share_storage ? T_UNION : T_STRUCT, 0, 0, 1)
     {
     }
-    void addMember(StringRef name, const Type *ct)
-    {
-        Type *t = const_cast<Type *>(ct);
-        if (t->isIncomplete())
-            SyntaxError("struct: can't add incomplete type.");
-        _member_name.push_back(name);
-        _member_type.push_back(t);
-        if (_tc == T_STRUCT)
-            _size += t->getSize();
-        else
-            _size = (_size >= t->getSize()) ? _size : t->getSize();
-        _align = (_align >= t->getAlignment()) ? _align : t->getAlignment();
-    }
-    const Type *getMemberType(StringRef name) const
-    {
-        const Type *t = nullptr;
-        size_t i = 0;
-        for (StringRef nm : _member_name)
-        {
-            if (nm == name)
-            {
-                t = _member_type[i];
-                break;
-            }
-            ++i;
-        }
-        if (i == _member_name.size())
-        {
-            SyntaxError("member not found.");
-        }
-        return t;
-    }
+    void addMember(StringRef name, const Type *ct);
+    const Type *getMemberType(StringRef name) const;
+    size_t getMemberOffset(StringRef name) const;
 
-    virtual bool equal(const Type &o) const
-    {
-        SyntaxError("not implemented.");
-        return false;
-    }
+    virtual bool equal(const Type &o) const;
 
     // from Stringable
-    virtual std::string toString() const
-    {
-        std::string s;
-        for (auto t : _member_type)
-        {
-            s += t->toString();
-            s += ':';
-        }
-        if (!s.empty())
-            s.pop_back();
-        return s + Type::toString();
-    }
+    virtual std::string toString() const;
 };
 class TypedefTypeImpl : public Type
 {
@@ -718,17 +487,10 @@ class TypedefTypeImpl : public Type
     {
     }
 
-    virtual bool equal(const Type &o) const
-    {
-        SyntaxError("not implemented.");
-        return false;
-    }
+    virtual bool equal(const Type &o) const;
 
     // from Stringable
-    virtual std::string toString() const
-    {
-        return "~<typedef-impl~>";
-    }
+    virtual std::string toString() const;
 };
 // label
 class LabelType : public Type
@@ -739,10 +501,7 @@ class LabelType : public Type
     LabelType() : Type(T_LABEL, 0) {}
 
     // from Stringable
-    virtual std::string toString() const
-    {
-        return "label";
-    }
+    virtual std::string toString() const;
 };
 
 class TypeUtil

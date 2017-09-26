@@ -1650,19 +1650,6 @@ void sn_function_definition::afterChildren(Environment *&env, const int pass)
     }
     else if (pass == 1)
     {
-        // DEBUG
-        sn_statement *stmt = dynamic_cast<sn_statement *>(getLastChild());
-        if (getFirstChild()->nodeType() == SN_DECLARATOR)
-            std::cout
-                << dynamic_cast<sn_declarator *>(getFirstChild())->name_info_
-                << ':' << std::endl;
-        else
-            std::cout << dynamic_cast<sn_declarator *>(getChild(1))->name_info_
-                      << ':' << std::endl;
-        for (auto &op : stmt->code_info_.get())
-        {
-            std::cout << '\t' << op.toString() << std::endl;
-        }
     }
 
     // restore environment
@@ -2030,6 +2017,8 @@ void sn_struct_union_specifier::visit(Environment *&env, const int pass)
         child = getChildrenCount() == 2 ? getLastChild() : nullptr;
     }
 
+    afterTag(env, pass);
+
     if (child != nullptr && child->nodeType() == SN_STRUCT_DECLARATION_LIST)
     {
         beforeDefinition(env, pass);
@@ -2039,8 +2028,7 @@ void sn_struct_union_specifier::visit(Environment *&env, const int pass)
 
     afterChildren(env, pass);
 }
-void sn_struct_union_specifier::beforeDefinition(Environment *&env,
-                                                 const int pass)
+void sn_struct_union_specifier::afterTag(Environment *&env, const int pass)
 {
     if (pass == 0)
     {
@@ -2054,16 +2042,40 @@ void sn_struct_union_specifier::beforeDefinition(Environment *&env,
                 tag = TypeUtil::GenerateTag();
         }
         assert(!tag.empty());
-        type_info_ = new TagType((t == TYPE_STRUCT ? T_STRUCT : T_UNION), tag);
 
-        // add tag to env
-        SymbolBuilder builder;
-        builder.setNamespace(SYMBOL_NAMESPACE_tag);
-        builder.setScope(getScope());
-        builder.setName(tag);  // TODO: tag doesn't need linkage
-        builder.setType(type_info_);
-        env->addSymbol(builder.build());
-
+        Symbol *s = env->findSymbolRecursive(SYMBOL_NAMESPACE_tag, tag);
+        if (s == nullptr)
+        {
+            type_info_ =
+                new TagType((t == TYPE_STRUCT ? T_STRUCT : T_UNION), tag);
+            // add tag to env
+            SymbolBuilder builder;
+            builder.setNamespace(SYMBOL_NAMESPACE_tag);
+            builder.setScope(getScope());
+            builder.setName(tag);  // TODO: tag doesn't need linkage
+            builder.setType(type_info_);
+            env->addSymbol(builder.build());
+        }
+        else
+        {
+            type_info_ = s->type;
+            assert(type_info_ != nullptr && type_info_->getClass() == T_TAG);
+            const Type *impl = dynamic_cast<TagType *>(type_info_)->getImpl();
+            if (impl != nullptr &&
+                ((t == TYPE_STRUCT && impl->getClass() != T_STRUCT) ||
+                 (t == TYPE_UNION && impl->getClass() != T_UNION)))
+            {
+                SyntaxError("tag redefined with different type: " +
+                            tag.toString());
+            }
+        }
+    }
+}
+void sn_struct_union_specifier::beforeDefinition(Environment *&env,
+                                                 const int pass)
+{
+    if (pass == 0)
+    {
         // create new environment for struct/union
         Environment *block = new Environment();
         block->setParent(env);
@@ -2997,11 +3009,11 @@ void sn_postfix_expression::afterChildren(Environment *&env, const int pass)
 {
     if (pass == 1)
     {
-        sn_expression *left = dynamic_cast<sn_expression *>(getFirstChild());
-        sn_expression *right =
-            (getChildrenCount() == 2)
-                ? dynamic_cast<sn_expression *>(getLastChild())
-                : nullptr;
+        sn_expression *left = nullptr;
+        sn_expression *right = nullptr;
+        sn_identifier *right_id = nullptr;
+        const Type *left_impl = nullptr;
+        StringRef member_name;
 
         // []: pointer to object type + integral type
         //
@@ -3010,12 +3022,14 @@ void sn_postfix_expression::afterChildren(Environment *&env, const int pass)
             // used in switch
             Type *left_type = nullptr;
             Type *right_type = nullptr;
-            const Type *impl_type = nullptr;
-            StringRef name;
 
             switch (op)
             {
                 case LSB:
+                    assert(getChildrenCount() == 2);
+                    left = dynamic_cast<sn_expression *>(getFirstChild());
+                    right = dynamic_cast<sn_expression *>(getLastChild());
+
                     left_type = left->type_;
                     right_type = right->type_;
                     if (!(left_type->getClass() == T_POINTER ||
@@ -3032,21 +3046,24 @@ void sn_postfix_expression::afterChildren(Environment *&env, const int pass)
                     type_->setQualifier(left_type->getQualifier());
                     break;
                 case REFER_TO:
+                    assert(getChildrenCount() == 2);
+                    left = dynamic_cast<sn_expression *>(getFirstChild());
+                    right_id = dynamic_cast<sn_identifier *>(getLastChild());
+
                     left_type = left->type_;
-                    right_type = right->type_;
-                    name =
-                        dynamic_cast<sn_identifier *>(right_type)->name_info_;
+                    member_name = right_id->name_info_;
+
                     if (left_type->getClass() != T_TAG)
                     {
                         SyntaxError("expect struct and union type.");
                     }
-                    impl_type = dynamic_cast<TagType *>(left_type)->getImpl();
-                    if (impl_type->getClass() == T_STRUCT ||
-                        impl_type->getClass() == T_UNION)
+                    left_impl = dynamic_cast<TagType *>(left_type)->getImpl();
+                    if (left_impl->getClass() == T_STRUCT ||
+                        left_impl->getClass() == T_UNION)
                     {
                         type_ = TypeUtil::CloneTop(
-                            dynamic_cast<const StructTypeImpl *>(impl_type)
-                                ->getMemberType(name));
+                            dynamic_cast<const StructTypeImpl *>(left_impl)
+                                ->getMemberType(member_name));
                         type_->setQualifier(left_type->getQualifier());
                     }
                     else
@@ -3070,6 +3087,7 @@ void sn_postfix_expression::afterChildren(Environment *&env, const int pass)
             IRStorage &st = env->getStorage();
 
             IRAddress t1, t2, t3;
+            size_t offset;
             switch (op)
             {
                 case LSB:
@@ -3081,20 +3099,17 @@ void sn_postfix_expression::afterChildren(Environment *&env, const int pass)
                     code_info_.append(right->code_info_);
                     t1 = st.addAndGetAddress(
                         IRObjectBuilder()
-                            .withName(StringRef(""))
                             .withValue(IRValueFactory::CreateZero(
                                 type_->getSize(), type_->getAlignment()))
                             .build());
                     t2 = st.addAndGetAddress(
                         IRObjectBuilder()
-                            .withName(StringRef(""))
                             .withValue(IRValueFactory::CreateZero(
                                 right->type_->getSize(),
                                 right->type_->getAlignment()))
                             .build());
                     t3 = st.addAndGetAddress(
                         IRObjectBuilder()
-                            .withName(StringRef(""))
                             .withValue(IRValueFactory::CreateZero(
                                 left->type_->getSize(),
                                 left->type_->getAlignment()))
@@ -3109,25 +3124,32 @@ void sn_postfix_expression::afterChildren(Environment *&env, const int pass)
                     result_info_ = t3;
                     break;
                 case REFER_TO:
-                // mov offsetof(struct, member), t1
-                // add addr(base), t1, t2
+                    // mov offsetof(struct, member), t1
+                    // add addr(base), t1, t2
 
-                // size_t
-                // t1 = st.find(st.put(IRObjectBuilder::Get()
-                //                         .fromType(TypeUtil::Type_size_t())
-                //                         .build()));
-                // reference to member, with qualifiers
-                // t2 = st.find(
-                //     st.put(IRObjectBuilder::Get().fromType(type_).build()));
-                // mov = {OP_TYPE_mov, offsetof(...), t1, {}};
-                /* add = {OP_TYPE_add,
-                   {OP_ADDR_imm, left->result_info_.value},
-                   t1,
-                   t2};
-                   code_info_.push_back(mov);
-                   code_info_.push_back(add);
-                   result_info_ = t2;
-                   break; */
+                    code_info_.append(left->code_info_);
+                    // size_t
+                    t1 = st.addAndGetAddress(
+                        IRObjectBuilder()
+                            .withValue(IRValueFactory::CreateZero(
+                                sizeof(size_t), sizeof(size_t)))
+                            .build());
+                    // pointer or
+                    // reference to member, with qualifiers
+                    t2 = st.addAndGetAddress(
+                        IRObjectBuilder()
+                            .withValue(IRValueFactory::CreateZero(
+                                sizeof(size_t), sizeof(size_t)))
+                            .build());
+                    offset = dynamic_cast<const StructTypeImpl *>(left_impl)
+                                 ->getMemberOffset(member_name);
+                    code_info_.add(IRInstructionBuilder::Mov(
+                        {OP_ADDR_imm, sizeof(void *), {offset}}, t1));
+                    code_info_.add(
+                        IRInstructionBuilder::Add(left->result_info_, t1, t2));
+
+                    result_info_ = t2;
+                    break;
                 case POINT_TO:
                 case OP_INC:
                 case OP_DEC:
@@ -3307,6 +3329,30 @@ const char *DebugSyntaxNode(ESyntaxNodeType nt)
 std::string SyntaxNode::toString() const
 {
     std::string s = DebugSyntaxNode(node_type_);
+    const sn_expression *expr = dynamic_cast<const sn_expression *>(this);
+    const sn_statement *stat = dynamic_cast<const sn_statement *>(this);
+    if (expr)
+    {
+        s += " [";
+        if (expr->type_)
+            s += expr->type_->toString();
+        s += ']';
+        s += "\n{>\n";
+        s += expr->code_info_.toString();
+        s += "\n<}\n";
+    }
+    else if (stat)
+    {
+        s += "\n{>\n";
+        s += stat->code_info_.toString();
+        s += "\n<}\n";
+    }
+    else if (nodeType() == SN_IDENTIFIER)
+    {
+        s += " \"";
+        s += dynamic_cast<const sn_identifier *>(this)->name_info_.toString();
+        s += '"';
+    }
     s += "\n>\n";
     for (auto *child : getChildren())
         s += child->toString();

@@ -232,7 +232,7 @@ class IRObjectBuilder
 
    public:
     IRObjectBuilder()
-        : _symbol_linkage(SYMBOL_LINKAGE_unique),
+        : _symbol_linkage(SYMBOL_LINKAGE_invalid),
           _syntax_storage(NONE),
           _name(),
           _lex_type(NONE)
@@ -264,68 +264,13 @@ class IRObjectBuilder
         _value = value;
         return (*this);
     }
-    IRObject build() const
-    {
-        IRObject o;
-        // name
-        o.name = _name;
-
-        // linkage
-        // _name == "" && !lex_const    => temporary
-        //             && lex_const     => constant
-        // _name != ""                  => symbol
-        if (_name.empty())
-        {
-            switch (_lex_type)
-            {
-                case CONST_CHAR:
-                case CONST_INT:
-                    o.linkage = IR_LINKAGE_inline;  // imm
-                    break;
-                case CONST_FLOAT:
-                case STRING: o.linkage = IR_LINKAGE_static_const; break;
-                default: o.linkage = IR_LINKAGE_local; break;
-            }
-        }
-        else
-        {
-            switch (_symbol_linkage)
-            {
-                case SYMBOL_LINKAGE_unique:
-                    assert(_syntax_storage == NONE || _syntax_storage == AUTO ||
-                           _syntax_storage == REGISTER);
-                    o.linkage = IR_LINKAGE_local;
-                    break;
-                case SYMBOL_LINKAGE_internal:
-                    assert(_syntax_storage == STATIC);
-                    o.linkage = IR_LINKAGE_static;
-                    break;
-                case SYMBOL_LINKAGE_external:
-                    assert(_syntax_storage == NONE ||
-                           _syntax_storage == EXTERN);
-                    if (_syntax_storage == NONE)
-                        o.linkage = IR_LINKAGE_static_export;
-                    else
-                        o.linkage = IR_LINKAGE_extern;
-                    break;
-                default: assert(false); break;
-            }
-        }
-
-        // value
-        o.value = _value;
-        // addr
-        // TODO: addr.width = ?
-        o.addr = {OP_ADDR_invalid, 0, {0}};
-
-        return o;
-    }
+    IRObject build() const;
 };
 // IRStorage answers "tell me the IRAddress of this object!"
 typedef size_t ir_handle_t;
 class IRStorage
 {
-    std::vector<IRObject> _objects;
+    std::list<IRObject> _objects;
 
     uint64_t _alloc;
     uint64_t _tmp_alloc, _tmp_alloc_max;
@@ -405,11 +350,13 @@ class IRCode
     }
     void append(IRCode &code)
     {
-        _code.splice(_code.end(), code._code);
+        _code.insert(_code.end(), code._code.begin(), code._code.end());
+        // _code.splice(_code.end(), code._code);
     }
     void append(std::list<IRInstruction> &code)
     {
-        _code.splice(_code.end(), code);
+        _code.insert(_code.end(), code.begin(), code.end());
+        // _code.splice(_code.end(), code);
     }
     size_t size() const
     {
@@ -419,6 +366,8 @@ class IRCode
     {
         return _code;
     }
+
+    std::string toString() const;
 };
 
 // Preparation:
@@ -443,4 +392,3 @@ class IRUtil
     static std::string LinkageToString(EIRLinkage linkage);
     static StringRef GenerateLabel();
 };
-

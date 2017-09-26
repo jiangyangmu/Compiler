@@ -8,7 +8,8 @@ LD = c++
 
 JCC = jcc
 JCC_HDR = $(wildcard *.h)
-JCC_SRC = parser.cpp env.cpp main.cpp
+JCC_LIB = parser.cpp type.cpp env.cpp
+JCC_SRC = ${JCC_LIB} main.cpp
 JCC_OBJ = $(patsubst %.cpp, ${BUILD_DIR}/%.o, ${JCC_SRC})
 
 JCC_TEST = jcc_test
@@ -16,7 +17,7 @@ JCC_TEST_HDR = ${HDR} $(wildcard test/*.h)
 # make sure we link tester.cpp first
 JCC_TEST_SRC = ${TEST_DIR}/tester.cpp \
 			   $(filter-out ${TEST_DIR}/tester.cpp, $(wildcard ${TEST_DIR}/*.cpp)) \
-			   parser.cpp env.cpp
+			   ${JCC_LIB}
 JCC_TEST_OBJ = $(patsubst %.cpp, ${BUILD_DIR}/%.o, \
 			   $(patsubst ${TEST_DIR}/%.cpp, ${BUILD_DIR}/%.o, \
 			   ${JCC_TEST_SRC}))
@@ -29,7 +30,7 @@ test : ${HOME}/bin/${JCC_TEST}
 	${JCC_TEST}
 
 clean :
-	rm ${BUILD_DIR}/*
+	rm ${BUILD_DIR}/*.o
 
 rebuild : clean all
 

@@ -33,7 +33,7 @@ class Environment : public TreeLike<Environment>
 
     // symbol management
     Symbol *findSymbol(ESymbolNamespace space, StringRef name) const;
-    // Symbol *recursiveFind(ESymbolNamespace space, StringRef name) const;
+    Symbol *findSymbolRecursive(ESymbolNamespace space, StringRef name) const;
     // Symbol *findDefinition(StringRef name) const;
     // Symbol *recursiveFindDefinition(StringRef name) const;
     // Symbol *recursiveFindTypename(StringRef name) const;

@@ -406,6 +406,7 @@ class sn_struct_union_specifier : public SyntaxNode
 
     // Visitor
     virtual void visit(Environment *&env, const int pass);
+    virtual void afterTag(Environment *&env, const int pass);
     virtual void beforeDefinition(Environment *&env, const int pass);
     virtual void afterDefinition(Environment *&env, const int pass);
     virtual void afterChildren(Environment *&env, const int pass);
@@ -957,11 +958,13 @@ class Parser
 
         // SymbolFactory::check();
     }
-    void debugPrint(bool verbose)
+    void DebugPrintEnvironment()
     {
-        if (verbose)
-            __debugPrint(tu->toString());
         env->debugPrint();
+    }
+    void DebugPrintSyntaxTree()
+    {
+        __debugPrint(tu->toString());
     }
     void emit()
     {
