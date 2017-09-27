@@ -29,7 +29,7 @@ void Tester::RunAllTest()
     size_t failed = 0, passed = 0;
     for (auto test : _all_tests)
     {
-        std::cout << "[ RUNNING ] " << test->getName() << std::endl;
+        std::cout << "[ RUN     ] " << test->getName() << std::endl;
         _has_error = false;
         test->setUp();
         test->run();

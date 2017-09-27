@@ -167,6 +167,8 @@ struct IRValue
     }
 };
 
+class IRCode;
+
 //
 // linkage     name    value(as bytes)     addr(auto)
 //
@@ -176,6 +178,8 @@ struct IRObject
     StringRef name;  // name == "" => isTemporary()
     IRValue value;
     IRAddress addr;
+
+    IRCode *code; // only used by function object
 
     std::string toString() const;
 };
@@ -229,13 +233,15 @@ class IRObjectBuilder
     StringRef _name;
     TokenType _lex_type;
     IRValue _value;
+    IRCode *_code;
 
    public:
     IRObjectBuilder()
         : _symbol_linkage(SYMBOL_LINKAGE_invalid),
           _syntax_storage(NONE),
           _name(),
-          _lex_type(NONE)
+          _lex_type(NONE),
+          _code(nullptr)
     {
         _value = IRValueFactory::CreateEmpty();
     }
@@ -262,6 +268,11 @@ class IRObjectBuilder
     IRObjectBuilder &withValue(IRValue value)
     {
         _value = value;
+        return (*this);
+    }
+    IRObjectBuilder &withCode(IRCode *code)
+    {
+        _code = code;
         return (*this);
     }
     IRObject build() const;
@@ -324,8 +335,15 @@ class IRStorage
 
         // width
         // TODO: where to get width info?
-        o.addr.width = std::min(o.value.size, o.value.align);
-        assert(o.addr.width >= 1 && o.addr.width <= 8);
+        if (o.code == nullptr)
+        {
+            o.addr.width = std::min(o.value.size, o.value.align);
+            assert(o.addr.width >= 1 && o.addr.width <= 10);
+        }
+        else
+        {
+            o.addr.width = sizeof(void *);
+        }
     }
 
    public:
@@ -334,7 +352,13 @@ class IRStorage
     IRAddress addAndGetAddress(IRObject o);
     IRAddress getAddressByName(StringRef name) const;
     void collectTemporarySpace();  // call after expression
-    std::list<IRInstruction> generateCode() const;
+
+    const std::list<IRObject> &get() const
+    {
+        return _objects;
+    }
+    std::list<IRInstruction> allocCode() const;
+    std::list<IRInstruction> freeCode() const;
 
     std::string toString() const;
 };
@@ -353,7 +377,7 @@ class IRCode
         _code.insert(_code.end(), code._code.begin(), code._code.end());
         // _code.splice(_code.end(), code._code);
     }
-    void append(std::list<IRInstruction> &code)
+    void append(std::list<IRInstruction> &&code)
     {
         _code.insert(_code.end(), code.begin(), code.end());
         // _code.splice(_code.end(), code);
@@ -375,15 +399,25 @@ class IRCode
 //   2. all code() in function_definition ready
 //
 
-// class IRTranslator
-// {
-//    public:
-//     // traverse tree of env.storage()
-//     void onObject(const IRObject &object);
-//     void onFunction(const StringRef name, const IRCode &code);
-// };
-//
-// class IR_to_x64 : public IRTranslator;
+class IRTranslator
+{
+   public:
+    virtual void onObject(const IRObject &object) = 0;
+    virtual void onInstruction(const IRInstruction &inst) = 0;
+    virtual std::string emit() const = 0;
+};
+
+class IR_to_x64 : public IRTranslator
+{
+    std::string _text;
+    std::string _data;
+    std::string _data_const;
+    std::string _data_bss;
+   public:
+    virtual void onObject(const IRObject &object);
+    virtual void onInstruction(const IRInstruction &inst);
+    virtual std::string emit() const;
+};
 //
 class IRUtil
 {

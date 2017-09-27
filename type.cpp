@@ -209,7 +209,7 @@ void TagType::setImpl(const Type *impl)
     _size = impl->getSize();
     _align = impl->getAlignment();
     unsetProp(TP_INCOMPLETE);
-    DebugLog("TagType: set impl of: " + _name.toString());
+    // DebugLog("TagType: set impl of: " + _name.toString());
 }
 const Type *TagType::getImpl() const
 {

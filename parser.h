@@ -968,6 +968,8 @@ class Parser
     }
     void emit()
     {
-        // env.emit();
+        IR_to_x64 t;
+        env->traverse(t);
+        std::cout << t.emit() << std::endl;
     }
 };

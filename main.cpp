@@ -13,24 +13,16 @@ using namespace std;
 #include "codegen.h"
 
 static bool lflag = false; // show Lexer output
-static bool vflag = false; // show Parser output
-static bool Vflag = false; // show Parser output
 static bool sflag = false; // show Syntax output
 static bool eflag = false; // show Environment output
 
 void options(int &argc, char ** &argv)
 {
     int ch;
-    while ((ch = getopt(argc, argv, "lvseV")) != -1) {
+    while ((ch = getopt(argc, argv, "lse")) != -1) {
         switch (ch) {
             case 'l':
                 lflag = true;
-                break;
-            case 'v':
-                vflag = true;
-                break;
-            case 'V':
-                Vflag = true;
                 break;
             case 's':
                 sflag = true;
@@ -76,7 +68,7 @@ int main(int argc, char *argv[])
         source += '\n', print_source += '\n';
     }
 
-    if (lflag || vflag)
+    if (lflag)
     {
         cout << "-------------- source --------------" << endl;
         cout << print_source << endl;
@@ -121,7 +113,7 @@ int main(int argc, char *argv[])
         return 0;
     }
 
-    if (vflag) cout << "-------------- parser --------------" << endl;
+    if (sflag || eflag) cout << "-------------- parser --------------" << endl;
     Parser p(lex);
     p.parse();
     if (sflag)
@@ -130,7 +122,7 @@ int main(int argc, char *argv[])
         p.DebugPrintEnvironment();
 
     // cout << "-------------- code --------------" << endl;
-    // p.emit();
+    p.emit();
     // cout << Emitted() << endl;
 
     // system("pause");

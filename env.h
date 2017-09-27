@@ -22,8 +22,7 @@ class Environment : public TreeLike<Environment>
 
     static int idgen;
     int id;
-    vector<Symbol *> symbols;
-    // vector<StringRef> slabels, elabels;
+    std::vector<Symbol *> symbols;
     IRStorage storage;
 
    public:
@@ -38,6 +37,7 @@ class Environment : public TreeLike<Environment>
     // Symbol *recursiveFindDefinition(StringRef name) const;
     // Symbol *recursiveFindTypename(StringRef name) const;
     void addSymbol(Symbol *s);
+
     static const Symbol *SameNameSymbolInFileScope(const Environment *env,
                                                    const Type *type,
                                                    const StringRef name);
@@ -51,4 +51,7 @@ class Environment : public TreeLike<Environment>
     {
         return storage;
     }
+
+    // Translation
+    void traverse(IRTranslator &t) const;
 };

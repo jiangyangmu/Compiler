@@ -1635,8 +1635,8 @@ void sn_function_definition::afterParamList(Environment *&env, const int pass)
                 .withSymbolLinkage(func_def->linkage)
                 .withSyntaxStorage(storage_info)
                 .withName(func_def->name)
-                .withValue(
-                    IRValueFactory::CreateZero(sizeof(void *), sizeof(void *)))
+                .withCode(
+                    &dynamic_cast<sn_statement *>(getLastChild())->code_info_)
                 .build());
     }
 }
@@ -2375,8 +2375,7 @@ void sn_compound_statement::afterChildren(Environment *&env, const int pass)
         // declaration_list
         // already handled by declaration
 
-        auto alloc_code = env->getStorage().generateCode();
-        code_info_.append(alloc_code);
+        code_info_.append(env->getStorage().allocCode());
 
         // statement_list
         if (getLastChild()->nodeType() == SN_STATEMENT_LIST)
@@ -2387,6 +2386,8 @@ void sn_compound_statement::afterChildren(Environment *&env, const int pass)
                     dynamic_cast<sn_statement *>(child)->code_info_);
             }
         }
+
+        code_info_.append(env->getStorage().freeCode());
     }
 }
 void sn_expression_statement::afterChildren(Environment *&env, const int pass)

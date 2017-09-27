@@ -364,6 +364,7 @@ IRObject IRObjectBuilder::build() const
 
     // value
     o.value = _value;
+    o.code = _code;
     // addr
     // TODO: addr.width = ?
     o.addr = {OP_ADDR_invalid, 0, {0}};
@@ -399,7 +400,7 @@ void IRStorage::collectTemporarySpace()  // call after expression
 {
     _tmp_alloc = 0;
 }
-std::list<IRInstruction> IRStorage::generateCode() const
+std::list<IRInstruction> IRStorage::allocCode() const
 {
     std::list<IRInstruction> code;
     if (_alloc + _tmp_alloc_max > 0)
@@ -413,6 +414,234 @@ std::list<IRInstruction> IRStorage::generateCode() const
         code.push_back(alloc);
     }
     return code;
+}
+std::list<IRInstruction> IRStorage::freeCode() const
+{
+    std::list<IRInstruction> code;
+    if (_alloc + _tmp_alloc_max > 0)
+    {
+        IRInstruction free = {
+            IR_OPCODE_free,
+            {OP_ADDR_imm, sizeof(void *), {_alloc + _tmp_alloc_max}},
+            {},
+            {},
+            new StringRef("")};
+        code.push_back(free);
+    }
+    return code;
+}
+
+void IR_to_x64::onObject(const IRObject &o)
+{
+    // function object
+    if (o.code != nullptr)
+    {
+        assert(o.linkage == IR_LINKAGE_static ||
+                o.linkage == IR_LINKAGE_static_export);
+        if (o.linkage == IR_LINKAGE_static_export)
+            _text += "\t.global _" + o.name.toString() + "\n";
+        _text += "_" + o.name.toString() + ":\n";
+        for (auto const &c : o.code->get())
+        {
+            onInstruction(c);
+            // _text += "\t" + c.toString() + "\n";
+        }
+        return;
+    }
+
+    // data object
+    if (o.linkage == IR_LINKAGE_static)
+    {
+        _data += "\t.align " + std::to_string(o.value.align) + "\n";
+        _data += o.name.toString() + ":\n";
+        _data += "\t.space " + std::to_string(o.value.size) + "\n";
+    }
+    else if (o.linkage == IR_LINKAGE_static_const)
+    {
+        _data_const += "\t.align " + std::to_string(o.value.align) + "\n";
+        _data_const += o.name.toString() + ":\n";
+        _data_const += "\t.space " + std::to_string(o.value.size) + "\n";
+    }
+    else if (o.linkage == IR_LINKAGE_static_export)
+    {
+        _data += "\t.global " + o.name.toString() + "\n";
+        _data += "\t.align " + std::to_string(o.value.align) + "\n";
+        _data += o.name.toString() + ":\n";
+        _data += "\t.space " + std::to_string(o.value.size) + "\n";
+    }
+}
+std::string x64_address(const IRAddress &addr)
+{
+    if (addr.mode == OP_ADDR_imm)
+        return std::to_string(addr.imm);
+    else if (addr.mode == OP_ADDR_label)
+        return "offset flat: " + addr.label->toString();
+    else
+    {
+        assert(addr.mode == OP_ADDR_mem);
+        std::string w;
+        switch (addr.width)
+        {
+            case 1: w = "BYTE"; break;
+            case 2: w = "WORD"; break;
+            case 4: w = "DWORD"; break;
+            case 8: w = "QWORD"; break;
+            default: assert(false); break;
+        }
+        return w + " PTR [-" + std::to_string(addr.mem) + "+rbp]";
+    }
+}
+std::string x64_loaded_address(const IRAddress &addr, const size_t reg_index,
+                          std::string &code)
+{
+    assert(addr.mode != OP_ADDR_invalid);
+    std::string x64addr = x64_address(addr);
+
+    if (addr.mode == OP_ADDR_imm)
+        return x64addr;
+
+    std::string reg;
+    {
+        std::string pre, post;
+        switch (addr.width)
+        {
+            case 1: post = "l"; break;
+            case 2: post = "x"; break;
+            case 4: pre = "e"; post = "x"; break;
+            case 8: pre = "r"; post = "x"; break;
+            default: assert(false); break;
+        }
+        switch (reg_index)
+        {
+            case 0: reg = pre + "a" + post; break;
+            case 1: reg = pre + "b" + post; break;
+            case 2: reg = pre + "c" + post; break;
+            default: assert(false); break;
+        }
+    }
+
+    if (addr.mode == OP_ADDR_label)
+    {
+        code += "\tmov " + reg + ", " + x64addr + "\n";
+        return reg;
+    }
+    else
+    {
+        assert(addr.mode == OP_ADDR_mem);
+        code += "\tmov " + reg + ", " + x64addr + "\n";
+        return reg;
+    }
+}
+// how to alloc register ?
+void IR_to_x64::onInstruction(const IRInstruction &inst)
+{
+    // rax, rcx, rbx
+    std::string reg;
+    switch (inst.op)
+    {
+        case IR_OPCODE_alloc:
+            _text += "\tpush rbp\n";
+            _text += "\tmov rbp, rsp\n";
+            assert(inst.arg1.mode == OP_ADDR_imm);
+            _text += "\tsub rsp, " + std::to_string(inst.arg1.imm) + "\n";
+            break;
+        case IR_OPCODE_free:
+            _text += "\tadd rsp, " + std::to_string(inst.arg1.imm) + "\n";
+            _text += "\tpop rbp\n";
+            break;
+        case IR_OPCODE_cmp:
+            _text += "\tcmp "
+                + x64_loaded_address(inst.arg1, 0, _text) + ", "
+                + x64_loaded_address(inst.arg2, 1, _text) + "\n";
+            break;
+        case IR_OPCODE_mov:
+            _text += "\tmov "
+                + x64_address(inst.arg2) + ", "
+                + x64_loaded_address(inst.arg1, 0, _text) + "\n";
+            break;
+        case IR_OPCODE_add:
+            reg = x64_loaded_address(inst.arg3, 0, _text);
+            _text += "\tmov "
+                + reg + ", "
+                + x64_loaded_address(inst.arg1, 1, _text) + "\n";
+            _text += "\tadd "
+                + reg + ", "
+                + x64_loaded_address(inst.arg2, 2, _text) + "\n";
+            break;
+        case IR_OPCODE_mul:
+            reg = x64_loaded_address(inst.arg3, 0, _text);
+            _text += "\tmov "
+                + reg + ", "
+                + x64_loaded_address(inst.arg1, 1, _text) + "\n";
+            _text += "\tmul "
+                + reg + ", "
+                + x64_loaded_address(inst.arg2, 2, _text) + "\n";
+            break;
+        case IR_OPCODE_jmp:
+        case IR_OPCODE_je:
+        case IR_OPCODE_jl:
+        case IR_OPCODE_jle:
+        case IR_OPCODE_jg:
+        case IR_OPCODE_jge:
+        case IR_OPCODE_jb:
+        case IR_OPCODE_jbe:
+        case IR_OPCODE_ja:
+        case IR_OPCODE_jae:
+        case IR_OPCODE_or:
+        case IR_OPCODE_xor:
+        case IR_OPCODE_and:
+        case IR_OPCODE_not:
+        case IR_OPCODE_shl:
+        case IR_OPCODE_shr:
+        case IR_OPCODE_sub:
+        case IR_OPCODE_div:
+        case IR_OPCODE_mod:
+        case IR_OPCODE_inc:
+        case IR_OPCODE_dec:
+        case IR_OPCODE_neg:
+        case IR_OPCODE_ref:
+        case IR_OPCODE_deref:
+        case IR_OPCODE_param:
+        case IR_OPCODE_call:
+        case IR_OPCODE_ret:
+        case IR_OPCODE_fld:
+        case IR_OPCODE_fst:
+        case IR_OPCODE_fabs:
+        case IR_OPCODE_fchs:
+        case IR_OPCODE_fadd:
+        case IR_OPCODE_fsub:
+        case IR_OPCODE_fmul:
+        case IR_OPCODE_fdiv:
+        case IR_OPCODE_invalid:
+            _text += "\tnot implemented: " + inst.toString() + "\n";
+            break;
+    }
+}
+std::string IR_to_x64::emit() const
+{
+    std::string s;
+    if (!_data_const.empty())
+    {
+        s += "\t.text\n";
+        s += _data_const;
+    }
+    if (!_text.empty())
+    {
+        s += "\t.text\n";
+        s += _text;
+    }
+    if (!_data_bss.empty())
+    {
+        s += "\t.data\n";
+        s += "\t.bss\n";
+        s += _data_bss;
+    }
+    if (!_data.empty())
+    {
+        s += "\t.data\n";
+        s += _data;
+    }
+    return s;
 }
 
 std::string IRUtil::OpcodeToString(EIROpcode op)
@@ -500,7 +729,8 @@ Symbol *Environment::findSymbol(ESymbolNamespace space, StringRef name) const
     }
     return nullptr;
 }
-Symbol *Environment::findSymbolRecursive(ESymbolNamespace space, StringRef name) const
+Symbol *Environment::findSymbolRecursive(ESymbolNamespace space,
+                                         StringRef name) const
 {
     const Environment *e = this;
     Symbol *s = nullptr;
@@ -589,6 +819,18 @@ const Symbol *Environment::SameNameSymbolInFileScope(const Environment *env,
         return s;
     else
         return nullptr;
+}
+void Environment::traverse(IRTranslator &t) const
+{
+    // all objects and function objects
+    for (auto &o : storage.get())
+    {
+        t.onObject(o);
+    }
+    for (auto *child : getChildren())
+    {
+        child->traverse(t);
+    }
 }
 
 // -------- code generation --------
