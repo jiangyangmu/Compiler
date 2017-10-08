@@ -955,6 +955,7 @@ class Parser
         env = new Environment();
         tu->visit(env, 0);
         tu->visit(env, 1);
+        tu->visit(env, 2);
 
         // SymbolFactory::check();
     }

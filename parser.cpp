@@ -2356,7 +2356,7 @@ void sn_compound_statement::visit(Environment *&env, const int pass)
 }
 void sn_compound_statement::afterDeclarations(Environment *&env, const int pass)
 {
-    if (pass == 1)
+    if (pass == 2)
     {
         // auto code = env->getStorage().generateCode();
         // code_info_.append(code);
@@ -2364,7 +2364,7 @@ void sn_compound_statement::afterDeclarations(Environment *&env, const int pass)
 }
 void sn_compound_statement::afterChildren(Environment *&env, const int pass)
 {
-    if (pass == 1)
+    if (pass == 2)
     {
         if (getChildrenCount() == 0)
             return;
@@ -2389,7 +2389,7 @@ void sn_compound_statement::afterChildren(Environment *&env, const int pass)
 }
 void sn_expression_statement::afterChildren(Environment *&env, const int pass)
 {
-    if (pass == 1)
+    if (pass == 2)
     {
         if (getChildrenCount() != 0)
         {
@@ -2400,7 +2400,7 @@ void sn_expression_statement::afterChildren(Environment *&env, const int pass)
 }
 void sn_selection_statement::afterChildren(Environment *&env, const int pass)
 {
-    if (pass == 1)
+    if (pass == 2)
     {
         if (t == IF)
         {
@@ -2445,14 +2445,14 @@ void sn_selection_statement::afterChildren(Environment *&env, const int pass)
 }
 void sn_iteration_statement::afterChildren(Environment *&env, const int pass)
 {
-    if (pass == 1)
+    if (pass == 2)
     {
         SyntaxError("not implemented");
     }
 }
 void sn_jump_statement::afterChildren(Environment *&env, const int pass)
 {
-    if (pass == 1)
+    if (pass == 2)
     {
         SyntaxError("not implemented");
     }
@@ -2464,7 +2464,7 @@ void sn_jump_statement::afterChildren(Environment *&env, const int pass)
 // DEBUG default, should not implement
 void sn_expression::afterChildren(Environment *&env, const int pass)
 {
-    if (pass == 1)
+    if (pass == 2)
     {
         SyntaxWarning(std::string(DebugSyntaxNode(nodeType())) +
                       ": not implemented, use default behavior.");
@@ -2479,204 +2479,375 @@ void sn_expression::afterChildren(Environment *&env, const int pass)
 }
 void sn_comma_expression::afterChildren(Environment *&env, const int pass)
 {
-    if (pass == 1)
+    if (pass == 1)  // type derivation
     {
-        // type derivation
+        type_ = dynamic_cast<sn_expression *>(getLastChild())->type_;
+    }
+    else if (pass == 2)  // code generation
+    {
+        for (auto *child : getChildren())
         {
-            type_ = dynamic_cast<sn_expression *>(getLastChild())->type_;
+            sn_expression *expr = dynamic_cast<sn_expression *>(child);
+            code_info_.append(expr->code_info_);
         }
-
-        // code generation
-        {
-            for (auto *child : getChildren())
-            {
-                sn_expression *expr = dynamic_cast<sn_expression *>(child);
-                code_info_.append(expr->code_info_);
-            }
-            result_info_ =
-                dynamic_cast<sn_expression *>(getLastChild())->result_info_;
-        }
+        result_info_ =
+            dynamic_cast<sn_expression *>(getLastChild())->result_info_;
     }
 }
 void sn_assign_expression::afterChildren(Environment *&env, const int pass)
 {
-    if (pass == 1)
+    if (pass == 1)  // type derivation
     {
-        // type derivation
+        sn_expression *to = dynamic_cast<sn_expression *>(getFirstChild());
+        sn_expression *from = dynamic_cast<sn_expression *>(getLastChild());
+
+        // TODO: this returns Type *, use it.
+        if (!TypeConversion::ByAssignmentConversion(to->type_, from->type_))
+            SyntaxError("can't do implicit conversion.");
+        if (!TypeUtil::Equal(to->type_, from->type_))
         {
-            sn_expression *to = dynamic_cast<sn_expression *>(getFirstChild());
-            sn_expression *from = dynamic_cast<sn_expression *>(getLastChild());
+            sn_cast_expression *cast_expr = new sn_cast_expression();
+            cast_expr->type_ = to->type_;
+            cast_expr->addChild(from);
 
-            // TODO: this returns Type *, use it.
-            if (!TypeConversion::ByAssignmentConversion(to->type_, from->type_))
-                SyntaxError("can't do implicit conversion.");
-            if (!TypeUtil::Equal(to->type_, from->type_))
-            {
-                sn_cast_expression *cast_expr = new sn_cast_expression();
-                cast_expr->type_ = to->type_;
-                cast_expr->addChild(from);
+            // XXX: this is bad!! split code generation to pass 2
+            cast_expr->afterChildren(env, pass);
 
-                // XXX: this is bad!! split code generation to pass 2
-                cast_expr->afterChildren(env, pass);
-
-                from = cast_expr;
-                replaceChild(1, from);  // XXX: syntax tree is modified here.
-            }
-
-            type_ = to->type_;
+            from = cast_expr;
+            replaceChild(1, from);  // XXX: syntax tree is modified here.
         }
 
-        // code generation
-        {
-            sn_expression *left =
-                dynamic_cast<sn_expression *>(getFirstChild());
-            sn_expression *right =
-                dynamic_cast<sn_expression *>(getLastChild());
+        type_ = to->type_;
+    }
+    else if (pass == 2)  // code generation
+    {
+        sn_expression *left = dynamic_cast<sn_expression *>(getFirstChild());
+        sn_expression *right = dynamic_cast<sn_expression *>(getLastChild());
 
-            switch (op)
-            {
-                case ASSIGN:
-                    code_info_.append(left->code_info_);
-                    code_info_.append(right->code_info_);
-                    code_info_.add(IRInstructionBuilder::Mov(
-                        right->result_info_, left->result_info_));
-                    result_info_ = left->result_info_;
-                    break;
-                default: SyntaxError("not implemented."); break;
-            }
+        switch (op)
+        {
+            case ASSIGN:
+                code_info_.append(left->code_info_);
+                code_info_.append(right->code_info_);
+                code_info_.add(IRInstructionBuilder::Mov(right->result_info_,
+                                                         left->result_info_));
+                result_info_ = left->result_info_;
+                break;
+            default: SyntaxError("not implemented."); break;
         }
     }
 }
 void sn_cond_expression::afterChildren(Environment *&env, const int pass)
 {
-    if (pass == 1)
+    if (pass == 1)  // type derivation
     {
-        // type derivation
+        sn_expression *left = dynamic_cast<sn_expression *>(getChild(1));
+        sn_expression *right = dynamic_cast<sn_expression *>(getChild(2));
+
+        Type *result =
+            TypeConversion::CondExprConversion(left->type_, right->type_);
+        if (!TypeUtil::Equal(result, left->type_))
         {
-            sn_expression *left = dynamic_cast<sn_expression *>(getChild(1));
-            sn_expression *right = dynamic_cast<sn_expression *>(getChild(2));
-
-            Type *result =
-                TypeConversion::CondExprConversion(left->type_, right->type_);
-            if (!TypeUtil::Equal(result, left->type_))
-            {
-                sn_cast_expression *cast_expr = new sn_cast_expression();
-                cast_expr->type_ = result;
-                cast_expr->addChild(left);
-                left = cast_expr;
-                replaceChild(1, left);  // XXX: syntax tree is modified here.
-            }
-            if (!TypeUtil::Equal(result, right->type_))
-            {
-                sn_cast_expression *cast_expr = new sn_cast_expression();
-                cast_expr->type_ = result;
-                cast_expr->addChild(right);
-                right = cast_expr;
-                replaceChild(2, right);  // XXX: syntax tree is modified here.
-            }
-
-            type_ = result;
+            sn_cast_expression *cast_expr = new sn_cast_expression();
+            cast_expr->type_ = result;
+            cast_expr->addChild(left);
+            left = cast_expr;
+            replaceChild(1, left);  // XXX: syntax tree is modified here.
         }
+        if (!TypeUtil::Equal(result, right->type_))
+        {
+            sn_cast_expression *cast_expr = new sn_cast_expression();
+            cast_expr->type_ = result;
+            cast_expr->addChild(right);
+            right = cast_expr;
+            replaceChild(2, right);  // XXX: syntax tree is modified here.
+        }
+
+        type_ = result;
     }
 }
 void sn_or_expression::afterChildren(Environment *&env, const int pass)
 {
-    if (pass == 1)
+    if (pass == 1)  // type derivation
     {
-        // type derivation
-        {
-            type_ = new IntegerType("i");
-        }
+        type_ = new IntegerType("i");
     }
 }
 void sn_and_expression::afterChildren(Environment *&env, const int pass)
 {
-    if (pass == 1)
+    if (pass == 1)  // type derivation
     {
-        // type derivation
-        {
-            type_ = new IntegerType("i");
-        }
+        type_ = new IntegerType("i");
     }
 }
 void sn_bitor_expression::afterChildren(Environment *&env, const int pass)
 {
-    if (pass == 1)
+    if (pass == 1)  // type derivation
     {
-        // type derivation
+        sn_expression *left = dynamic_cast<sn_expression *>(getFirstChild());
+        sn_expression *right = dynamic_cast<sn_expression *>(getLastChild());
+
+        Type *result = TypeConversion::UsualArithmeticConversion(left->type_,
+                                                                 right->type_);
+        if (!TypeUtil::Equal(result, left->type_))
         {
-            sn_expression *left =
-                dynamic_cast<sn_expression *>(getFirstChild());
-            sn_expression *right =
-                dynamic_cast<sn_expression *>(getLastChild());
-
-            Type *result = TypeConversion::UsualArithmeticConversion(
-                left->type_, right->type_);
-            if (!TypeUtil::Equal(result, left->type_))
-            {
-                sn_cast_expression *cast_expr = new sn_cast_expression();
-                cast_expr->type_ = result;
-                cast_expr->addChild(left);
-                left = cast_expr;
-                replaceChild(0, left);  // XXX: syntax tree is modified here.
-            }
-            if (!TypeUtil::Equal(result, right->type_))
-            {
-                sn_cast_expression *cast_expr = new sn_cast_expression();
-                cast_expr->type_ = result;
-                cast_expr->addChild(right);
-                right = cast_expr;
-                replaceChild(1, right);  // XXX: syntax tree is modified here.
-            }
-
-            type_ = result;
+            sn_cast_expression *cast_expr = new sn_cast_expression();
+            cast_expr->type_ = result;
+            cast_expr->addChild(left);
+            left = cast_expr;
+            replaceChild(0, left);  // XXX: syntax tree is modified here.
         }
+        if (!TypeUtil::Equal(result, right->type_))
+        {
+            sn_cast_expression *cast_expr = new sn_cast_expression();
+            cast_expr->type_ = result;
+            cast_expr->addChild(right);
+            right = cast_expr;
+            replaceChild(1, right);  // XXX: syntax tree is modified here.
+        }
+
+        type_ = result;
     }
 }
 void sn_bitxor_expression::afterChildren(Environment *&env, const int pass)
 {
-    if (pass == 1)
+    if (pass == 1)  // type derivation
     {
-        // type derivation
+        sn_expression *left = dynamic_cast<sn_expression *>(getFirstChild());
+        sn_expression *right = dynamic_cast<sn_expression *>(getLastChild());
+
+        Type *result = TypeConversion::UsualArithmeticConversion(left->type_,
+                                                                 right->type_);
+        if (!TypeUtil::Equal(result, left->type_))
         {
-            sn_expression *left =
-                dynamic_cast<sn_expression *>(getFirstChild());
-            sn_expression *right =
-                dynamic_cast<sn_expression *>(getLastChild());
-
-            Type *result = TypeConversion::UsualArithmeticConversion(
-                left->type_, right->type_);
-            if (!TypeUtil::Equal(result, left->type_))
-            {
-                sn_cast_expression *cast_expr = new sn_cast_expression();
-                cast_expr->type_ = result;
-                cast_expr->addChild(left);
-                left = cast_expr;
-                replaceChild(0, left);  // XXX: syntax tree is modified here.
-            }
-            if (!TypeUtil::Equal(result, right->type_))
-            {
-                sn_cast_expression *cast_expr = new sn_cast_expression();
-                cast_expr->type_ = result;
-                cast_expr->addChild(right);
-                right = cast_expr;
-                replaceChild(1, right);  // XXX: syntax tree is modified here.
-            }
-
-            type_ = result;
+            sn_cast_expression *cast_expr = new sn_cast_expression();
+            cast_expr->type_ = result;
+            cast_expr->addChild(left);
+            left = cast_expr;
+            replaceChild(0, left);  // XXX: syntax tree is modified here.
         }
+        if (!TypeUtil::Equal(result, right->type_))
+        {
+            sn_cast_expression *cast_expr = new sn_cast_expression();
+            cast_expr->type_ = result;
+            cast_expr->addChild(right);
+            right = cast_expr;
+            replaceChild(1, right);  // XXX: syntax tree is modified here.
+        }
+
+        type_ = result;
     }
 }
 void sn_bitand_expression::afterChildren(Environment *&env, const int pass)
 {
-    if (pass == 1)
+    if (pass == 1)  // type derivation
     {
-        // type derivation
+        sn_expression *left = dynamic_cast<sn_expression *>(getFirstChild());
+        sn_expression *right = dynamic_cast<sn_expression *>(getLastChild());
+
+        Type *result = TypeConversion::UsualArithmeticConversion(left->type_,
+                                                                 right->type_);
+        if (!TypeUtil::Equal(result, left->type_))
         {
-            sn_expression *left =
-                dynamic_cast<sn_expression *>(getFirstChild());
-            sn_expression *right =
-                dynamic_cast<sn_expression *>(getLastChild());
+            sn_cast_expression *cast_expr = new sn_cast_expression();
+            cast_expr->type_ = result;
+            cast_expr->addChild(left);
+            left = cast_expr;
+            replaceChild(0, left);  // XXX: syntax tree is modified here.
+        }
+        if (!TypeUtil::Equal(result, right->type_))
+        {
+            sn_cast_expression *cast_expr = new sn_cast_expression();
+            cast_expr->type_ = result;
+            cast_expr->addChild(right);
+            right = cast_expr;
+            replaceChild(1, right);  // XXX: syntax tree is modified here.
+        }
+
+        type_ = result;
+    }
+}
+void sn_eq_expression::afterChildren(Environment *&env, const int pass)
+{
+    if (pass == 1)  // type derivation
+    {
+        sn_expression *left = dynamic_cast<sn_expression *>(getFirstChild());
+        sn_expression *right = dynamic_cast<sn_expression *>(getLastChild());
+
+        if (left->type_->isArithmetic() && right->type_->isArithmetic())
+        {
+            Type *result = TypeConversion::UsualArithmeticConversion(
+                left->type_, right->type_);
+            if (!TypeUtil::Equal(result, left->type_))
+            {
+                sn_cast_expression *cast_expr = new sn_cast_expression();
+                cast_expr->type_ = result;
+                cast_expr->addChild(left);
+                left = cast_expr;
+                replaceChild(0,
+                             left);  // XXX: syntax tree is modified here.
+            }
+            if (!TypeUtil::Equal(result, right->type_))
+            {
+                sn_cast_expression *cast_expr = new sn_cast_expression();
+                cast_expr->type_ = result;
+                cast_expr->addChild(right);
+                right = cast_expr;
+                replaceChild(1,
+                             right);  // XXX: syntax tree is modified here.
+            }
+        }
+        else if (left->type_->getClass() == T_POINTER &&
+                 right->type_->getClass() == T_POINTER)
+        {
+            // TODO: check c89-3.3.9-constraints/semantics
+        }
+        else
+        {
+            SyntaxError("can't compare, type mismatch or not support.");
+        }
+
+        type_ = new IntegerType("i");
+    }
+}
+void sn_rel_expression::afterChildren(Environment *&env, const int pass)
+{
+    if (pass == 1)  // type derivation
+    {
+        sn_expression *left = dynamic_cast<sn_expression *>(getFirstChild());
+        sn_expression *right = dynamic_cast<sn_expression *>(getLastChild());
+
+        if (left->type_->isArithmetic() && right->type_->isArithmetic())
+        {
+            Type *result = TypeConversion::UsualArithmeticConversion(
+                left->type_, right->type_);
+            if (!TypeUtil::Equal(result, left->type_))
+            {
+                sn_cast_expression *cast_expr = new sn_cast_expression();
+                cast_expr->type_ = result;
+                cast_expr->addChild(left);
+                left = cast_expr;
+                replaceChild(0,
+                             left);  // XXX: syntax tree is modified here.
+            }
+            if (!TypeUtil::Equal(result, right->type_))
+            {
+                sn_cast_expression *cast_expr = new sn_cast_expression();
+                cast_expr->type_ = result;
+                cast_expr->addChild(right);
+                right = cast_expr;
+                replaceChild(1,
+                             right);  // XXX: syntax tree is modified here.
+            }
+        }
+        else if (left->type_->getClass() == T_POINTER &&
+                 right->type_->getClass() == T_POINTER)
+        {
+            // TODO: check c89-3.3.8-constraints/semantics
+        }
+        else
+        {
+            SyntaxError("can't compare, type mismatch or not support.");
+        }
+
+        type_ = new IntegerType("i");
+    }
+}
+void sn_shift_expression::afterChildren(Environment *&env, const int pass)
+{
+    if (pass == 1)  // type derivation
+    {
+        sn_expression *left = dynamic_cast<sn_expression *>(getFirstChild());
+        sn_expression *right = dynamic_cast<sn_expression *>(getLastChild());
+
+        if (!left->type_->isIntegral() || !right->type_->isIntegral())
+        {
+            SyntaxError("expect integral type.");
+        }
+        Type *ltype = TypeConversion::IntegerPromotion(left->type_);
+        Type *rtype = TypeConversion::IntegerPromotion(right->type_);
+        if (!TypeUtil::Equal(ltype, left->type_))
+        {
+            sn_cast_expression *cast_expr = new sn_cast_expression();
+            cast_expr->type_ = ltype;
+            cast_expr->addChild(left);
+            left = cast_expr;
+            replaceChild(0, left);  // XXX: syntax tree is modified here.
+        }
+        if (!TypeUtil::Equal(rtype, right->type_))
+        {
+            sn_cast_expression *cast_expr = new sn_cast_expression();
+            cast_expr->type_ = rtype;
+            cast_expr->addChild(right);
+            right = cast_expr;
+            replaceChild(1, right);  // XXX: syntax tree is modified here.
+        }
+
+        type_ = ltype;
+    }
+}
+void sn_add_expression::afterChildren(Environment *&env, const int pass)
+{
+    if (pass == 1)  // type derivation
+    {
+        sn_expression *left = dynamic_cast<sn_expression *>(getFirstChild());
+        sn_expression *right = dynamic_cast<sn_expression *>(getLastChild());
+
+        if (left->type_->isArithmetic() && right->type_->isArithmetic())
+        {
+            Type *result = TypeConversion::UsualArithmeticConversion(
+                left->type_, right->type_);
+            if (!TypeUtil::Equal(result, left->type_))
+            {
+                sn_cast_expression *cast_expr = new sn_cast_expression();
+                cast_expr->type_ = result;
+                cast_expr->addChild(left);
+                left = cast_expr;
+                replaceChild(0,
+                             left);  // XXX: syntax tree is modified here.
+            }
+            if (!TypeUtil::Equal(result, right->type_))
+            {
+                sn_cast_expression *cast_expr = new sn_cast_expression();
+                cast_expr->type_ = result;
+                cast_expr->addChild(right);
+                right = cast_expr;
+                replaceChild(1,
+                             right);  // XXX: syntax tree is modified here.
+            }
+        }
+        else if (left->type_->getClass() == T_POINTER &&
+                 right->type_->getClass() == T_POINTER)
+        {
+            // TODO: check c89-3.3.6-constraints/semantics
+        }
+        else if (left->type_->getClass() == T_POINTER &&
+                 right->type_->isArithmetic())
+        {
+            // TODO: check c89-3.3.6-constraints/semantics
+        }
+        else
+        {
+            SyntaxError("can't add these two types.");
+        }
+
+        type_ = left->type_;  // TODO: fix it if do pointer add
+    }
+}
+void sn_mul_expression::afterChildren(Environment *&env, const int pass)
+{
+    if (pass == 1)  // type derivation
+    {
+        sn_expression *left = dynamic_cast<sn_expression *>(getFirstChild());
+        sn_expression *right = dynamic_cast<sn_expression *>(getLastChild());
+
+        if (left->type_->isArithmetic() && right->type_->isArithmetic())
+        {
+            if (op == OP_MOD &&
+                (!left->type_->isIntegral() || !right->type_->isIntegral()))
+            {
+                SyntaxError("can't mod these two types.");
+            }
 
             Type *result = TypeConversion::UsualArithmeticConversion(
                 left->type_, right->type_);
@@ -2686,7 +2857,8 @@ void sn_bitand_expression::afterChildren(Environment *&env, const int pass)
                 cast_expr->type_ = result;
                 cast_expr->addChild(left);
                 left = cast_expr;
-                replaceChild(0, left);  // XXX: syntax tree is modified here.
+                replaceChild(0,
+                             left);  // XXX: syntax tree is modified here.
             }
             if (!TypeUtil::Equal(result, right->type_))
             {
@@ -2694,670 +2866,414 @@ void sn_bitand_expression::afterChildren(Environment *&env, const int pass)
                 cast_expr->type_ = result;
                 cast_expr->addChild(right);
                 right = cast_expr;
-                replaceChild(1, right);  // XXX: syntax tree is modified here.
+                replaceChild(1,
+                             right);  // XXX: syntax tree is modified here.
             }
-
-            type_ = result;
         }
-    }
-}
-void sn_eq_expression::afterChildren(Environment *&env, const int pass)
-{
-    if (pass == 1)
-    {
-        // type derivation
+        else
         {
-            sn_expression *left =
-                dynamic_cast<sn_expression *>(getFirstChild());
-            sn_expression *right =
-                dynamic_cast<sn_expression *>(getLastChild());
-
-            if (left->type_->isArithmetic() && right->type_->isArithmetic())
-            {
-                Type *result = TypeConversion::UsualArithmeticConversion(
-                    left->type_, right->type_);
-                if (!TypeUtil::Equal(result, left->type_))
-                {
-                    sn_cast_expression *cast_expr = new sn_cast_expression();
-                    cast_expr->type_ = result;
-                    cast_expr->addChild(left);
-                    left = cast_expr;
-                    replaceChild(0,
-                                 left);  // XXX: syntax tree is modified here.
-                }
-                if (!TypeUtil::Equal(result, right->type_))
-                {
-                    sn_cast_expression *cast_expr = new sn_cast_expression();
-                    cast_expr->type_ = result;
-                    cast_expr->addChild(right);
-                    right = cast_expr;
-                    replaceChild(1,
-                                 right);  // XXX: syntax tree is modified here.
-                }
-            }
-            else if (left->type_->getClass() == T_POINTER &&
-                     right->type_->getClass() == T_POINTER)
-            {
-                // TODO: check c89-3.3.9-constraints/semantics
-            }
-            else
-            {
-                SyntaxError("can't compare, type mismatch or not support.");
-            }
-
-            type_ = new IntegerType("i");
+            SyntaxError("can't mul/div these two types.");
         }
-    }
-}
-void sn_rel_expression::afterChildren(Environment *&env, const int pass)
-{
-    if (pass == 1)
-    {
-        // type derivation
-        {
-            sn_expression *left =
-                dynamic_cast<sn_expression *>(getFirstChild());
-            sn_expression *right =
-                dynamic_cast<sn_expression *>(getLastChild());
 
-            if (left->type_->isArithmetic() && right->type_->isArithmetic())
-            {
-                Type *result = TypeConversion::UsualArithmeticConversion(
-                    left->type_, right->type_);
-                if (!TypeUtil::Equal(result, left->type_))
-                {
-                    sn_cast_expression *cast_expr = new sn_cast_expression();
-                    cast_expr->type_ = result;
-                    cast_expr->addChild(left);
-                    left = cast_expr;
-                    replaceChild(0,
-                                 left);  // XXX: syntax tree is modified here.
-                }
-                if (!TypeUtil::Equal(result, right->type_))
-                {
-                    sn_cast_expression *cast_expr = new sn_cast_expression();
-                    cast_expr->type_ = result;
-                    cast_expr->addChild(right);
-                    right = cast_expr;
-                    replaceChild(1,
-                                 right);  // XXX: syntax tree is modified here.
-                }
-            }
-            else if (left->type_->getClass() == T_POINTER &&
-                     right->type_->getClass() == T_POINTER)
-            {
-                // TODO: check c89-3.3.8-constraints/semantics
-            }
-            else
-            {
-                SyntaxError("can't compare, type mismatch or not support.");
-            }
-
-            type_ = new IntegerType("i");
-        }
-    }
-}
-void sn_shift_expression::afterChildren(Environment *&env, const int pass)
-{
-    if (pass == 1)
-    {
-        // type derivation
-        {
-            sn_expression *left =
-                dynamic_cast<sn_expression *>(getFirstChild());
-            sn_expression *right =
-                dynamic_cast<sn_expression *>(getLastChild());
-
-            if (!left->type_->isIntegral() || !right->type_->isIntegral())
-            {
-                SyntaxError("expect integral type.");
-            }
-            Type *ltype = TypeConversion::IntegerPromotion(left->type_);
-            Type *rtype = TypeConversion::IntegerPromotion(right->type_);
-            if (!TypeUtil::Equal(ltype, left->type_))
-            {
-                sn_cast_expression *cast_expr = new sn_cast_expression();
-                cast_expr->type_ = ltype;
-                cast_expr->addChild(left);
-                left = cast_expr;
-                replaceChild(0, left);  // XXX: syntax tree is modified here.
-            }
-            if (!TypeUtil::Equal(rtype, right->type_))
-            {
-                sn_cast_expression *cast_expr = new sn_cast_expression();
-                cast_expr->type_ = rtype;
-                cast_expr->addChild(right);
-                right = cast_expr;
-                replaceChild(1, right);  // XXX: syntax tree is modified here.
-            }
-
-            type_ = ltype;
-        }
-    }
-}
-void sn_add_expression::afterChildren(Environment *&env, const int pass)
-{
-    if (pass == 1)
-    {
-        // type derivation
-        {
-            sn_expression *left =
-                dynamic_cast<sn_expression *>(getFirstChild());
-            sn_expression *right =
-                dynamic_cast<sn_expression *>(getLastChild());
-
-            if (left->type_->isArithmetic() && right->type_->isArithmetic())
-            {
-                Type *result = TypeConversion::UsualArithmeticConversion(
-                    left->type_, right->type_);
-                if (!TypeUtil::Equal(result, left->type_))
-                {
-                    sn_cast_expression *cast_expr = new sn_cast_expression();
-                    cast_expr->type_ = result;
-                    cast_expr->addChild(left);
-                    left = cast_expr;
-                    replaceChild(0,
-                                 left);  // XXX: syntax tree is modified here.
-                }
-                if (!TypeUtil::Equal(result, right->type_))
-                {
-                    sn_cast_expression *cast_expr = new sn_cast_expression();
-                    cast_expr->type_ = result;
-                    cast_expr->addChild(right);
-                    right = cast_expr;
-                    replaceChild(1,
-                                 right);  // XXX: syntax tree is modified here.
-                }
-            }
-            else if (left->type_->getClass() == T_POINTER &&
-                     right->type_->getClass() == T_POINTER)
-            {
-                // TODO: check c89-3.3.6-constraints/semantics
-            }
-            else if (left->type_->getClass() == T_POINTER &&
-                     right->type_->isArithmetic())
-            {
-                // TODO: check c89-3.3.6-constraints/semantics
-            }
-            else
-            {
-                SyntaxError("can't add these two types.");
-            }
-
-            type_ = left->type_;  // TODO: fix it if do pointer add
-        }
-    }
-}
-void sn_mul_expression::afterChildren(Environment *&env, const int pass)
-{
-    if (pass == 1)
-    {
-        // type derivation
-        {
-            sn_expression *left =
-                dynamic_cast<sn_expression *>(getFirstChild());
-            sn_expression *right =
-                dynamic_cast<sn_expression *>(getLastChild());
-
-            if (left->type_->isArithmetic() && right->type_->isArithmetic())
-            {
-                if (op == OP_MOD &&
-                    (!left->type_->isIntegral() || !right->type_->isIntegral()))
-                {
-                    SyntaxError("can't mod these two types.");
-                }
-
-                Type *result = TypeConversion::UsualArithmeticConversion(
-                    left->type_, right->type_);
-                if (!TypeUtil::Equal(result, left->type_))
-                {
-                    sn_cast_expression *cast_expr = new sn_cast_expression();
-                    cast_expr->type_ = result;
-                    cast_expr->addChild(left);
-                    left = cast_expr;
-                    replaceChild(0,
-                                 left);  // XXX: syntax tree is modified here.
-                }
-                if (!TypeUtil::Equal(result, right->type_))
-                {
-                    sn_cast_expression *cast_expr = new sn_cast_expression();
-                    cast_expr->type_ = result;
-                    cast_expr->addChild(right);
-                    right = cast_expr;
-                    replaceChild(1,
-                                 right);  // XXX: syntax tree is modified here.
-                }
-            }
-            else
-            {
-                SyntaxError("can't mul/div these two types.");
-            }
-
-            type_ = left->type_;
-        }
+        type_ = left->type_;
     }
 }
 void sn_cast_expression::afterChildren(Environment *&env, const int pass)
 {
-    if (pass == 1)
+    if (pass == 1)  // type derivation
     {
-        // type derivation
-        {
-            if (getFirstChild()->nodeType() == SN_TYPE_NAME)
-                type_ =
-                    dynamic_cast<sn_type_name *>(getFirstChild())->type_info_;
-            else
-                assert(type_ != nullptr);
-        }
-
-        // code generation
-        {
-            sn_expression *e = dynamic_cast<sn_expression *>(getLastChild());
-            code_info_.append(e->code_info_);
-            // TODO: type conversion code
-            // ...
-            result_info_ = e->result_info_;
-        }
+        if (getFirstChild()->nodeType() == SN_TYPE_NAME)
+            type_ = dynamic_cast<sn_type_name *>(getFirstChild())->type_info_;
+        else
+            assert(type_ != nullptr);
+    }
+    else if (pass == 2)  // code generation
+    {
+        sn_expression *e = dynamic_cast<sn_expression *>(getLastChild());
+        code_info_.append(e->code_info_);
+        // TODO: type conversion code
+        // ...
+        result_info_ = e->result_info_;
     }
 }
 void sn_unary_expression::afterChildren(Environment *&env, const int pass)
 {
-    if (pass == 1)
+    SyntaxNode *child = getFirstChild();
+    Type *child_type = nullptr;
+    if (child->nodeType() == SN_TYPE_NAME)
+        child_type = dynamic_cast<sn_type_name *>(child)->type_info_;
+    else
+        child_type = dynamic_cast<sn_expression *>(child)->type_;
+    sn_expression *expr =
+        (op == SIZEOF ? nullptr : dynamic_cast<sn_expression *>(child));
+
+    if (pass == 1)  // type derivation
     {
-        SyntaxNode *child = getFirstChild();
-        Type *child_type = nullptr;
-        if (child->nodeType() == SN_TYPE_NAME)
-            child_type = dynamic_cast<sn_type_name *>(child)->type_info_;
-        else
-            child_type = dynamic_cast<sn_expression *>(child)->type_;
-        sn_expression *expr =
-            (op == SIZEOF ? nullptr : dynamic_cast<sn_expression *>(child));
-
-        // type derivation
+        // ++, --: scalar type & modifiable lvalue
+        // & * + - ~ !
+        // sizeof
+        sn_cast_expression *cast_expr = nullptr;
+        switch (op)
         {
-            // ++, --: scalar type & modifiable lvalue
-            // & * + - ~ !
-            // sizeof
-            sn_cast_expression *cast_expr = nullptr;
-            switch (op)
-            {
-                case OP_INC:
-                case OP_DEC:
-                    if (!child_type->isScalar())
-                        SyntaxError("need scalar type.");
-                    if (!child_type->isModifiable())
-                        SyntaxError("need modifiable lvalue.");
-                    type_ = child_type;
-                    break;
-                case BIT_AND:  // address
-                    if (!child_type->isFunction() && !child_type->isLvalue())
-                        SyntaxError("need function type or lvalue.");
-                    type_ =
-                        TypeUtil::Concatenate(new PointerType(), child_type);
-                    break;
-                case OP_MUL:  // indirection
-                    if (child_type->getClass() != T_POINTER)
-                        SyntaxError("need pointer type.");
-                    type_ =
-                        TypeUtil::CloneTop(TypeUtil::TargetType(child_type));
-                    if (!type_->isFunction() && !type_->isObject())
-                        SyntaxError(
-                            "can't deference pointer to non-object type.");
-                    type_->setLvalue();
-                    break;
-                case OP_ADD:
-                case OP_SUB:
-                    if (!child_type->isArithmetic())
-                        SyntaxError("need arithmetic type.");
-                    type_ = TypeConversion::IntegerPromotion(child_type);
-                    if (!TypeUtil::Equal(type_, child_type))
-                    {
-                        cast_expr = new sn_cast_expression();
-                        cast_expr->type_ = type_;
-                        cast_expr->addChild(child);
-                        cast_expr->result_info_ = expr->result_info_;
-                        cast_expr->code_info_.append(expr->code_info_);
-                        replaceChild(
-                            0,
-                            cast_expr);  // XXX: syntax tree is modified here.
-                    }
-                    break;
-                case BIT_NOT:
-                case BOOL_NOT:
-                case SIZEOF:
-                default: assert(false); break;
-            }
+            case OP_INC:
+            case OP_DEC:
+                if (!child_type->isScalar())
+                    SyntaxError("need scalar type.");
+                if (!child_type->isModifiable())
+                    SyntaxError("need modifiable lvalue.");
+                type_ = child_type;
+                break;
+            case BIT_AND:  // address
+                if (!child_type->isFunction() && !child_type->isLvalue())
+                    SyntaxError("need function type or lvalue.");
+                type_ = TypeUtil::Concatenate(new PointerType(), child_type);
+                break;
+            case OP_MUL:  // indirection
+                if (child_type->getClass() != T_POINTER)
+                    SyntaxError("need pointer type.");
+                type_ = TypeUtil::CloneTop(TypeUtil::TargetType(child_type));
+                if (!type_->isFunction() && !type_->isObject())
+                    SyntaxError("can't deference pointer to non-object type.");
+                type_->setLvalue();
+                break;
+            case OP_ADD:
+            case OP_SUB:
+                if (!child_type->isArithmetic())
+                    SyntaxError("need arithmetic type.");
+                type_ = TypeConversion::IntegerPromotion(child_type);
+                if (!TypeUtil::Equal(type_, child_type))
+                {
+                    cast_expr = new sn_cast_expression();
+                    cast_expr->type_ = type_;
+                    cast_expr->addChild(child);
+                    cast_expr->result_info_ = expr->result_info_;
+                    cast_expr->code_info_.append(expr->code_info_);
+                    replaceChild(
+                        0,
+                        cast_expr);  // XXX: syntax tree is modified here.
+                }
+                break;
+            case BIT_NOT:
+            case BOOL_NOT:
+            case SIZEOF:
+            default: assert(false); break;
         }
+    }
+    else if (pass == 2)  // code generation
+    {
+        IRStorage &st = env->getStorage();
 
-        // code generation
+        // const Type *impl_type = nullptr;
+
+        IRAddress t1;
+        switch (op)
         {
-            IRStorage &st = env->getStorage();
-
-            // const Type *impl_type = nullptr;
-
-            IRAddress t1;
-            switch (op)
-            {
-                case OP_INC:
-                    if (child_type->getClass() == T_POINTER)
-                    {
-                        // add $0, sizeof(type), $0
-                        code_info_.add(IRInstructionBuilder::Add(
-                            expr->result_info_,
-                            {OP_ADDR_imm,
-                             sizeof(size_t),
-                             {(uint64_t)TypeUtil::TargetType(child_type)
-                                  ->getSize()}},
-                            expr->result_info_));
-                    }
-                    else
-                    {
-                        // inc $0
-                        code_info_.add(
-                            IRInstructionBuilder::Inc(expr->result_info_));
-                    }
-                    result_info_ = expr->result_info_;
-                    break;
-                case OP_DEC:
-                    if (child_type->getClass() == T_POINTER)
-                    {
-                        // sub $0, sizeof(type), $0
-                        code_info_.add(IRInstructionBuilder::Sub(
-                            expr->result_info_,
-                            {OP_ADDR_imm,
-                             sizeof(size_t),
-                             {(uint64_t)TypeUtil::TargetType(child_type)
-                                  ->getSize()}},
-                            expr->result_info_));
-                    }
-                    else
-                    {
-                        // dec $0
-                        code_info_.add(
-                            IRInstructionBuilder::Dec(expr->result_info_));
-                    }
-                    result_info_ = expr->result_info_;
-                    break;
-                case BIT_AND:  // address
-                    // ref $0, t1
-                    t1 = st.addAndGetAddress(
-                        IRObjectBuilder()
-                            .withValue(IRValueFactory::CreateZero(
-                                sizeof(void *), sizeof(void *)))
-                            .build());
+            case OP_INC:
+                if (child_type->getClass() == T_POINTER)
+                {
+                    // add $0, sizeof(type), $0
+                    code_info_.add(IRInstructionBuilder::Add(
+                        expr->result_info_,
+                        {OP_ADDR_imm,
+                         sizeof(size_t),
+                         {(uint64_t)TypeUtil::TargetType(child_type)
+                              ->getSize()}},
+                        expr->result_info_));
+                }
+                else
+                {
+                    // inc $0
                     code_info_.add(
-                        IRInstructionBuilder::Ref(expr->result_info_, t1));
-                    result_info_ = t1;
-                    break;
-                case OP_MUL:  // indirection
-                    // if struct/union/enum ? (array not allowed by semantic)
-                    if (type_->getClass() == T_TAG)
-                    {
-                        SyntaxError(
-                            "deference pointer to tag type not implemented.");
-                        // impl_type = dynamic_cast<TagType
-                        // *>(type_)->getImpl(); SyntaxError("deference a
-                        // struct/union");
-                    }
+                        IRInstructionBuilder::Inc(expr->result_info_));
+                }
+                result_info_ = expr->result_info_;
+                break;
+            case OP_DEC:
+                if (child_type->getClass() == T_POINTER)
+                {
+                    // sub $0, sizeof(type), $0
+                    code_info_.add(IRInstructionBuilder::Sub(
+                        expr->result_info_,
+                        {OP_ADDR_imm,
+                         sizeof(size_t),
+                         {(uint64_t)TypeUtil::TargetType(child_type)
+                              ->getSize()}},
+                        expr->result_info_));
+                }
+                else
+                {
+                    // dec $0
+                    code_info_.add(
+                        IRInstructionBuilder::Dec(expr->result_info_));
+                }
+                result_info_ = expr->result_info_;
+                break;
+            case BIT_AND:  // address
+                // ref $0, t1
+                t1 = st.addAndGetAddress(
+                    IRObjectBuilder()
+                        .withValue(IRValueFactory::CreateZero(sizeof(void *),
+                                                              sizeof(void *)))
+                        .build());
+                code_info_.add(
+                    IRInstructionBuilder::Ref(expr->result_info_, t1));
+                result_info_ = t1;
+                break;
+            case OP_MUL:  // indirection
+                // if struct/union/enum ? (array not allowed by semantic)
+                if (type_->getClass() == T_TAG)
+                {
+                    SyntaxError(
+                        "deference pointer to tag type not implemented.");
+                    // impl_type = dynamic_cast<TagType
+                    // *>(type_)->getImpl(); SyntaxError("deference a
+                    // struct/union");
+                }
 
-                    // deref $0, t1
-                    t1 = st.addAndGetAddress(
-                        IRObjectBuilder()
-                            .withValue(IRValueFactory::CreateZero(
-                                type_->getSize(), type_->getAlignment()))
-                            .build());
-                    code_info_.add(
-                        IRInstructionBuilder::Deref(expr->result_info_, t1));
-                    result_info_ = t1;
-                    break;
-                case OP_ADD: result_info_ = expr->result_info_; break;
-                case OP_SUB:
-                    // mov $0, t1
-                    // neg t1
-                    t1 = st.addAndGetAddress(
-                        IRObjectBuilder()
-                            .withValue(IRValueFactory::CreateZero(
-                                type_->getSize(), type_->getAlignment()))
-                            .build());
-                    code_info_.add(
-                        IRInstructionBuilder::Mov(expr->result_info_, t1));
-                    code_info_.add(IRInstructionBuilder::Neg(t1));
-                    result_info_ = t1;
-                    break;
-                case BIT_NOT:
-                case BOOL_NOT: break;
-                case SIZEOF: break;
-                default: break;
-            }
+                // deref $0, t1
+                t1 = st.addAndGetAddress(
+                    IRObjectBuilder()
+                        .withValue(IRValueFactory::CreateZero(
+                            type_->getSize(), type_->getAlignment()))
+                        .build());
+                code_info_.add(
+                    IRInstructionBuilder::Deref(expr->result_info_, t1));
+                result_info_ = t1;
+                break;
+            case OP_ADD: result_info_ = expr->result_info_; break;
+            case OP_SUB:
+                // mov $0, t1
+                // neg t1
+                t1 = st.addAndGetAddress(
+                    IRObjectBuilder()
+                        .withValue(IRValueFactory::CreateZero(
+                            type_->getSize(), type_->getAlignment()))
+                        .build());
+                code_info_.add(
+                    IRInstructionBuilder::Mov(expr->result_info_, t1));
+                code_info_.add(IRInstructionBuilder::Neg(t1));
+                result_info_ = t1;
+                break;
+            case BIT_NOT:
+            case BOOL_NOT: break;
+            case SIZEOF: break;
+            default: break;
         }
     }
 }
 void sn_postfix_expression::afterChildren(Environment *&env, const int pass)
 {
-    if (pass == 1)
+    sn_expression *left = nullptr;
+    sn_expression *right = nullptr;
+    sn_identifier *right_id = nullptr;
+    const Type *left_impl = nullptr;
+    StringRef member_name;
+    if (pass == 1)  // type derivation
     {
-        sn_expression *left = nullptr;
-        sn_expression *right = nullptr;
-        sn_identifier *right_id = nullptr;
-        const Type *left_impl = nullptr;
-        StringRef member_name;
+        // used in switch
+        Type *left_type = nullptr;
+        Type *right_type = nullptr;
 
-        // []: pointer to object type + integral type
-        //
-        // type derivation
+        switch (op)
         {
-            // used in switch
-            Type *left_type = nullptr;
-            Type *right_type = nullptr;
+            case LSB:
+                // []: pointer to object type + integral type
+                assert(getChildrenCount() == 2);
+                left = dynamic_cast<sn_expression *>(getFirstChild());
+                right = dynamic_cast<sn_expression *>(getLastChild());
 
-            switch (op)
-            {
-                case LSB:
-                    assert(getChildrenCount() == 2);
-                    left = dynamic_cast<sn_expression *>(getFirstChild());
-                    right = dynamic_cast<sn_expression *>(getLastChild());
+                left_type = left->type_;
+                right_type = right->type_;
+                if (!(left_type->getClass() == T_POINTER ||
+                      left_type->getClass() == T_ARRAY) ||
+                    !TypeUtil::TargetType(left_type)->isObject())
+                {
+                    SyntaxError("type not support array subscripting.");
+                }
+                if (!right_type->isIntegral())
+                {
+                    SyntaxError("need integral type as array subscript.");
+                }
+                type_ = TypeUtil::TargetType(left_type);
+                type_->setQualifier(left_type->getQualifier());
+                type_->setLvalue();
+                break;
+            case REFER_TO:
+                assert(getChildrenCount() == 2);
+                left = dynamic_cast<sn_expression *>(getFirstChild());
+                right_id = dynamic_cast<sn_identifier *>(getLastChild());
 
-                    left_type = left->type_;
-                    right_type = right->type_;
-                    if (!(left_type->getClass() == T_POINTER ||
-                          left_type->getClass() == T_ARRAY) ||
-                        !TypeUtil::TargetType(left_type)->isObject())
-                    {
-                        SyntaxError("type not support array subscripting.");
-                    }
-                    if (!right_type->isIntegral())
-                    {
-                        SyntaxError("need integral type as array subscript.");
-                    }
-                    type_ = TypeUtil::TargetType(left_type);
-                    type_->setQualifier(left_type->getQualifier());
+                left_type = left->type_;
+                member_name = right_id->name_info_;
+
+                if (left_type->getClass() != T_TAG)
+                {
+                    SyntaxError("expect struct and union type.");
+                }
+
+                left_impl = dynamic_cast<TagType *>(left_type)->getImpl();
+                if (left_impl->getClass() != T_STRUCT &&
+                    left_impl->getClass() != T_UNION)
+                {
+                    SyntaxError("expect struct and union type.");
+                }
+
+                type_ = TypeUtil::CloneTop(
+                    dynamic_cast<const StructTypeImpl *>(left_impl)
+                        ->getMemberType(member_name));
+                type_->setQualifier(left_type->getQualifier());
+                assert(type_->isLvalue() == false);
+                if (left_type->isLvalue())
                     type_->setLvalue();
-                    break;
-                case REFER_TO:
-                    assert(getChildrenCount() == 2);
-                    left = dynamic_cast<sn_expression *>(getFirstChild());
-                    right_id = dynamic_cast<sn_identifier *>(getLastChild());
-
-                    left_type = left->type_;
-                    member_name = right_id->name_info_;
-
-                    if (left_type->getClass() != T_TAG)
-                    {
-                        SyntaxError("expect struct and union type.");
-                    }
-
-                    left_impl = dynamic_cast<TagType *>(left_type)->getImpl();
-                    if (left_impl->getClass() != T_STRUCT &&
-                        left_impl->getClass() != T_UNION)
-                    {
-                        SyntaxError("expect struct and union type.");
-                    }
-
-                    type_ = TypeUtil::CloneTop(
-                        dynamic_cast<const StructTypeImpl *>(left_impl)
-                            ->getMemberType(member_name));
-                    type_->setQualifier(left_type->getQualifier());
-                    assert(type_->isLvalue() == false);
-                    if (left_type->isLvalue())
-                        type_->setLvalue();
-                    break;
-                case POINT_TO:
-                // if (...)
-                //     SyntaxError("expect pointer to struct and union type.");
-                // type_->setLvalue();
-                // break;
-                case OP_INC:
-                case OP_DEC:
-                case LP: SyntaxError("too lazy to implement."); break;
-                default: SyntaxError("Should not reach here."); break;
-            }
+                break;
+            case POINT_TO:
+            // if (...)
+            //     SyntaxError("expect pointer to struct and union type.");
+            // type_->setLvalue();
+            // break;
+            case OP_INC:
+            case OP_DEC:
+            case LP: SyntaxError("too lazy to implement."); break;
+            default: SyntaxError("Should not reach here."); break;
         }
+    }
+    else if (pass == 2)  // code generation
+    {
+        IRStorage &st = env->getStorage();
 
-        // code generation
+        IRAddress t1, t2, t3;
+        size_t offset;
+        switch (op)
         {
-            IRStorage &st = env->getStorage();
+            case LSB:
+                // mov value(expr), t1
+                // mul sizeof(type_), t1, t2
+                // add value(base), t2, t3
 
-            IRAddress t1, t2, t3;
-            size_t offset;
-            switch (op)
-            {
-                case LSB:
-                    // mov value(expr), t1
-                    // mul sizeof(type_), t1, t2
-                    // add value(base), t2, t3
+                code_info_.append(left->code_info_);
+                code_info_.append(right->code_info_);
+                t1 = st.addAndGetAddress(
+                    IRObjectBuilder()
+                        .withValue(IRValueFactory::CreateZero(
+                            type_->getSize(), type_->getAlignment()))
+                        .build());
+                t2 = st.addAndGetAddress(
+                    IRObjectBuilder()
+                        .withValue(IRValueFactory::CreateZero(
+                            right->type_->getSize(),
+                            right->type_->getAlignment()))
+                        .build());
+                t3 = st.addAndGetAddress(
+                    IRObjectBuilder()
+                        .withValue(IRValueFactory::CreateZero(
+                            left->type_->getSize(),
+                            left->type_->getAlignment()))
+                        .build());
+                code_info_.add(
+                    IRInstructionBuilder::Mov(right->result_info_, t1));
+                code_info_.add(IRInstructionBuilder::Mul(
+                    {OP_ADDR_imm, t1.width, {type_->getSize()}}, t1, t2));
+                code_info_.add(
+                    IRInstructionBuilder::Add(left->result_info_, t2, t3));
 
-                    code_info_.append(left->code_info_);
-                    code_info_.append(right->code_info_);
-                    t1 = st.addAndGetAddress(
-                        IRObjectBuilder()
-                            .withValue(IRValueFactory::CreateZero(
-                                type_->getSize(), type_->getAlignment()))
-                            .build());
-                    t2 = st.addAndGetAddress(
-                        IRObjectBuilder()
-                            .withValue(IRValueFactory::CreateZero(
-                                right->type_->getSize(),
-                                right->type_->getAlignment()))
-                            .build());
-                    t3 = st.addAndGetAddress(
-                        IRObjectBuilder()
-                            .withValue(IRValueFactory::CreateZero(
-                                left->type_->getSize(),
-                                left->type_->getAlignment()))
-                            .build());
-                    code_info_.add(
-                        IRInstructionBuilder::Mov(right->result_info_, t1));
-                    code_info_.add(IRInstructionBuilder::Mul(
-                        {OP_ADDR_imm, t1.width, {type_->getSize()}}, t1, t2));
-                    code_info_.add(
-                        IRInstructionBuilder::Add(left->result_info_, t2, t3));
+                result_info_ = t3;
+                break;
+            case REFER_TO:
+                // mov offsetof(struct, member), t1
+                // add addr(base), t1, t2
 
-                    result_info_ = t3;
-                    break;
-                case REFER_TO:
-                    // mov offsetof(struct, member), t1
-                    // add addr(base), t1, t2
+                code_info_.append(left->code_info_);
+                // size_t
+                t1 = st.addAndGetAddress(
+                    IRObjectBuilder()
+                        .withValue(IRValueFactory::CreateZero(sizeof(size_t),
+                                                              sizeof(size_t)))
+                        .build());
+                // pointer or
+                // reference to member, with qualifiers
+                t2 = st.addAndGetAddress(
+                    IRObjectBuilder()
+                        .withValue(IRValueFactory::CreateZero(sizeof(size_t),
+                                                              sizeof(size_t)))
+                        .build());
+                offset = dynamic_cast<const StructTypeImpl *>(left_impl)
+                             ->getMemberOffset(member_name);
+                code_info_.add(IRInstructionBuilder::Mov(
+                    {OP_ADDR_imm, sizeof(void *), {offset}}, t1));
+                code_info_.add(
+                    IRInstructionBuilder::Add(left->result_info_, t1, t2));
 
-                    code_info_.append(left->code_info_);
-                    // size_t
-                    t1 = st.addAndGetAddress(
-                        IRObjectBuilder()
-                            .withValue(IRValueFactory::CreateZero(
-                                sizeof(size_t), sizeof(size_t)))
-                            .build());
-                    // pointer or
-                    // reference to member, with qualifiers
-                    t2 = st.addAndGetAddress(
-                        IRObjectBuilder()
-                            .withValue(IRValueFactory::CreateZero(
-                                sizeof(size_t), sizeof(size_t)))
-                            .build());
-                    offset = dynamic_cast<const StructTypeImpl *>(left_impl)
-                                 ->getMemberOffset(member_name);
-                    code_info_.add(IRInstructionBuilder::Mov(
-                        {OP_ADDR_imm, sizeof(void *), {offset}}, t1));
-                    code_info_.add(
-                        IRInstructionBuilder::Add(left->result_info_, t1, t2));
-
-                    result_info_ = t2;
-                    break;
-                case POINT_TO:
-                case OP_INC:
-                case OP_DEC:
-                case LP: SyntaxError("too lazy to implement."); break;
-                default: SyntaxError("Should not reach here."); break;
-            }
+                result_info_ = t2;
+                break;
+            case POINT_TO:
+            case OP_INC:
+            case OP_DEC:
+            case LP: SyntaxError("too lazy to implement."); break;
+            default: SyntaxError("Should not reach here."); break;
         }
     }
 }
 void sn_primary_expression::afterChildren(Environment *&env, const int pass)
 {
-    if (pass == 1)
+    Symbol *s = nullptr;
+
+    if (pass == 1)  // type derivation
     {
-        Symbol *s = nullptr;
-
-        // type derivation
+        switch (t.type)
         {
-            switch (t.type)
-            {
-                case SYMBOL:
-                    // obj or enum-const
-                    s = env->findSymbol(SYMBOL_NAMESPACE_id, t.symbol);
-                    if (s == nullptr)
-                    {
-                        SyntaxError("symbol not found:" + t.symbol.toString());
-                    }
-                    type_ = s->type;
-                    type_->setLvalue();
-                    break;
-                case CONST_CHAR: type_ = new CharType(); break;
-                case CONST_INT: type_ = new IntegerType("i"); break;
-                case CONST_FLOAT: type_ = new FloatingType("f"); break;
-                case STRING:
-                    type_ = new CharType();
-                    type_ = TypeUtil::Concatenate(
-                        new ArrayType(t.string_.size() + 1), type_);
-                    type_->setLvalue();
-                    break;
-                default:
-                    // expr
-                    // type_->setLvalue();
-                    SyntaxError("not implemented.");
-                    break;
-            }
+            case SYMBOL:
+                // obj or enum-const
+                s = env->findSymbol(SYMBOL_NAMESPACE_id, t.symbol);
+                if (s == nullptr)
+                {
+                    SyntaxError("symbol not found:" + t.symbol.toString());
+                }
+                type_ = s->type;
+                type_->setLvalue();
+                break;
+            case CONST_CHAR: type_ = new CharType(); break;
+            case CONST_INT: type_ = new IntegerType("i"); break;
+            case CONST_FLOAT: type_ = new FloatingType("f"); break;
+            case STRING:
+                type_ = new CharType();
+                type_ = TypeUtil::Concatenate(
+                    new ArrayType(t.string_.size() + 1), type_);
+                type_->setLvalue();
+                break;
+            default:
+                // expr
+                // type_->setLvalue();
+                SyntaxError("not implemented.");
+                break;
         }
-
-        // code generation
+    }
+    else if (pass == 2)  // code generation
+    {
+        IRStorage &st = env->getStorage();
+        switch (t.type)
         {
-            IRStorage &st = env->getStorage();
-            switch (t.type)
-            {
-                case SYMBOL:
-                    result_info_ = st.getAddressByName(t.symbol);
-                    break;
-                case CONST_CHAR:
-                case CONST_INT:
-                case CONST_FLOAT:
-                    result_info_ = st.addAndGetAddress(
-                        IRObjectBuilder()
-                            .withLexType(t.type)
-                            .withValue(IRValueFactory::Create(
-                                type_->getSize(), type_->getAlignment(),
-                                &(t.ival)))
-                            .build());
-                    break;
-                case STRING:
-                    result_info_ = st.addAndGetAddress(
-                        IRObjectBuilder()
-                            .withLexType(t.type)
-                            .withValue(IRValueFactory::CreateString(t.string_))
-                            .build());
-                    break;
-                default:
-                    // expr
-                    SyntaxError("not implemented.");
-                    break;
-            }
+            case SYMBOL: result_info_ = st.getAddressByName(t.symbol); break;
+            case CONST_CHAR:
+            case CONST_INT:
+            case CONST_FLOAT:
+                result_info_ = st.addAndGetAddress(
+                    IRObjectBuilder()
+                        .withLexType(t.type)
+                        .withValue(IRValueFactory::Create(
+                            type_->getSize(), type_->getAlignment(), &(t.ival)))
+                        .build());
+                break;
+            case STRING:
+                result_info_ = st.addAndGetAddress(
+                    IRObjectBuilder()
+                        .withLexType(t.type)
+                        .withValue(IRValueFactory::CreateString(t.string_))
+                        .build());
+                break;
+            default:
+                // expr
+                SyntaxError("not implemented.");
+                break;
         }
     }
 }
