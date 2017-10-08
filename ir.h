@@ -106,6 +106,18 @@ class IRInstructionBuilder
     {
         return {IR_OPCODE_jmp, arg1, {}, {}, nullptr};
     }
+    static IRInstruction Inc(IRAddress arg1)
+    {
+        return {IR_OPCODE_inc, arg1, {}, {}, nullptr};
+    }
+    static IRInstruction Dec(IRAddress arg1)
+    {
+        return {IR_OPCODE_dec, arg1, {}, {}, nullptr};
+    }
+    static IRInstruction Neg(IRAddress arg1)
+    {
+        return {IR_OPCODE_neg, arg1, {}, {}, nullptr};
+    }
     static IRInstruction Add(IRAddress arg1, IRAddress arg2, IRAddress arg3)
     {
         return {IR_OPCODE_add, arg1, arg2, arg3, nullptr};
@@ -117,6 +129,14 @@ class IRInstructionBuilder
     static IRInstruction Mul(IRAddress arg1, IRAddress arg2, IRAddress arg3)
     {
         return {IR_OPCODE_mul, arg1, arg2, arg3, nullptr};
+    }
+    static IRInstruction Ref(IRAddress arg1, IRAddress arg2)
+    {
+        return {IR_OPCODE_ref, arg1, arg2, {}, nullptr};
+    }
+    static IRInstruction Deref(IRAddress arg1, IRAddress arg2)
+    {
+        return {IR_OPCODE_deref, arg1, arg2, {}, nullptr};
     }
 };
 // Usage:

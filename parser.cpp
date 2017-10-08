@@ -1156,11 +1156,7 @@ sn_expression *sn_unary_expression::parse(Lexer &lex)
                 // EXPECT_TYPE_IS(expr->e->type(), T_POINTER);
                 // expr->type_ = expr->e->type()->asPointerType()->target();
                 break;
-            default:
-                SyntaxError("unexpected token.");
-                // expr->addChild(sn_postfix_expression::parse(
-                //     lex, sn_primary_expression::parse(lex)));
-                break;
+            default: SyntaxError("unexpected token."); break;
         }
         return expr;
     }
@@ -1881,6 +1877,7 @@ void sn_parameter_list::afterChildren(Environment *&env, const int pass)
         {
             sn_parameter_declaration *pd =
                 dynamic_cast<sn_parameter_declaration *>(child);
+            pd->type_info_->setLvalue();
             func->addParam(pd->type_info_, pd->name_info_);
         }
         type_info_ = func;
@@ -2967,42 +2964,171 @@ void sn_unary_expression::afterChildren(Environment *&env, const int pass)
 {
     if (pass == 1)
     {
+        SyntaxNode *child = getFirstChild();
+        Type *child_type = nullptr;
+        if (child->nodeType() == SN_TYPE_NAME)
+            child_type = dynamic_cast<sn_type_name *>(child)->type_info_;
+        else
+            child_type = dynamic_cast<sn_expression *>(child)->type_;
+        sn_expression *expr =
+            (op == SIZEOF ? nullptr : dynamic_cast<sn_expression *>(child));
+
         // type derivation
         {
-            Type *child_type = nullptr;
-            if (getLastChild()->nodeType() == SN_TYPE_NAME)
-                child_type =
-                    dynamic_cast<sn_type_name *>(getLastChild())->type_info_;
-            else
-                child_type =
-                    dynamic_cast<sn_expression *>(getLastChild())->type_;
-
             // ++, --: scalar type & modifiable lvalue
             // & * + - ~ !
             // sizeof
+            sn_cast_expression *cast_expr = nullptr;
             switch (op)
             {
                 case OP_INC:
                 case OP_DEC:
                     if (!child_type->isScalar())
                         SyntaxError("need scalar type.");
-                    // TODO: modifiable lvalue.
+                    if (!child_type->isModifiable())
+                        SyntaxError("need modifiable lvalue.");
+                    type_ = child_type;
                     break;
-                case BIT_AND:
-                case OP_MUL:
+                case BIT_AND:  // address
+                    if (!child_type->isFunction() && !child_type->isLvalue())
+                        SyntaxError("need function type or lvalue.");
+                    type_ =
+                        TypeUtil::Concatenate(new PointerType(), child_type);
+                    break;
+                case OP_MUL:  // indirection
+                    if (child_type->getClass() != T_POINTER)
+                        SyntaxError("need pointer type.");
+                    type_ =
+                        TypeUtil::CloneTop(TypeUtil::TargetType(child_type));
+                    if (!type_->isFunction() && !type_->isObject())
+                        SyntaxError(
+                            "can't deference pointer to non-object type.");
+                    type_->setLvalue();
+                    break;
                 case OP_ADD:
                 case OP_SUB:
+                    if (!child_type->isArithmetic())
+                        SyntaxError("need arithmetic type.");
+                    type_ = TypeConversion::IntegerPromotion(child_type);
+                    if (!TypeUtil::Equal(type_, child_type))
+                    {
+                        cast_expr = new sn_cast_expression();
+                        cast_expr->type_ = type_;
+                        cast_expr->addChild(child);
+                        cast_expr->result_info_ = expr->result_info_;
+                        cast_expr->code_info_.append(expr->code_info_);
+                        replaceChild(
+                            0,
+                            cast_expr);  // XXX: syntax tree is modified here.
+                    }
+                    break;
                 case BIT_NOT:
                 case BOOL_NOT:
-                    // TODO: finish it
-                    break;
                 case SIZEOF:
-                    // TODO: finish it
+                default: assert(false); break;
+            }
+        }
+
+        // code generation
+        {
+            IRStorage &st = env->getStorage();
+
+            // const Type *impl_type = nullptr;
+
+            IRAddress t1;
+            switch (op)
+            {
+                case OP_INC:
+                    if (child_type->getClass() == T_POINTER)
+                    {
+                        // add $0, sizeof(type), $0
+                        code_info_.add(IRInstructionBuilder::Add(
+                            expr->result_info_,
+                            {OP_ADDR_imm,
+                             sizeof(size_t),
+                             {(uint64_t)TypeUtil::TargetType(child_type)
+                                  ->getSize()}},
+                            expr->result_info_));
+                    }
+                    else
+                    {
+                        // inc $0
+                        code_info_.add(
+                            IRInstructionBuilder::Inc(expr->result_info_));
+                    }
+                    result_info_ = expr->result_info_;
                     break;
+                case OP_DEC:
+                    if (child_type->getClass() == T_POINTER)
+                    {
+                        // sub $0, sizeof(type), $0
+                        code_info_.add(IRInstructionBuilder::Sub(
+                            expr->result_info_,
+                            {OP_ADDR_imm,
+                             sizeof(size_t),
+                             {(uint64_t)TypeUtil::TargetType(child_type)
+                                  ->getSize()}},
+                            expr->result_info_));
+                    }
+                    else
+                    {
+                        // dec $0
+                        code_info_.add(
+                            IRInstructionBuilder::Dec(expr->result_info_));
+                    }
+                    result_info_ = expr->result_info_;
+                    break;
+                case BIT_AND:  // address
+                    // ref $0, t1
+                    t1 = st.addAndGetAddress(
+                        IRObjectBuilder()
+                            .withValue(IRValueFactory::CreateZero(
+                                sizeof(void *), sizeof(void *)))
+                            .build());
+                    code_info_.add(
+                        IRInstructionBuilder::Ref(expr->result_info_, t1));
+                    result_info_ = t1;
+                    break;
+                case OP_MUL:  // indirection
+                    // if struct/union/enum ? (array not allowed by semantic)
+                    if (type_->getClass() == T_TAG)
+                    {
+                        SyntaxError(
+                            "deference pointer to tag type not implemented.");
+                        // impl_type = dynamic_cast<TagType
+                        // *>(type_)->getImpl(); SyntaxError("deference a
+                        // struct/union");
+                    }
+
+                    // deref $0, t1
+                    t1 = st.addAndGetAddress(
+                        IRObjectBuilder()
+                            .withValue(IRValueFactory::CreateZero(
+                                type_->getSize(), type_->getAlignment()))
+                            .build());
+                    code_info_.add(
+                        IRInstructionBuilder::Deref(expr->result_info_, t1));
+                    result_info_ = t1;
+                    break;
+                case OP_ADD: result_info_ = expr->result_info_; break;
+                case OP_SUB:
+                    // mov $0, t1
+                    // neg t1
+                    t1 = st.addAndGetAddress(
+                        IRObjectBuilder()
+                            .withValue(IRValueFactory::CreateZero(
+                                type_->getSize(), type_->getAlignment()))
+                            .build());
+                    code_info_.add(
+                        IRInstructionBuilder::Mov(expr->result_info_, t1));
+                    code_info_.add(IRInstructionBuilder::Neg(t1));
+                    result_info_ = t1;
+                    break;
+                case BIT_NOT:
+                case BOOL_NOT: break;
+                case SIZEOF: break;
                 default: break;
             }
-
-            type_ = child_type;
         }
     }
 }
@@ -3045,6 +3171,7 @@ void sn_postfix_expression::afterChildren(Environment *&env, const int pass)
                     }
                     type_ = TypeUtil::TargetType(left_type);
                     type_->setQualifier(left_type->getQualifier());
+                    type_->setLvalue();
                     break;
                 case REFER_TO:
                     assert(getChildrenCount() == 2);
@@ -3058,23 +3185,26 @@ void sn_postfix_expression::afterChildren(Environment *&env, const int pass)
                     {
                         SyntaxError("expect struct and union type.");
                     }
+
                     left_impl = dynamic_cast<TagType *>(left_type)->getImpl();
-                    if (left_impl->getClass() == T_STRUCT ||
-                        left_impl->getClass() == T_UNION)
-                    {
-                        type_ = TypeUtil::CloneTop(
-                            dynamic_cast<const StructTypeImpl *>(left_impl)
-                                ->getMemberType(member_name));
-                        type_->setQualifier(left_type->getQualifier());
-                    }
-                    else
+                    if (left_impl->getClass() != T_STRUCT &&
+                        left_impl->getClass() != T_UNION)
                     {
                         SyntaxError("expect struct and union type.");
                     }
+
+                    type_ = TypeUtil::CloneTop(
+                        dynamic_cast<const StructTypeImpl *>(left_impl)
+                            ->getMemberType(member_name));
+                    type_->setQualifier(left_type->getQualifier());
+                    assert(type_->isLvalue() == false);
+                    if (left_type->isLvalue())
+                        type_->setLvalue();
                     break;
                 case POINT_TO:
                 // if (...)
                 //     SyntaxError("expect pointer to struct and union type.");
+                // type_->setLvalue();
                 // break;
                 case OP_INC:
                 case OP_DEC:
@@ -3178,18 +3308,20 @@ void sn_primary_expression::afterChildren(Environment *&env, const int pass)
                         SyntaxError("symbol not found:" + t.symbol.toString());
                     }
                     type_ = s->type;
+                    type_->setLvalue();
                     break;
                 case CONST_CHAR: type_ = new CharType(); break;
                 case CONST_INT: type_ = new IntegerType("i"); break;
                 case CONST_FLOAT: type_ = new FloatingType("f"); break;
                 case STRING:
                     type_ = new CharType();
-                    type_->setQualifier(TP_CONST);
-                    // TODO: maybe array?
-                    type_ = TypeUtil::Concatenate(new PointerType(), type_);
+                    type_ = TypeUtil::Concatenate(
+                        new ArrayType(t.string_.size() + 1), type_);
+                    type_->setLvalue();
                     break;
                 default:
                     // expr
+                    // type_->setLvalue();
                     SyntaxError("not implemented.");
                     break;
             }

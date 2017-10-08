@@ -86,7 +86,8 @@ bool TypeUtil::Compatible(const Type *t1, const Type *t2)
 
     if (t1->getClass() != t2->getClass())
         return false;
-    if (t1->_prop != t2->_prop)
+    // ignore lvalue prop
+    if ((t1->_prop & ~TP_LVALUE) != (t2->_prop & ~TP_LVALUE))
         return false;
     if (t1->_size != t2->_size)
         return false;
@@ -158,7 +159,10 @@ Type *TypeConversion::ByAssignmentConversion(Type *to, Type *from)
     }
     else
     {
-        SyntaxError("ByAssignmentConversion: Unsupported type conversion.");
+        SyntaxError(
+            "ByAssignmentConversion: Unsupported type conversion."
+            " from \"" +
+            from->toString() + "\" to \"" + to->toString() + "\"");
     }
 
     return to;
@@ -221,6 +225,8 @@ Type *TypeConversion::ValueTransformConversion(Type *t)
 Type *TypeConversion::IntegerPromotion(Type *t)
 {
     // TODO: also consider unsigned int
+    if (t == nullptr || !t->isIntegral())
+        SyntaxError("IntegerPromotion: expect integral type.");
     return new IntegerType("i");
 }
 // Type *TypeConversion::BooleanConversion(Type *t);
@@ -491,15 +497,21 @@ std::string x64_address(const IRAddress &addr)
         return w + " PTR [-" + std::to_string(addr.mem) + "+rbp]";
     }
 }
-std::string x64_loaded_address(const IRAddress &addr, const size_t reg_index,
-                          std::string &code)
+std::string x64_address(size_t width, std::string reg)
 {
-    assert(addr.mode != OP_ADDR_invalid);
-    std::string x64addr = x64_address(addr);
-
-    if (addr.mode == OP_ADDR_imm)
-        return x64addr;
-
+    std::string w;
+    switch (width)
+    {
+        case 1: w = "BYTE"; break;
+        case 2: w = "WORD"; break;
+        case 4: w = "DWORD"; break;
+        case 8: w = "QWORD"; break;
+        default: assert(false); break;
+    }
+    return w + " PTR [" + reg + "]";
+}
+std::string x64_register(const IRAddress &addr, const size_t reg_index)
+{
     std::string reg;
     {
         std::string pre, post;
@@ -519,6 +531,18 @@ std::string x64_loaded_address(const IRAddress &addr, const size_t reg_index,
             default: assert(false); break;
         }
     }
+    return reg;
+}
+std::string x64_loaded_address(const IRAddress &addr, const size_t reg_index,
+                          std::string &code)
+{
+    assert(addr.mode != OP_ADDR_invalid);
+    std::string x64addr = x64_address(addr);
+
+    if (addr.mode == OP_ADDR_imm)
+        return x64addr;
+
+    std::string reg = x64_register(addr, reg_index);
 
     if (addr.mode == OP_ADDR_label)
     {
@@ -536,7 +560,8 @@ std::string x64_loaded_address(const IRAddress &addr, const size_t reg_index,
 void IR_to_x64::onInstruction(const IRInstruction &inst)
 {
     // rax, rcx, rbx
-    std::string reg;
+    std::string reg, r2;
+    _text += "\n\t# " + inst.toString() + "\n";
     switch (inst.op)
     {
         case IR_OPCODE_alloc:
@@ -559,23 +584,92 @@ void IR_to_x64::onInstruction(const IRInstruction &inst)
                 + x64_address(inst.arg2) + ", "
                 + x64_loaded_address(inst.arg1, 0, _text) + "\n";
             break;
-        case IR_OPCODE_add:
-            reg = x64_loaded_address(inst.arg3, 0, _text);
+        case IR_OPCODE_ref:
+            reg = x64_register(inst.arg2, 0);
+            _text += "\tlea "
+                + reg + ", "
+                + x64_address(inst.arg1) + "\n";
+            _text += "\tmov "
+                + x64_address(inst.arg2) + ", "
+                + reg + "\n";
+            break;
+        case IR_OPCODE_deref:
+            reg = x64_register(inst.arg1, 0);
+            r2 = x64_register(inst.arg2, 1);
             _text += "\tmov "
                 + reg + ", "
-                + x64_loaded_address(inst.arg1, 1, _text) + "\n";
+                + x64_address(inst.arg1) + "\n";
+            _text += "\tmov "
+                + r2 + ", "
+                + x64_address(inst.arg2.width, reg) + "\n";
+            _text += "\tmov "
+                + x64_address(inst.arg2) + ", "
+                + r2 + "\n";
+            break;
+        case IR_OPCODE_add:
+            reg = x64_register(inst.arg1, 0);
+            _text += "\tmov "
+                + reg + ", "
+                + x64_address(inst.arg1) + "\n";
             _text += "\tadd "
                 + reg + ", "
-                + x64_loaded_address(inst.arg2, 2, _text) + "\n";
+                + x64_address(inst.arg2) + "\n";
+            _text += "\tmov "
+                + x64_address(inst.arg3) + ", "
+                + reg + "\n";
             break;
-        case IR_OPCODE_mul:
-            reg = x64_loaded_address(inst.arg3, 0, _text);
+        case IR_OPCODE_sub:
+            reg = x64_register(inst.arg1, 0);
             _text += "\tmov "
                 + reg + ", "
-                + x64_loaded_address(inst.arg1, 1, _text) + "\n";
-            _text += "\tmul "
+                + x64_address(inst.arg1) + "\n";
+            _text += "\tsub "
                 + reg + ", "
-                + x64_loaded_address(inst.arg2, 2, _text) + "\n";
+                + x64_address(inst.arg2) + "\n";
+            _text += "\tmov "
+                + x64_address(inst.arg3) + ", "
+                + reg + "\n";
+            break;
+        case IR_OPCODE_mul:
+            reg = x64_register(inst.arg1, 0);
+            _text += "\tmov "
+                + reg + ", "
+                + x64_address(inst.arg1) + "\n";
+            _text += "\tmul "
+                + x64_address(inst.arg2) + "\n";
+            _text += "\tmov "
+                + x64_address(inst.arg3) + ", "
+                + reg + "\n";
+            break;
+        case IR_OPCODE_inc:
+            reg = x64_register(inst.arg1, 0);
+            _text += "\tmov "
+                + reg + ", "
+                + x64_address(inst.arg1) + "\n";
+            _text += "\tinc " + reg + "\n";
+            _text += "\tmov "
+                + x64_address(inst.arg1) + ", "
+                + reg + "\n";
+            break;
+        case IR_OPCODE_dec:
+            reg = x64_register(inst.arg1, 0);
+            _text += "\tmov "
+                + reg + ", "
+                + x64_address(inst.arg1) + "\n";
+            _text += "\tdec " + reg + "\n";
+            _text += "\tmov "
+                + x64_address(inst.arg1) + ", "
+                + reg + "\n";
+            break;
+        case IR_OPCODE_neg:
+            reg = x64_register(inst.arg1, 0);
+            _text += "\tmov "
+                + reg + ", "
+                + x64_address(inst.arg1) + "\n";
+            _text += "\tneg " + reg + "\n";
+            _text += "\tmov "
+                + x64_address(inst.arg1) + ", "
+                + reg + "\n";
             break;
         case IR_OPCODE_jmp:
         case IR_OPCODE_je:
@@ -593,14 +687,8 @@ void IR_to_x64::onInstruction(const IRInstruction &inst)
         case IR_OPCODE_not:
         case IR_OPCODE_shl:
         case IR_OPCODE_shr:
-        case IR_OPCODE_sub:
         case IR_OPCODE_div:
         case IR_OPCODE_mod:
-        case IR_OPCODE_inc:
-        case IR_OPCODE_dec:
-        case IR_OPCODE_neg:
-        case IR_OPCODE_ref:
-        case IR_OPCODE_deref:
         case IR_OPCODE_param:
         case IR_OPCODE_call:
         case IR_OPCODE_ret:

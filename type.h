@@ -128,6 +128,10 @@ class Type : public Stringable
     {
         return _prop & TP_IS_FUNCTION;
     }
+    bool isModifiable() const
+    {
+        return isLvalue() && !isIncomplete() && !isConst();
+    }
     ETypeClass getClass() const
     {
         return _tc;
@@ -141,10 +145,17 @@ class Type : public Stringable
         return _align;
     }
 
+    void setLvalue()
+    {
+        setProp(TP_LVALUE);
+    }
+    void unsetLvalue()
+    {
+        unsetProp(TP_LVALUE);
+    }
     void setQualifier(int qualifiers)
     {
-        // TODO: check input
-        _prop |= qualifiers;
+        _prop |= (qualifiers & (TP_CONST | TP_VOLATILE));
     }
     int getQualifier() const
     {
@@ -152,8 +163,7 @@ class Type : public Stringable
     }
     void unsetQualifier(int qualifiers)
     {
-        // TODO: check input
-        _prop &= ~qualifiers;
+        _prop &= ~(qualifiers & (TP_CONST | TP_VOLATILE));
     }
     void markComplete()
     {
