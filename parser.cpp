@@ -2509,10 +2509,6 @@ void sn_assign_expression::afterChildren(Environment *&env, const int pass)
             sn_cast_expression *cast_expr = new sn_cast_expression();
             cast_expr->type_ = to->type_;
             cast_expr->addChild(from);
-
-            // XXX: this is bad!! split code generation to pass 2
-            cast_expr->afterChildren(env, pass);
-
             from = cast_expr;
             replaceChild(1, from);  // XXX: syntax tree is modified here.
         }
@@ -2836,22 +2832,22 @@ void sn_add_expression::afterChildren(Environment *&env, const int pass)
 }
 void sn_mul_expression::afterChildren(Environment *&env, const int pass)
 {
+    sn_expression *left = dynamic_cast<sn_expression *>(getFirstChild());
+    sn_expression *right = dynamic_cast<sn_expression *>(getLastChild());
+    Type *lt = left->type_;
+    Type *rt = right->type_;
+
     if (pass == 1)  // type derivation
     {
-        sn_expression *left = dynamic_cast<sn_expression *>(getFirstChild());
-        sn_expression *right = dynamic_cast<sn_expression *>(getLastChild());
-
-        if (left->type_->isArithmetic() && right->type_->isArithmetic())
+        if (lt->isArithmetic() && rt->isArithmetic())
         {
-            if (op == OP_MOD &&
-                (!left->type_->isIntegral() || !right->type_->isIntegral()))
+            if (op == OP_MOD && (!lt->isIntegral() || !rt->isIntegral()))
             {
                 SyntaxError("can't mod these two types.");
             }
 
-            Type *result = TypeConversion::UsualArithmeticConversion(
-                left->type_, right->type_);
-            if (!TypeUtil::Equal(result, left->type_))
+            Type *result = TypeConversion::UsualArithmeticConversion(lt, rt);
+            if (!TypeUtil::Equal(result, lt))
             {
                 sn_cast_expression *cast_expr = new sn_cast_expression();
                 cast_expr->type_ = result;
@@ -2860,7 +2856,7 @@ void sn_mul_expression::afterChildren(Environment *&env, const int pass)
                 replaceChild(0,
                              left);  // XXX: syntax tree is modified here.
             }
-            if (!TypeUtil::Equal(result, right->type_))
+            if (!TypeUtil::Equal(result, rt))
             {
                 sn_cast_expression *cast_expr = new sn_cast_expression();
                 cast_expr->type_ = result;
@@ -2869,13 +2865,44 @@ void sn_mul_expression::afterChildren(Environment *&env, const int pass)
                 replaceChild(1,
                              right);  // XXX: syntax tree is modified here.
             }
+
+            type_ = result;
         }
         else
         {
-            SyntaxError("can't mul/div these two types.");
+            SyntaxError("multiplicative operation require arithmetic types.");
         }
+    }
+    else if (pass == 2)  // code generation
+    {
+        IRStorage &st = env->getStorage();
+        code_info_.append(left->code_info_);
+        code_info_.append(right->code_info_);
 
-        type_ = left->type_;
+        assert(lt->getSize() == rt->getSize());
+
+        result_info_ =
+            st.addAndGetAddress(IRObjectBuilder()
+                                    .withValue(IRValueFactory::CreateZero(
+                                        lt->getSize(), lt->getAlignment()))
+                                    .build());
+        if (lt->getClass() == T_INT && rt->getClass() == T_INT)
+        {
+            code_info_.add(IRInstructionBuilder::Mul(
+                left->result_info_, right->result_info_, result_info_));
+        }
+        else if (lt->getClass() == T_FLOAT && rt->getClass() == T_FLOAT)
+        {
+            // code_info_.add(IRInstructionBuilder::FMUL(
+            //             left->result_info_,
+            //             right->result_info_,
+            //             result_info_
+            //             ));
+        }
+        else
+        {
+            assert(false);
+        }
     }
 }
 void sn_cast_expression::afterChildren(Environment *&env, const int pass)
@@ -2891,9 +2918,72 @@ void sn_cast_expression::afterChildren(Environment *&env, const int pass)
     {
         sn_expression *e = dynamic_cast<sn_expression *>(getLastChild());
         code_info_.append(e->code_info_);
-        // TODO: type conversion code
-        // ...
-        result_info_ = e->result_info_;
+
+        IRStorage &st = env->getStorage();
+
+        const Type *to = type_;
+        const Type *from = e->type_;
+        IRAddress dst;
+        IRAddress &src = e->result_info_;
+        {
+            if (to->getSize() != from->getSize() ||
+                (to->getClass() == T_INT && from->getClass() == T_FLOAT) ||
+                (to->getClass() == T_FLOAT && from->getClass() == T_INT))
+            {
+                dst = st.addAndGetAddress(
+                    IRObjectBuilder()
+                        .withValue(IRValueFactory::CreateZero(
+                            to->getSize(), to->getAlignment()))
+                        .build());
+                result_info_ = dst;
+            }
+            else
+                result_info_ = e->result_info_;
+
+            // char <=> int <=> enum
+            if (to->isIntegral() && from->isIntegral())
+            {
+                // same size: no-op
+                // inc size: sx/zx
+                // dec size: shrk
+                if (to->getSize() > from->getSize())
+                {
+                    // XXX: assume 'char' is signed
+                    bool is_signed =
+                        (from->getClass() == T_INT
+                             ? dynamic_cast<const IntegerType *>(from)
+                                   ->isSigned()
+                             : true);
+
+                    code_info_.add(is_signed
+                                       ? IRInstructionBuilder::SX(src, dst)
+                                       : IRInstructionBuilder::SX(src, dst));
+                }
+                else if (to->getSize() < from->getSize())
+                    code_info_.add(IRInstructionBuilder::SHRK(src, dst));
+            }
+            // float <=> float
+            else if (to->getClass() == T_FLOAT && from->getClass() == T_FLOAT)
+            {
+                // inc size: fext
+                // dec size: fshrk
+                if (to->getSize() > from->getSize())
+                    code_info_.add(IRInstructionBuilder::FEXT(src, dst));
+                else if (to->getSize() < from->getSize())
+                    code_info_.add(IRInstructionBuilder::FSHRK(src, dst));
+            }
+            // int <=> float
+            else if (to->getClass() == T_INT && from->getClass() == T_FLOAT)
+            {
+                // f2i
+                code_info_.add(IRInstructionBuilder::F2I(src, dst));
+            }
+            else if (to->getClass() == T_FLOAT && from->getClass() == T_INT)
+            {
+                // i2f
+                code_info_.add(IRInstructionBuilder::I2F(src, dst));
+            }
+        }
     }
 }
 void sn_unary_expression::afterChildren(Environment *&env, const int pass)
@@ -2946,8 +3036,6 @@ void sn_unary_expression::afterChildren(Environment *&env, const int pass)
                     cast_expr = new sn_cast_expression();
                     cast_expr->type_ = type_;
                     cast_expr->addChild(child);
-                    cast_expr->result_info_ = expr->result_info_;
-                    cast_expr->code_info_.append(expr->code_info_);
                     replaceChild(
                         0,
                         cast_expr);  // XXX: syntax tree is modified here.
@@ -3068,6 +3156,7 @@ void sn_postfix_expression::afterChildren(Environment *&env, const int pass)
     sn_identifier *right_id = nullptr;
     const Type *left_impl = nullptr;
     StringRef member_name;
+
     if (pass == 1)  // type derivation
     {
         // used in switch
@@ -3382,6 +3471,13 @@ std::string SyntaxNode::toString() const
     const sn_statement *stat = dynamic_cast<const sn_statement *>(this);
     if (expr)
     {
+        if (expr->nodeType() == SN_CAST_EXPRESSION)
+        {
+            s += " [";
+            s += dynamic_cast<const sn_expression *>(expr->getLastChild())
+                     ->type_->toString();
+            s += "] -~>";
+        }
         s += " [";
         if (expr->type_)
             s += expr->type_->toString();

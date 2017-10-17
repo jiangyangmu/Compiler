@@ -222,15 +222,32 @@ Type *TypeConversion::ValueTransformConversion(Type *t)
     }
 }
 
+// char, short int, bit-field, enum
+//    => int if large enough
+//    => unsigned int else
 Type *TypeConversion::IntegerPromotion(Type *t)
 {
-    // TODO: also consider unsigned int
     if (t == nullptr || !t->isIntegral())
         SyntaxError("IntegerPromotion: expect integral type.");
     return new IntegerType("i");
 }
 // Type *TypeConversion::BooleanConversion(Type *t);
-// Type *TypeConversion::IntegerConversion(Type *t);
+Type *TypeConversion::IntegerConversion(Type *from, Type *to)
+{
+    assert(from != nullptr && to != nullptr);
+    assert(from->getClass() == T_INT && to->getClass() == T_INT);
+
+    size_t size1 = from->getSize();
+    size_t size2 = to->getSize();
+    // bool signed1 = dynamic_cast<IntegerType *>(from)->isSigned();
+    // bool signed2 = dynamic_cast<IntegerType *>(to)->isSigned();
+
+    if (size1 == size2) {}
+    else if (size1 < size2) {}
+    else {}
+
+    return to;
+}
 // Type *TypeConversion::PointerConversion(Type *t);
 // Type *TypeConversion::FloatingConversion(Type *t);
 // Type *TypeConversion::FIIFConversion(Type *from, const Type *to);
@@ -671,6 +688,21 @@ void IR_to_x64::onInstruction(const IRInstruction &inst)
                 + x64_address(inst.arg1) + ", "
                 + reg + "\n";
             break;
+        case IR_OPCODE_sx:
+            reg = x64_register(inst.arg1, 0);
+            r2 = x64_register(inst.arg2, 0);
+            _text += "\tmov "
+                + reg + ", "
+                + x64_address(inst.arg1) + "\n";
+            _text += "\tmovsx "
+                + r2+ ", "
+                + reg + "\n";
+            _text += "\tmov "
+                + x64_address(inst.arg2) + ", "
+                + r2 + "\n";
+            break;
+        case IR_OPCODE_zx:
+        case IR_OPCODE_shrk:
         case IR_OPCODE_jmp:
         case IR_OPCODE_je:
         case IR_OPCODE_jl:
@@ -700,6 +732,10 @@ void IR_to_x64::onInstruction(const IRInstruction &inst)
         case IR_OPCODE_fsub:
         case IR_OPCODE_fmul:
         case IR_OPCODE_fdiv:
+        case IR_OPCODE_fext:
+        case IR_OPCODE_fshrk:
+        case IR_OPCODE_f2i:
+        case IR_OPCODE_i2f:
         case IR_OPCODE_invalid:
             _text += "\tnot implemented: " + inst.toString() + "\n";
             break;
@@ -765,6 +801,9 @@ std::string IRUtil::OpcodeToString(EIROpcode op)
         case IR_OPCODE_inc: s = "inc"; break;
         case IR_OPCODE_dec: s = "dec"; break;
         case IR_OPCODE_neg: s = "neg"; break;
+        case IR_OPCODE_sx: s = "sx"; break;
+        case IR_OPCODE_zx: s = "zx"; break;
+        case IR_OPCODE_shrk: s = "shrk"; break;
         case IR_OPCODE_ref: s = "ref"; break;
         case IR_OPCODE_deref: s = "deref"; break;
         case IR_OPCODE_param: s = "param"; break;

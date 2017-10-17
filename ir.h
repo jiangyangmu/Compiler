@@ -33,7 +33,6 @@ enum EIROpcode
     IR_OPCODE_free,
 
     // statement
-    IR_OPCODE_cmp,
     IR_OPCODE_jmp,
     IR_OPCODE_je,
     IR_OPCODE_jl,
@@ -45,14 +44,26 @@ enum EIROpcode
     IR_OPCODE_ja,
     IR_OPCODE_jae,
 
-    // expression
+    // routine
+    IR_OPCODE_param,
+    IR_OPCODE_call,
+    IR_OPCODE_ret,
+
+    // pointer
+    IR_OPCODE_ref,
+    IR_OPCODE_deref,
+
+    // integer operands
     IR_OPCODE_mov,
+    IR_OPCODE_cmp,
+    // bit-wise
     IR_OPCODE_or,
     IR_OPCODE_xor,
     IR_OPCODE_and,
-    IR_OPCODE_not,  // bit-wise
+    IR_OPCODE_not,
     IR_OPCODE_shl,
-    IR_OPCODE_shr,  // shift
+    IR_OPCODE_shr,
+    // arithmetic
     IR_OPCODE_add,
     IR_OPCODE_sub,
     IR_OPCODE_mul,
@@ -60,14 +71,15 @@ enum EIROpcode
     IR_OPCODE_mod,
     IR_OPCODE_inc,
     IR_OPCODE_dec,
+    // signedness
     IR_OPCODE_neg,
-    IR_OPCODE_ref,
-    IR_OPCODE_deref,
 
-    // routine
-    IR_OPCODE_param,
-    IR_OPCODE_call,
-    IR_OPCODE_ret,
+    // integer conversion
+    // IR_OPCODE_s2u,
+    // IR_OPCODE_u2s,
+    IR_OPCODE_sx, // signed extend
+    IR_OPCODE_zx, // unsigned extend
+    IR_OPCODE_shrk, // shrink
 
     // FPU
     IR_OPCODE_fld,
@@ -78,6 +90,11 @@ enum EIROpcode
     IR_OPCODE_fsub,
     IR_OPCODE_fmul,
     IR_OPCODE_fdiv,
+    // floating-point conversion
+    IR_OPCODE_fext, // extend
+    IR_OPCODE_fshrk, // shrink
+    IR_OPCODE_f2i,
+    IR_OPCODE_i2f,
 };
 struct IRInstruction
 {
@@ -129,6 +146,34 @@ class IRInstructionBuilder
     static IRInstruction Mul(IRAddress arg1, IRAddress arg2, IRAddress arg3)
     {
         return {IR_OPCODE_mul, arg1, arg2, arg3, nullptr};
+    }
+    static IRInstruction SX(IRAddress arg1, IRAddress arg2)
+    {
+        return {IR_OPCODE_sx, arg1, arg2, {}, nullptr};
+    }
+    static IRInstruction ZX(IRAddress arg1, IRAddress arg2)
+    {
+        return {IR_OPCODE_zx, arg1, arg2, {}, nullptr};
+    }
+    static IRInstruction SHRK(IRAddress arg1, IRAddress arg2)
+    {
+        return {IR_OPCODE_shrk, arg1, arg2, {}, nullptr};
+    }
+    static IRInstruction FEXT(IRAddress arg1, IRAddress arg2)
+    {
+        return {IR_OPCODE_fext, arg1, arg2, {}, nullptr};
+    }
+    static IRInstruction FSHRK(IRAddress arg1, IRAddress arg2)
+    {
+        return {IR_OPCODE_fshrk, arg1, arg2, {}, nullptr};
+    }
+    static IRInstruction F2I(IRAddress arg1, IRAddress arg2)
+    {
+        return {IR_OPCODE_f2i, arg1, arg2, {}, nullptr};
+    }
+    static IRInstruction I2F(IRAddress arg1, IRAddress arg2)
+    {
+        return {IR_OPCODE_i2f, arg1, arg2, {}, nullptr};
     }
     static IRInstruction Ref(IRAddress arg1, IRAddress arg2)
     {

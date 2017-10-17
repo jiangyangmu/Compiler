@@ -172,7 +172,11 @@ class Type : public Stringable
 
     virtual bool equal(const Type &o) const
     {
-        return _tc == o._tc && _prop == o._prop && _size == o._size &&
+        // XXX: ignore Lvalue prop
+        // TODO: maybe create another function same() ?
+        int p = _prop & ~TP_LVALUE;
+        int op = o._prop & ~TP_LVALUE;
+        return _tc == o._tc && (p == op) && _size == o._size &&
                _align == o._align;
     }
 
@@ -550,7 +554,7 @@ class TypeConversion
 
     static Type *IntegerPromotion(Type *t);
     static Type *BooleanConversion(Type *t);
-    static Type *IntegerConversion(Type *t);
+    static Type *IntegerConversion(Type *from, Type *to);
     static Type *PointerConversion(Type *t);
     static Type *FloatingConversion(Type *t);
     // floating-int, int-floating
