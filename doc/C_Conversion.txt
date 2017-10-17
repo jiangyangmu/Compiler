@@ -114,6 +114,23 @@ C 对 "自动类型转换" 的支持？
                           then if target type is unsigned, calc result using unsigned-mod
                                else (target is signed), implementation defined.
 
+            size & signedness (in two's-compliment)
+                * If same size,
+                    signed to unsigned is no-op,
+                    unsigned to signed is implementation-defined(no-op).
+                * If inc size,
+                    signed to signed is signed-extend,
+                    signed to unsigned is signed-extend, (well-defined underflow)
+                    unsigned to signed is zero-extend.
+                    unsigned to unsigned is zero-extend,
+                * If dec size,
+                    * XXX: how to handle sign-bit? ignore
+                    signed to signed is implementation-defined (shrink),
+                    unsigned to signed is implementation-defined (shrink),
+                    signed to unsigned is shrink, (well-defined underflow)
+                    unsigned to unsigned is shrink.
+
+
     Pointer Conversions =>
             (void *) can be implicitly converted to and from any pointer to object (not function)
             const/volatile can be added
@@ -122,17 +139,20 @@ C 对 "自动类型转换" 的支持？
 
 
     Real floating-integer Conversions => ...
-            From C89:
-                floating -> integral
-                    fractional part is discarded. If integral part is too large, undefined behavior.
-                integral -> floating
-                    choose the nearest value, lower or higher
+
+            floating -> integral
+                fractional part is discarded.
+                If integral part is too large, undefined behavior.
+            integral -> floating
+                choose the nearest value, lower or higher is implementation-defined.
+
     Real floating point Conversions => ...
-            From C89:
-                float -> double -> long double
-                    promotion loses nothing
-                long double -> double -> float
-                    demotion choose the nearest value, lower or higher
+
+            float -> double -> long double
+                promotion loses nothing.
+            long double -> double -> float
+                demotion choose the nearest value, lower or higher is implementation-defined.
+                If too large, undefined behavior.
 
 
 发生 "自动类型转换" 的时机，应该采取的行动？
@@ -163,11 +183,6 @@ C 对 "自动类型转换" 的支持？
         (double, *) => double
         (float, *) => float
         [Integer Promotions]
-        if same signedness => choose bigger integer
-        if unsigned has bigger integer => choose unsigned
-        if signed has bigger integer & can represent unsigned => choose signed
-        else (equal big integer, or signed not large enough) => choose unsigned with signed integer
-      Rules from C89:
         (unsigned long int, Integral) => unsigned long int
         (long int, unsigned int)
             => long int (if long int big enough)

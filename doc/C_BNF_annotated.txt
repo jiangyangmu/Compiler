@@ -211,6 +211,7 @@ cast-expr               := unary-expr
 
 # prefix-expr
 # ++i 在 C 里是 rvalue，C++ 里是 lvalue
+# unary-op: & * + - ~ !
 unary-expr              := postfix-expr
                         || '++' unary-expr
                         || '--' unary-expr

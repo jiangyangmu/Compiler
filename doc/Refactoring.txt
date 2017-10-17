@@ -125,6 +125,23 @@ ensure semantics correctness
             qualified = top type is specified with a type qualifier
                 unqualified type = top type remove type qualifiers
                 'const'/'volatile'
+            lvalue = an expression (with an object type or an incomplete
+                     type other than void) that designates an object.
+                create:
+                    # identifer (in primary-expr)
+                    # identifer (in function-definition)
+                    # string-literal
+                        with type 'array of char'
+                    # postfix-expr '->' identifer
+                    # '*' cast-expr (in unary-expr)
+                    # postfix-expr '[' expr ']'
+                        equal to: '*' (postfix-expr '+' (expr))
+                transfer:
+                    # '(' expr ')'
+                        e.isLvalue() = expr.isLvalue()
+                    # postfix-expr '.' identifer
+                        e.isLvalue() = postfix-expr.isLvalue()
+
             <两个类型之间：融合>
             compatible = if their types are the same. Additional rules for determining whether two types are compatible are described in 3.5.2 for type specifiers, in 3.5.3 for type qualifiers, and in 3.5.4 for declarators.
                          two structure, union, or enumeration types declared in separate translation units are compatible if they have the same number of members, the same member names, and compatible member types; for two structures, the members shall be in the same order; for two enumerations, the members shall have the same values.
