@@ -230,7 +230,7 @@ bool TagType::equal(const Type &o) const
 
 bool EnumConstType::equal(const Type &o) const
 {
-    if (!Type::equal(o))
+    if (!IntegralType::equal(o))
         return false;
 
     const EnumConstType &e = dynamic_cast<const EnumConstType &>(o);

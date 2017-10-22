@@ -13,6 +13,10 @@ using namespace std;
 
 // -------- type management -------
 
+Type *TypeUtil::Type_size_t()
+{
+    return new IntegerType("Ui");
+}
 Type *TypeUtil::Concatenate(Type *front, Type *back)
 {
     if (front == nullptr)
@@ -623,6 +627,15 @@ void IR_to_x64::onInstruction(const IRInstruction &inst)
                 + x64_address(inst.arg2) + ", "
                 + r2 + "\n";
             break;
+        case IR_OPCODE_sal:
+            // mov cl, arg2
+            // sal arg1, cl
+            // mov arg1, arg3
+        case IR_OPCODE_shl:
+        case IR_OPCODE_sar:
+        case IR_OPCODE_shr:
+            _text += "\tnot implemented: " + inst.toString() + "\n";
+            break;
         case IR_OPCODE_add:
             reg = x64_register(inst.arg1, 0);
             _text += "\tmov "
@@ -701,10 +714,18 @@ void IR_to_x64::onInstruction(const IRInstruction &inst)
                 + x64_address(inst.arg2) + ", "
                 + r2 + "\n";
             break;
+        case IR_OPCODE_ret:
+            reg = x64_register(inst.arg1, 0);
+            _text += "\tmov "
+                + reg + ", "
+                + x64_address(inst.arg1) + "\n";
+            _text += "\tret\n";
+            break;
         case IR_OPCODE_zx:
         case IR_OPCODE_shrk:
         case IR_OPCODE_jmp:
         case IR_OPCODE_je:
+        case IR_OPCODE_jne:
         case IR_OPCODE_jl:
         case IR_OPCODE_jle:
         case IR_OPCODE_jg:
@@ -717,13 +738,10 @@ void IR_to_x64::onInstruction(const IRInstruction &inst)
         case IR_OPCODE_xor:
         case IR_OPCODE_and:
         case IR_OPCODE_not:
-        case IR_OPCODE_shl:
-        case IR_OPCODE_shr:
         case IR_OPCODE_div:
         case IR_OPCODE_mod:
         case IR_OPCODE_param:
         case IR_OPCODE_call:
-        case IR_OPCODE_ret:
         case IR_OPCODE_fld:
         case IR_OPCODE_fst:
         case IR_OPCODE_fabs:
@@ -778,6 +796,7 @@ std::string IRUtil::OpcodeToString(EIROpcode op)
         case IR_OPCODE_cmp: s = "cmp"; break;
         case IR_OPCODE_jmp: s = "jmp"; break;
         case IR_OPCODE_je: s = "je"; break;
+        case IR_OPCODE_jne: s = "jne"; break;
         case IR_OPCODE_jl: s = "jl"; break;
         case IR_OPCODE_jle: s = "jle"; break;
         case IR_OPCODE_jg: s = "jg"; break;
@@ -792,7 +811,9 @@ std::string IRUtil::OpcodeToString(EIROpcode op)
         case IR_OPCODE_and: s = "and"; break;
         case IR_OPCODE_not: s = "not"; break;
         case IR_OPCODE_shl: s = "shl"; break;
+        case IR_OPCODE_sal: s = "sal"; break;
         case IR_OPCODE_shr: s = "shr"; break;
+        case IR_OPCODE_sar: s = "sar"; break;
         case IR_OPCODE_add: s = "add"; break;
         case IR_OPCODE_sub: s = "sub"; break;
         case IR_OPCODE_mul: s = "mul"; break;

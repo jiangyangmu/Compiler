@@ -183,6 +183,63 @@ class Type : public Stringable
     // from Stringable
     virtual std::string toString() const;
 };
+class IntegralType : public Type
+{
+   protected:
+    bool _signed;
+
+    IntegralType(ETypeClass tc, int prop, size_t size, size_t align)
+        : Type(tc, prop | TP_IS_INTEGRAL | TP_IS_ARITHMETIC | TP_IS_SCALAR,
+               size, align),
+          _signed(false)
+    {
+    }
+
+   public:
+    bool isSigned() const
+    {
+        return _signed;
+    }
+
+    virtual bool equal(const Type &o) const
+    {
+        if (!Type::equal(o))
+            return false;
+        const IntegralType &p = dynamic_cast<const IntegralType &>(o);
+        return isSigned() == p.isSigned();
+    }
+};
+class DerivedType : public Type
+{
+   protected:
+    Type *_t;
+
+    DerivedType(ETypeClass tc, int prop, size_t size = 0, size_t align = 0)
+        : Type(tc, prop, size, align), _t(nullptr)
+    {
+    }
+
+   public:
+    virtual void setTargetType(Type *t)
+    {
+        // assert(_t == nullptr);
+        assert(t != nullptr);
+        _t = t;
+    }
+    Type *getTargetType()
+    {
+        return _t;
+    }
+
+    virtual bool equal(const Type &o) const
+    {
+        if (!Type::equal(o))
+            return false;
+        const DerivedType &p = dynamic_cast<const DerivedType &>(o);
+        assert(_t && p._t);
+        return _t->equal(*p._t);
+    }
+};
 
 class VoidType : public Type
 {
@@ -194,40 +251,34 @@ class VoidType : public Type
     // from Stringable
     virtual std::string toString() const;
 };
-class CharType : public Type
+class CharType : public IntegralType
 {
     friend TypeUtil;
 
    public:
-    CharType()
-        : Type(T_CHAR,
-               TP_IS_INTEGRAL | TP_IS_ARITHMETIC | TP_IS_SCALAR | TP_IS_OBJECT,
-               1, 1)
+    CharType() : IntegralType(T_CHAR, TP_IS_OBJECT, 1, 1)
     {
+        _signed = true;
     }
 
     // from Stringable
     virtual std::string toString() const;
 };
-class IntegerType : public Type
+class IntegerType : public IntegralType
 {
     friend TypeUtil;
 
     const char *_desc;
-    bool _signed;
 
    public:
     IntegerType(const char *desc)
-        : Type(T_INT,
-               TP_IS_INTEGRAL | TP_IS_ARITHMETIC | TP_IS_SCALAR | TP_IS_OBJECT,
-               4, 4),
-          _desc(desc),
-          _signed(true)
+        : IntegralType(T_INT, TP_IS_OBJECT, 4, 4), _desc(desc)
     {
         // assume desc is valid combination
         assert(desc != nullptr);
 
         // sign
+        _signed = true;
         if (*desc == 'S')
             ++desc;
         else if (*desc == 'U')
@@ -241,19 +292,6 @@ class IntegerType : public Type
             default: break;
         }
         _align = _size;
-    }
-
-    bool isSigned() const
-    {
-        return _signed;
-    }
-
-    virtual bool equal(const Type &o) const
-    {
-        if (!Type::equal(o))
-            return false;
-        const IntegerType &i = dynamic_cast<const IntegerType &>(o);
-        return _signed == i._signed;
     }
 
     // from Stringable
@@ -289,37 +327,6 @@ class FloatingType : public Type
     virtual std::string toString() const;
 };
 // derived types
-class DerivedType : public Type
-{
-   protected:
-    Type *_t;
-
-    DerivedType(ETypeClass tc, int prop, size_t size = 0, size_t align = 0)
-        : Type(tc, prop, size, align), _t(nullptr)
-    {
-    }
-
-   public:
-    virtual void setTargetType(Type *t)
-    {
-        // assert(_t == nullptr);
-        assert(t != nullptr);
-        _t = t;
-    }
-    Type *getTargetType()
-    {
-        return _t;
-    }
-
-    virtual bool equal(const Type &o) const
-    {
-        if (!Type::equal(o))
-            return false;
-        const DerivedType &p = dynamic_cast<const DerivedType &>(o);
-        assert(_t && p._t);
-        return _t->equal(*p._t);
-    }
-};
 class PointerType : public DerivedType
 {
     friend TypeUtil;
@@ -416,7 +423,7 @@ class TagType : public Type
     // from Stringable
     virtual std::string toString() const;
 };
-class EnumConstType : public Type
+class EnumConstType : public IntegralType
 {
     friend TypeUtil;
 
@@ -425,10 +432,7 @@ class EnumConstType : public Type
 
    public:
     EnumConstType(StringRef name, int value)
-        : Type(T_ENUM_CONST, TP_IS_INTEGRAL | TP_IS_ARITHMETIC | TP_IS_SCALAR,
-               4, 4),
-          _name(name),
-          _value(value)
+        : IntegralType(T_ENUM_CONST, 0, 4, 4), _name(name), _value(value)
     {
     }
 
@@ -521,7 +525,7 @@ class LabelType : public Type
 class TypeUtil
 {
    public:
-    static const Type *Type_size_t();
+    static Type *Type_size_t();
     static Type *Concatenate(Type *front, Type *back);
     // unbox derived type
     static Type *TargetType(Type *aggregate);

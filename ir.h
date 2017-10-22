@@ -22,6 +22,16 @@ struct IRAddress
     };
 
     std::string toString() const;
+
+    static IRAddress imm_0() {
+        return {OP_ADDR_imm, sizeof(int), {0}};
+    }
+    static IRAddress imm_1() {
+        return {OP_ADDR_imm, sizeof(int), {1}};
+    }
+    static IRAddress imm_2() {
+        return {OP_ADDR_imm, sizeof(int), {2}};
+    }
 };
 
 enum EIROpcode
@@ -35,6 +45,7 @@ enum EIROpcode
     // statement
     IR_OPCODE_jmp,
     IR_OPCODE_je,
+    IR_OPCODE_jne,
     IR_OPCODE_jl,
     IR_OPCODE_jle,
     IR_OPCODE_jg,
@@ -63,6 +74,8 @@ enum EIROpcode
     IR_OPCODE_not,
     IR_OPCODE_shl,
     IR_OPCODE_shr,
+    IR_OPCODE_sal, // signed shift left
+    IR_OPCODE_sar, // signed shift right
     // arithmetic
     IR_OPCODE_add,
     IR_OPCODE_sub,
@@ -113,11 +126,48 @@ class IRInstructionBuilder
     }
     static IRInstruction Mov(IRAddress arg1, IRAddress arg2)
     {
+        assert(arg1.mode != OP_ADDR_invalid && arg2.mode != OP_ADDR_invalid);
         return {IR_OPCODE_mov, arg1, arg2, {}, nullptr};
     }
     static IRInstruction Je(IRAddress arg1)
     {
         return {IR_OPCODE_je, arg1, {}, {}, nullptr};
+    }
+    static IRInstruction Jne(IRAddress arg1)
+    {
+        return {IR_OPCODE_jne, arg1, {}, {}, nullptr};
+    }
+    static IRInstruction Jl(IRAddress arg1)
+    {
+        return {IR_OPCODE_jl, arg1, {}, {}, nullptr};
+    }
+    static IRInstruction Jle(IRAddress arg1)
+    {
+        return {IR_OPCODE_jle, arg1, {}, {}, nullptr};
+    }
+    static IRInstruction Jg(IRAddress arg1)
+    {
+        return {IR_OPCODE_jg, arg1, {}, {}, nullptr};
+    }
+    static IRInstruction Jge(IRAddress arg1)
+    {
+        return {IR_OPCODE_jge, arg1, {}, {}, nullptr};
+    }
+    static IRInstruction Jb(IRAddress arg1)
+    {
+        return {IR_OPCODE_jb, arg1, {}, {}, nullptr};
+    }
+    static IRInstruction Jbe(IRAddress arg1)
+    {
+        return {IR_OPCODE_jbe, arg1, {}, {}, nullptr};
+    }
+    static IRInstruction Ja(IRAddress arg1)
+    {
+        return {IR_OPCODE_ja, arg1, {}, {}, nullptr};
+    }
+    static IRInstruction Jae(IRAddress arg1)
+    {
+        return {IR_OPCODE_jae, arg1, {}, {}, nullptr};
     }
     static IRInstruction Jmp(IRAddress arg1)
     {
@@ -135,6 +185,34 @@ class IRInstructionBuilder
     {
         return {IR_OPCODE_neg, arg1, {}, {}, nullptr};
     }
+    static IRInstruction Or(IRAddress arg1, IRAddress arg2, IRAddress arg3)
+    {
+        return {IR_OPCODE_or, arg1, arg2, arg3, nullptr};
+    }
+    static IRInstruction Xor(IRAddress arg1, IRAddress arg2, IRAddress arg3)
+    {
+        return {IR_OPCODE_xor, arg1, arg2, arg3, nullptr};
+    }
+    static IRInstruction And(IRAddress arg1, IRAddress arg2, IRAddress arg3)
+    {
+        return {IR_OPCODE_and, arg1, arg2, arg3, nullptr};
+    }
+    static IRInstruction Shl(IRAddress arg1, IRAddress arg2, IRAddress arg3)
+    {
+        return {IR_OPCODE_shl, arg1, arg2, arg3, nullptr};
+    }
+    static IRInstruction Sal(IRAddress arg1, IRAddress arg2, IRAddress arg3)
+    {
+        return {IR_OPCODE_shl, arg1, arg2, arg3, nullptr};
+    }
+    static IRInstruction Shr(IRAddress arg1, IRAddress arg2, IRAddress arg3)
+    {
+        return {IR_OPCODE_shr, arg1, arg2, arg3, nullptr};
+    }
+    static IRInstruction Sar(IRAddress arg1, IRAddress arg2, IRAddress arg3)
+    {
+        return {IR_OPCODE_sar, arg1, arg2, arg3, nullptr};
+    }
     static IRInstruction Add(IRAddress arg1, IRAddress arg2, IRAddress arg3)
     {
         return {IR_OPCODE_add, arg1, arg2, arg3, nullptr};
@@ -146,6 +224,14 @@ class IRInstructionBuilder
     static IRInstruction Mul(IRAddress arg1, IRAddress arg2, IRAddress arg3)
     {
         return {IR_OPCODE_mul, arg1, arg2, arg3, nullptr};
+    }
+    static IRInstruction Div(IRAddress arg1, IRAddress arg2, IRAddress arg3)
+    {
+        return {IR_OPCODE_div, arg1, arg2, arg3, nullptr};
+    }
+    static IRInstruction Mod(IRAddress arg1, IRAddress arg2, IRAddress arg3)
+    {
+        return {IR_OPCODE_mod, arg1, arg2, arg3, nullptr};
     }
     static IRInstruction SX(IRAddress arg1, IRAddress arg2)
     {
@@ -182,6 +268,10 @@ class IRInstructionBuilder
     static IRInstruction Deref(IRAddress arg1, IRAddress arg2)
     {
         return {IR_OPCODE_deref, arg1, arg2, {}, nullptr};
+    }
+    static IRInstruction Ret(IRAddress arg1)
+    {
+        return {IR_OPCODE_ret, arg1, {}, {}, nullptr};
     }
 };
 // Usage:

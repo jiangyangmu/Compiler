@@ -834,7 +834,7 @@ class sn_mul_expression : public sn_expression
 
    public:
     sn_mul_expression() : sn_expression(SN_MUL_EXPRESSION) {}
-    static sn_expression *parse(Lexer &lex);
+    static sn_expression *parse(Lexer &lex, sn_expression *left);
 
     // Visitor
     virtual void afterChildren(Environment *&env, const int pass);
