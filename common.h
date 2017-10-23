@@ -106,6 +106,10 @@ class StringRef
         begin = data;
         end = data + n;
     }
+    StringRef & operator=(const char *data)
+    {
+        return (*this = StringRef(data));
+    }
 
     void clear()
     {

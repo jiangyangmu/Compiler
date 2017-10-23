@@ -529,10 +529,11 @@ class TypeUtil
     static Type *Concatenate(Type *front, Type *back);
     // unbox derived type
     static Type *TargetType(Type *aggregate);
+    static const Type *TargetType(const Type *aggregate);
     static Type *Merge(Type *t1, Type *t2);
     static Type *CloneTop(const Type *T);
     static bool Equal(const Type *t1, const Type *t2);
-    static bool Compatible(const Type *t1, const Type *t2);
+    static bool Compatible(const Type *t1, const Type *t2, StringRef *reason = nullptr);
     // Is 'test' more strict qualified than 'base' ?
     static bool MoreStrictQualified(const Type *test, const Type *base);
     // for anonymous struct/union/enum

@@ -49,6 +49,22 @@ Type *TypeUtil::TargetType(Type *t)
     }
     return target;
 }
+const Type *TypeUtil::TargetType(const Type *t)
+{
+    const Type *target = nullptr;
+    switch (t->getClass())
+    {
+        case T_POINTER:
+            target = dynamic_cast<const PointerType *>(t)->_t;
+            break;
+        case T_ARRAY: target = dynamic_cast<const ArrayType *>(t)->_t; break;
+        case T_FUNCTION: target = dynamic_cast<const FuncType *>(t)->_t; break;
+        default:
+            SyntaxError("TypeUtil::TargetType: not an aggregate type.");
+            break;
+    }
+    return target;
+}
 Type *TypeUtil::Merge(Type *t1, Type *t2)
 {
     if (t1 == nullptr)
@@ -83,20 +99,202 @@ bool TypeUtil::Equal(const Type *t1, const Type *t2)
     assert(t1 && t2);
     return t1->equal(*t2);
 }
-bool TypeUtil::Compatible(const Type *t1, const Type *t2)
+bool TypeUtil::Compatible(const Type *t1, const Type *t2, StringRef *reason)
 {
-    // TODO: fully support this.
+    // TODO: support typedef.
+    // TODO: support enum-const.
     assert(t1 != nullptr && t2 != nullptr);
 
+    // type qualifier
+    int qualifiers = TP_CONST | TP_VOLATILE;
+    if ((t1->_prop & qualifiers) != (t2->_prop & qualifiers))
+    {
+        if (reason)
+            *reason = "different qualified.";
+        return false;
+    }
+
+    // type specifier
     if (t1->getClass() != t2->getClass())
+    {
+        // XXX: allow enum-const to pass
+        if (!((t1->getClass() == T_ENUM_CONST && t2->isIntegral()) ||
+              (t2->getClass() == T_ENUM_CONST && t1->isIntegral())))
+        {
+            if (reason)
+                *reason = "different type class.";
+            return false;
+        }
+    }
+
+    bool unboxed = false;
+    if (t1->getClass() == T_TAG)
+    {
+        const TagType *tg1 = dynamic_cast<const TagType *>(t1);
+        const TagType *tg2 = dynamic_cast<const TagType *>(t2);
+        if (tg1->_name != tg2->_name || tg1->_impl_type != tg2->_impl_type)
+        {
+            if (reason)
+                *reason = "tag: different tag name or tag type.";
+            return false;
+        }
+        t1 = tg1->getImpl();
+        t2 = tg2->getImpl();
+        unboxed = true;
+    }
+
+    if (t1->getClass() == T_STRUCT)  // struct
+    {
+        assert(unboxed);
+        // number, names, types
+        const StructTypeImpl *s1 = dynamic_cast<const StructTypeImpl *>(t1);
+        const StructTypeImpl *s2 = dynamic_cast<const StructTypeImpl *>(t2);
+        if (s1->_member_name.size() != s2->_member_name.size())
+        {
+            if (reason)
+                *reason = "struct: different member number.";
+            return false;
+        }
+        for (size_t i = 0; i < s1->_member_name.size(); ++i)
+        {
+            if (s1->_member_name[i] != s2->_member_name[i] ||
+                !Compatible(s1->_member_type[i], s2->_member_type[i]))
+            {
+                if (reason)
+                    *reason = "struct: different member name or type.";
+                return false;
+            }
+        }
+        // goto test_size_and_align
+    }
+    else if (t1->getClass() == T_UNION)  // union
+    {
+        assert(unboxed);
+        // number, names, types
+        const StructTypeImpl *s1 = dynamic_cast<const StructTypeImpl *>(t1);
+        const StructTypeImpl *s2 = dynamic_cast<const StructTypeImpl *>(t2);
+        if (s1->_member_name.size() != s2->_member_name.size())
+            return false;
+        for (size_t i = 0; i < s1->_member_name.size(); ++i)
+        {
+            for (size_t j = 0; j < s2->_member_name.size(); ++j)
+            {
+                if (s1->_member_name[i] == s2->_member_name[j])
+                {
+                    if (!Compatible(s1->_member_type[i], s2->_member_type[j]))
+                    {
+                        if (reason)
+                            *reason = "union: different member type.";
+                        return false;
+                    }
+                    else
+                        break;
+                }
+            }
+        }
+        // goto test_size_and_align
+    }
+    else if (t1->getClass() == T_ENUM)  // enum
+    {
+        assert(unboxed);
+        // number, names, values
+        const EnumTypeImpl *e1 = dynamic_cast<const EnumTypeImpl *>(t1);
+        const EnumTypeImpl *e2 = dynamic_cast<const EnumTypeImpl *>(t2);
+        if (e1->_members.size() != e2->_members.size())
+            return false;
+        for (auto const &em1 : e1->_members)
+        {
+            bool matched = false;
+            for (auto const &em2 : e2->_members)
+            {
+                if (em1->_name == em2->_name && em1->_value == em2->_value)
+                {
+                    matched = true;
+                    break;
+                }
+            }
+            if (!matched)
+            {
+                if (reason)
+                    *reason = "enum: unmatched enum constant.";
+                return false;
+            }
+        }
+        // goto test_size_and_align
+    }
+    else if (t1->getClass() == T_ENUM_CONST)
+    {
+        const EnumConstType *ec1 = dynamic_cast<const EnumConstType *>(t1);
+        const EnumConstType *ec2 = dynamic_cast<const EnumConstType *>(t2);
+        if (ec1->_name != ec2->_name || ec1->_value != ec2->_value)
+        {
+            if (reason)
+                *reason = "enum-const: unmatched.";
+            return false;
+        }
+    }
+
+    // declarator
+    if (t1->getClass() == T_POINTER)  // pointer
+    {
+        if (!Compatible(TargetType(t1), TargetType(t2)))
+        {
+            if (reason)
+                *reason = "pointer: incompatible target type.";
+            return false;
+        }
+        else
+            return true;
+    }
+    else if (t1->getClass() == T_ARRAY)  // array
+    {
+        if (!t1->isIncomplete() && !t2->isIncomplete() &&
+            dynamic_cast<const ArrayType *>(t1)->_n !=
+                dynamic_cast<const ArrayType *>(t2)->_n)
+        {
+            if (reason)
+                *reason = "array: unmatched size.";
+            return false;
+        }
+        else
+        {
+            if (!Compatible(TargetType(t1), TargetType(t2)))
+            {
+                if (reason)
+                    *reason = "array: incompatible target type.";
+                return false;
+            }
+            else
+                return true;
+        }
+    }
+    else if (t1->getClass() == T_FUNCTION)  // function
+    {
+        SyntaxError("not implemented.");
+    }
+
+    // char/integer/floating/enum-const
+    if (t1->isIntegral() && t2->isIntegral())
+    {
+        const IntegralType *i1 = dynamic_cast<const IntegralType *>(t1);
+        const IntegralType *i2 = dynamic_cast<const IntegralType *>(t2);
+        if (i1->isSigned() != i2->isSigned())
+        {
+            if (reason)
+                *reason = "integral: unmatched signedness.";
+            return false;
+        }
+        // goto test_size_and_align
+    }
+    // void/label
+
+    if (t1->getSize() != t2->getSize() ||
+        t1->getAlignment() != t2->getAlignment())
+    {
+        if (reason)
+            *reason = "unmatched size or alignment.";
         return false;
-    // ignore lvalue prop
-    if ((t1->_prop & ~TP_LVALUE) != (t2->_prop & ~TP_LVALUE))
-        return false;
-    if (t1->_size != t2->_size)
-        return false;
-    if (t1->_align != t2->_align)
-        return false;
+    }
     return true;
 }
 bool TypeUtil::MoreStrictQualified(const Type *test, const Type *base)
@@ -246,9 +444,15 @@ Type *TypeConversion::IntegerConversion(Type *from, Type *to)
     // bool signed1 = dynamic_cast<IntegerType *>(from)->isSigned();
     // bool signed2 = dynamic_cast<IntegerType *>(to)->isSigned();
 
-    if (size1 == size2) {}
-    else if (size1 < size2) {}
-    else {}
+    if (size1 == size2)
+    {
+    }
+    else if (size1 < size2)
+    {
+    }
+    else
+    {
+    }
 
     return to;
 }
@@ -464,7 +668,7 @@ void IR_to_x64::onObject(const IRObject &o)
     if (o.code != nullptr)
     {
         assert(o.linkage == IR_LINKAGE_static ||
-                o.linkage == IR_LINKAGE_static_export);
+               o.linkage == IR_LINKAGE_static_export);
         if (o.linkage == IR_LINKAGE_static_export)
             _text += "\t.global _" + o.name.toString() + "\n";
         _text += "_" + o.name.toString() + ":\n";
@@ -540,8 +744,14 @@ std::string x64_register(const IRAddress &addr, const size_t reg_index)
         {
             case 1: post = "l"; break;
             case 2: post = "x"; break;
-            case 4: pre = "e"; post = "x"; break;
-            case 8: pre = "r"; post = "x"; break;
+            case 4:
+                pre = "e";
+                post = "x";
+                break;
+            case 8:
+                pre = "r";
+                post = "x";
+                break;
             default: assert(false); break;
         }
         switch (reg_index)
@@ -555,7 +765,7 @@ std::string x64_register(const IRAddress &addr, const size_t reg_index)
     return reg;
 }
 std::string x64_loaded_address(const IRAddress &addr, const size_t reg_index,
-                          std::string &code)
+                               std::string &code)
 {
     assert(addr.mode != OP_ADDR_invalid);
     std::string x64addr = x64_address(addr);
@@ -596,41 +806,30 @@ void IR_to_x64::onInstruction(const IRInstruction &inst)
             _text += "\tpop rbp\n";
             break;
         case IR_OPCODE_cmp:
-            _text += "\tcmp "
-                + x64_loaded_address(inst.arg1, 0, _text) + ", "
-                + x64_loaded_address(inst.arg2, 1, _text) + "\n";
+            _text += "\tcmp " + x64_loaded_address(inst.arg1, 0, _text) + ", " +
+                     x64_loaded_address(inst.arg2, 1, _text) + "\n";
             break;
         case IR_OPCODE_mov:
-            _text += "\tmov "
-                + x64_address(inst.arg2) + ", "
-                + x64_loaded_address(inst.arg1, 0, _text) + "\n";
+            _text += "\tmov " + x64_address(inst.arg2) + ", " +
+                     x64_loaded_address(inst.arg1, 0, _text) + "\n";
             break;
         case IR_OPCODE_ref:
             reg = x64_register(inst.arg2, 0);
-            _text += "\tlea "
-                + reg + ", "
-                + x64_address(inst.arg1) + "\n";
-            _text += "\tmov "
-                + x64_address(inst.arg2) + ", "
-                + reg + "\n";
+            _text += "\tlea " + reg + ", " + x64_address(inst.arg1) + "\n";
+            _text += "\tmov " + x64_address(inst.arg2) + ", " + reg + "\n";
             break;
         case IR_OPCODE_deref:
             reg = x64_register(inst.arg1, 0);
             r2 = x64_register(inst.arg2, 1);
-            _text += "\tmov "
-                + reg + ", "
-                + x64_address(inst.arg1) + "\n";
-            _text += "\tmov "
-                + r2 + ", "
-                + x64_address(inst.arg2.width, reg) + "\n";
-            _text += "\tmov "
-                + x64_address(inst.arg2) + ", "
-                + r2 + "\n";
+            _text += "\tmov " + reg + ", " + x64_address(inst.arg1) + "\n";
+            _text +=
+                "\tmov " + r2 + ", " + x64_address(inst.arg2.width, reg) + "\n";
+            _text += "\tmov " + x64_address(inst.arg2) + ", " + r2 + "\n";
             break;
         case IR_OPCODE_sal:
-            // mov cl, arg2
-            // sal arg1, cl
-            // mov arg1, arg3
+        // mov cl, arg2
+        // sal arg1, cl
+        // mov arg1, arg3
         case IR_OPCODE_shl:
         case IR_OPCODE_sar:
         case IR_OPCODE_shr:
@@ -638,87 +837,50 @@ void IR_to_x64::onInstruction(const IRInstruction &inst)
             break;
         case IR_OPCODE_add:
             reg = x64_register(inst.arg1, 0);
-            _text += "\tmov "
-                + reg + ", "
-                + x64_address(inst.arg1) + "\n";
-            _text += "\tadd "
-                + reg + ", "
-                + x64_address(inst.arg2) + "\n";
-            _text += "\tmov "
-                + x64_address(inst.arg3) + ", "
-                + reg + "\n";
+            _text += "\tmov " + reg + ", " + x64_address(inst.arg1) + "\n";
+            _text += "\tadd " + reg + ", " + x64_address(inst.arg2) + "\n";
+            _text += "\tmov " + x64_address(inst.arg3) + ", " + reg + "\n";
             break;
         case IR_OPCODE_sub:
             reg = x64_register(inst.arg1, 0);
-            _text += "\tmov "
-                + reg + ", "
-                + x64_address(inst.arg1) + "\n";
-            _text += "\tsub "
-                + reg + ", "
-                + x64_address(inst.arg2) + "\n";
-            _text += "\tmov "
-                + x64_address(inst.arg3) + ", "
-                + reg + "\n";
+            _text += "\tmov " + reg + ", " + x64_address(inst.arg1) + "\n";
+            _text += "\tsub " + reg + ", " + x64_address(inst.arg2) + "\n";
+            _text += "\tmov " + x64_address(inst.arg3) + ", " + reg + "\n";
             break;
         case IR_OPCODE_mul:
             reg = x64_register(inst.arg1, 0);
-            _text += "\tmov "
-                + reg + ", "
-                + x64_address(inst.arg1) + "\n";
-            _text += "\tmul "
-                + x64_address(inst.arg2) + "\n";
-            _text += "\tmov "
-                + x64_address(inst.arg3) + ", "
-                + reg + "\n";
+            _text += "\tmov " + reg + ", " + x64_address(inst.arg1) + "\n";
+            _text += "\tmul " + x64_address(inst.arg2) + "\n";
+            _text += "\tmov " + x64_address(inst.arg3) + ", " + reg + "\n";
             break;
         case IR_OPCODE_inc:
             reg = x64_register(inst.arg1, 0);
-            _text += "\tmov "
-                + reg + ", "
-                + x64_address(inst.arg1) + "\n";
+            _text += "\tmov " + reg + ", " + x64_address(inst.arg1) + "\n";
             _text += "\tinc " + reg + "\n";
-            _text += "\tmov "
-                + x64_address(inst.arg1) + ", "
-                + reg + "\n";
+            _text += "\tmov " + x64_address(inst.arg1) + ", " + reg + "\n";
             break;
         case IR_OPCODE_dec:
             reg = x64_register(inst.arg1, 0);
-            _text += "\tmov "
-                + reg + ", "
-                + x64_address(inst.arg1) + "\n";
+            _text += "\tmov " + reg + ", " + x64_address(inst.arg1) + "\n";
             _text += "\tdec " + reg + "\n";
-            _text += "\tmov "
-                + x64_address(inst.arg1) + ", "
-                + reg + "\n";
+            _text += "\tmov " + x64_address(inst.arg1) + ", " + reg + "\n";
             break;
         case IR_OPCODE_neg:
             reg = x64_register(inst.arg1, 0);
-            _text += "\tmov "
-                + reg + ", "
-                + x64_address(inst.arg1) + "\n";
+            _text += "\tmov " + reg + ", " + x64_address(inst.arg1) + "\n";
             _text += "\tneg " + reg + "\n";
-            _text += "\tmov "
-                + x64_address(inst.arg1) + ", "
-                + reg + "\n";
+            _text += "\tmov " + x64_address(inst.arg1) + ", " + reg + "\n";
             break;
         case IR_OPCODE_sx:
             reg = x64_register(inst.arg1, 0);
             r2 = x64_register(inst.arg2, 0);
-            _text += "\tmov "
-                + reg + ", "
-                + x64_address(inst.arg1) + "\n";
-            _text += "\tmovsx "
-                + r2+ ", "
-                + reg + "\n";
-            _text += "\tmov "
-                + x64_address(inst.arg2) + ", "
-                + r2 + "\n";
+            _text += "\tmov " + reg + ", " + x64_address(inst.arg1) + "\n";
+            _text += "\tmovsx " + r2 + ", " + reg + "\n";
+            _text += "\tmov " + x64_address(inst.arg2) + ", " + r2 + "\n";
             break;
         case IR_OPCODE_ret:
             reg = x64_register(inst.arg1, 0);
-            _text += "\tmov "
-                + reg + ", "
-                + x64_address(inst.arg1) + "\n";
+            _text += "\tmov " + reg + ", " + x64_address(inst.arg1) + "\n";
             _text += "\tret\n";
             break;
         case IR_OPCODE_zx:

@@ -2569,31 +2569,128 @@ void sn_assign_expression::afterChildren(Environment *&env, const int pass)
 }
 void sn_cond_expression::afterChildren(Environment *&env, const int pass)
 {
+    sn_expression *cond = dynamic_cast<sn_expression *>(getChild(0));
+    sn_expression *left = dynamic_cast<sn_expression *>(getChild(1));
+    sn_expression *right = dynamic_cast<sn_expression *>(getChild(2));
+    Type *ct = cond->type_;
+    Type *lt = left->type_;
+    Type *rt = right->type_;
+
     if (pass == 1)  // type derivation
     {
-        sn_expression *left = dynamic_cast<sn_expression *>(getChild(1));
-        sn_expression *right = dynamic_cast<sn_expression *>(getChild(2));
-
-        Type *result =
-            TypeConversion::CondExprConversion(left->type_, right->type_);
-        if (!TypeUtil::Equal(result, left->type_))
+        if (!ct->isScalar())
         {
-            sn_cast_expression *cast_expr = new sn_cast_expression();
-            cast_expr->type_ = result;
-            cast_expr->addChild(left);
-            left = cast_expr;
-            replaceChild(1, left);  // XXX: syntax tree is modified here.
-        }
-        if (!TypeUtil::Equal(result, right->type_))
-        {
-            sn_cast_expression *cast_expr = new sn_cast_expression();
-            cast_expr->type_ = result;
-            cast_expr->addChild(right);
-            right = cast_expr;
-            replaceChild(2, right);  // XXX: syntax tree is modified here.
+            SyntaxError("Expect scalar type.");
         }
 
-        type_ = result;
+        if (lt->isArithmetic() && rt->isArithmetic())
+        {
+            Type *result = TypeConversion::UsualArithmeticConversion(lt, rt);
+            if (!TypeUtil::Equal(result, lt))
+            {
+                sn_cast_expression *cast_expr = new sn_cast_expression();
+                cast_expr->type_ = result;
+                cast_expr->addChild(left);
+                left = cast_expr;
+                replaceChild(1, left);  // XXX: syntax tree is modified here.
+            }
+            if (!TypeUtil::Equal(result, rt))
+            {
+                sn_cast_expression *cast_expr = new sn_cast_expression();
+                cast_expr->type_ = result;
+                cast_expr->addChild(right);
+                right = cast_expr;
+                replaceChild(2, right);  // XXX: syntax tree is modified here.
+            }
+
+            type_ = result;
+        }
+        else if (lt->getClass() == T_STRUCT && rt->getClass() == T_STRUCT)
+        {
+            if (!TypeUtil::Compatible(lt, rt))
+                SyntaxError("Type '" + lt->toString() + "' and '" +
+                            rt->toString() + "' is not compatible.");
+            type_ = lt;
+        }
+        else if (lt->getClass() == T_UNION && rt->getClass() == T_UNION)
+        {
+            if (!TypeUtil::Compatible(lt, rt))
+                SyntaxError("Type '" + lt->toString() + "' and '" +
+                            rt->toString() + "' is not compatible.");
+            type_ = lt;
+        }
+        else if (lt->getClass() == T_POINTER && rt->getClass() == T_POINTER)
+        {
+            // TODO: check c89-3.3.15
+            type_ = lt;
+        }
+        else if (lt->getClass() == T_VOID && rt->getClass() == T_VOID)
+        {
+            type_ = lt;
+        }
+        else
+        {
+            SyntaxError("can't compare, type mismatch or not support.");
+        }
+    }
+    else if (pass == 2)  // code generation
+    {
+        IRStorage &st = env->getStorage();
+
+        if (lt->getClass() != T_VOID || rt->getClass() != T_VOID)
+        {
+            result_info_ = st.addAndGetAddress(
+                IRObjectBuilder()
+                    .withValue(IRValueFactory::CreateZero(
+                        type_->getSize(), type_->getAlignment()))
+                    .build());
+
+            // ... cond code ...
+            // cmp cond, #0
+            // je L_false
+            // ... left code ...
+            // mov left, result
+            // jmp L_end
+            // L_false: ... right code ...
+            //          mov right, result
+            // L_end:
+
+            code_info_.append(cond->code_info_);
+            code_info_.add(IRInstructionBuilder::Cmp(cond->result_info_,
+                                                     IRAddress::imm_0()));
+            code_info_.add(IRInstructionBuilder::Je(
+                {OP_ADDR_imm, sizeof(void *), {left->code_info_.size() + 2}}));
+            code_info_.append(left->code_info_);
+            code_info_.add(
+                IRInstructionBuilder::Mov(left->result_info_, result_info_));
+            code_info_.add(IRInstructionBuilder::Jmp(
+                {OP_ADDR_imm, sizeof(void *), {right->code_info_.size() + 1}}));
+            code_info_.append(right->code_info_);
+            code_info_.add(
+                IRInstructionBuilder::Mov(right->result_info_, result_info_));
+        }
+        else
+        {
+            result_info_ = {OP_ADDR_invalid, 0, {0}};
+
+            // ... cond code ...
+            // cmp cond, #0
+            // je L_false
+            // ... left code ...
+            // jmp L_end
+            // L_false: ... right code ...
+            // L_end:
+
+            code_info_.append(cond->code_info_);
+            code_info_.add(IRInstructionBuilder::Cmp(cond->result_info_,
+                                                     IRAddress::imm_0()));
+            code_info_.add(IRInstructionBuilder::Je(
+                {OP_ADDR_imm, sizeof(void *), {left->code_info_.size() + 1}}));
+            code_info_.append(left->code_info_);
+            code_info_.add(IRInstructionBuilder::Jmp(
+                {OP_ADDR_imm, sizeof(void *), {right->code_info_.size()}}));
+            code_info_.append(right->code_info_);
+        }
     }
 }
 
@@ -2628,25 +2725,25 @@ void sn_or_expression::afterChildren(Environment *&env, const int pass)
                 .build());
 
         // ... left code ...
-        // cmp left, #1
-        // je L_true
+        // cmp left, #0
+        // jne L_true
         // ... right code ...
-        // cmp right, #1
-        // je L_true
+        // cmp right, #0
+        // jne L_true
         // L_false: mov #1, result
         //        jmp #1
         // L_true: mov #0, result
         code_info_.append(left->code_info_);
         // NEED: IR system: fast 0 in int/float/pointer, like ZeroOfType(type)
         code_info_.add(
-            IRInstructionBuilder::Cmp(left->result_info_, IRAddress::imm_1()));
-        code_info_.add(IRInstructionBuilder::Je(
+            IRInstructionBuilder::Cmp(left->result_info_, IRAddress::imm_0()));
+        code_info_.add(IRInstructionBuilder::Jne(
             {OP_ADDR_imm, sizeof(void *), {right->code_info_.size() + 4}}));
         code_info_.append(right->code_info_);
         code_info_.add(
-            IRInstructionBuilder::Cmp(left->result_info_, IRAddress::imm_1()));
+            IRInstructionBuilder::Cmp(left->result_info_, IRAddress::imm_0()));
         code_info_.add(
-            IRInstructionBuilder::Je({OP_ADDR_imm, sizeof(void *), {2}}));
+            IRInstructionBuilder::Jne({OP_ADDR_imm, sizeof(void *), {2}}));
         code_info_.add(IRInstructionBuilder::Mov(
             {OP_ADDR_imm, sizeof(int), {1}}, result_info_));
         code_info_.add(
@@ -3844,7 +3941,10 @@ void sn_const_expression::afterChildren(Environment *&env, const int pass)
     // TODO: remove sn_const_expression
     if (pass == 0)
     {
-        if (getFirstChild()->nodeType() == SN_PRIMARY_EXPRESSION)
+        if (getChildrenCount() == 0)
+        {
+        }
+        else if (getFirstChild()->nodeType() == SN_PRIMARY_EXPRESSION)
         {
             sn_primary_expression *e =
                 dynamic_cast<sn_primary_expression *>(getFirstChild());
