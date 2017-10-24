@@ -2,7 +2,7 @@
 
 #include "common.h"
 
-// TODO: type compatibility
+// TODO: type compatibility for function
 // TODO: type equal-ness
 // TODO: type incomplete-ness
 // TODO: type lvalue
@@ -450,16 +450,16 @@ class EnumConstType : public IntegralType
     // from Stringable
     virtual std::string toString() const;
 };
-class EnumTypeImpl : public Type
+class EnumTypeImpl : public IntegralType
 {
     friend TypeUtil;
 
     vector<const EnumConstType *> _members;
 
    public:
-    EnumTypeImpl()
-        : Type(T_ENUM, TP_IS_INTEGRAL | TP_IS_ARITHMETIC | TP_IS_SCALAR, 4, 4)
+    EnumTypeImpl() : IntegralType(T_ENUM, 0, 4, 4)
     {
+        _signed = true;
     }
 
     void addMember(const EnumConstType *member)
@@ -528,6 +528,7 @@ class TypeUtil
     static Type *Type_size_t();
     static Type *Concatenate(Type *front, Type *back);
     // unbox derived type
+    static const Type *Unbox(const Type *tag);
     static Type *TargetType(Type *aggregate);
     static const Type *TargetType(const Type *aggregate);
     static Type *Merge(Type *t1, Type *t2);

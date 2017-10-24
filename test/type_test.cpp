@@ -340,8 +340,63 @@ TEST_F(TypeTester, Compatible)
 
     // union
     // number + name + type + unorder
+    for (auto number : TF)
+    {
+        for (auto name : TF)
+            for (auto type : TF)
+                for (auto order : TF)
+                {
+                    bool expected = !(number || name || type);
+                    std::string a = "union S { int i; int j; } a;";
+
+                    std::string i = std::string() + (type ? "char " : "int ") +
+                                    (name ? "ii;" : "i;");
+                    std::string j = "int j;";
+                    std::string b = "union S { " + (order ? j + i : i + j) +
+                                    (number ? "int k;" : "") + "} b;";
+                    auto t1 = parseProgramAndGetTypes(std::string(a), "a")[0];
+                    auto t2 = parseProgramAndGetTypes(std::string(b), "b")[0];
+                    StringRef reason;
+                    EXPECT_EQ(expected, TypeUtil::Compatible(t1, t2));
+                    if(expected != TypeUtil::Compatible(t1, t2, &reason))
+                        std::cout << "a: " << a << "\tb: " << b << std::endl
+                            << "reason: " << reason << std::endl;
+                }
+    }
 
     // enum
+    // number + name + value + unorder
+    for (auto number : TF)
+    {
+        for (auto name : TF)
+            for (auto value : TF)
+                for (auto order : TF)
+                {
+                    bool expected = !(number || name || value);
+                    std::string a = "enum E { HAHA = 1, HEHE = 2 } a;";
+
+                    std::string i = std::string() + (name ? "XIXI" : "HAHA") +
+                                    (value ? "= 3" : " = 1");
+                    std::string j = "HEHE = 2";
+                    std::string b = "enum E { " +
+                                    (order ? j + "," + i : i + "," + j) +
+                                    (number ? ",LOL" : "") + "} b;";
+                    auto t1 = parseProgramAndGetTypes(std::string(a), "a")[0];
+                    auto t2 = parseProgramAndGetTypes(std::string(b), "b")[0];
+                    StringRef reason;
+                    EXPECT_EQ(expected, TypeUtil::Compatible(t1, t2));
+                    if (expected != TypeUtil::Compatible(t1, t2, &reason))
+                        std::cout << "a: " << a << "\tb: " << b << std::endl
+                                  << "reason: " << reason << std::endl;
+                }
+    }
+    // enum + enum-const + integral
+    {
+        auto t = parseProgramAndGetTypes("enum E { HAHA } a; int i;", "a,HAHA,i");
+        EXPECT_EQ(true, TypeUtil::Compatible(t[0],t[1]));
+        EXPECT_EQ(true, TypeUtil::Compatible(t[0],t[2]));
+        EXPECT_EQ(true, TypeUtil::Compatible(t[1],t[2]));
+    }
 
     // function
 }

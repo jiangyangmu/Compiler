@@ -35,6 +35,15 @@ Type *TypeUtil::Concatenate(Type *front, Type *back)
         dt->setTargetType(Concatenate(dt->getTargetType(), back));
     return front;
 }
+const Type *TypeUtil::Unbox(const Type *tag)
+{
+    if (!tag || tag->getClass() != T_TAG)
+        SyntaxError("unbox: need tag type.");
+    const Type *impl = dynamic_cast<const TagType *>(tag)->getImpl();
+    if (!impl)
+        SyntaxError("unbox: null implement type.");
+    return impl;
+}
 Type *TypeUtil::TargetType(Type *t)
 {
     Type *target = nullptr;
@@ -117,176 +126,235 @@ bool TypeUtil::Compatible(const Type *t1, const Type *t2, StringRef *reason)
     // type specifier
     if (t1->getClass() != t2->getClass())
     {
-        // XXX: allow enum-const to pass
-        if (!((t1->getClass() == T_ENUM_CONST && t2->isIntegral()) ||
-              (t2->getClass() == T_ENUM_CONST && t1->isIntegral())))
+        // XXX: allowed combination:
+        //  tag(enum) + enum-const
+        //  tag(enum) + integral
+        //  enum-const + integral
+        t1 = (t1->getClass() == T_TAG) ? Unbox(t1) : t1;
+        t2 = (t2->getClass() == T_TAG) ? Unbox(t2) : t2;
+        bool t1_enum =
+            (t1->getClass() == T_ENUM_CONST || t1->getClass() == T_ENUM);
+        bool t1_int = (t1->isIntegral() && !t1_enum);
+        bool t2_enum =
+            (t2->getClass() == T_ENUM_CONST || t2->getClass() == T_ENUM);
+        bool t2_int = (t2->isIntegral() && !t2_enum);
+        if (t1_enum && t2_enum)
+        {
+            // NEED: enum-const has link to origin enum-impl
+            const EnumTypeImpl *e =
+                (t1->getClass() == T_ENUM)
+                    ? dynamic_cast<const EnumTypeImpl *>(t1)
+                    : dynamic_cast<const EnumTypeImpl *>(t2);
+            const EnumConstType *ec =
+                (t1->getClass() == T_ENUM_CONST)
+                    ? dynamic_cast<const EnumConstType *>(t1)
+                    : dynamic_cast<const EnumConstType *>(t2);
+            const EnumConstType *efind = nullptr;
+            for (auto em : e->_members)
+            {
+                if (em->_name == ec->_name)
+                {
+                    efind = em;
+                    break;
+                }
+            }
+            if (!efind)
+            {
+                if (reason)
+                    *reason = "different enum type.";
+                return false;
+            }
+            assert(efind->_value == ec->_value);
+            return true;
+        }
+        else if ((t1_enum && t2_int) || (t1_int && t2_enum))
+        {
+            // goto test_size_and_align
+        }
+        else
         {
             if (reason)
                 *reason = "different type class.";
             return false;
         }
     }
-
-    bool unboxed = false;
-    if (t1->getClass() == T_TAG)
+    else
     {
-        const TagType *tg1 = dynamic_cast<const TagType *>(t1);
-        const TagType *tg2 = dynamic_cast<const TagType *>(t2);
-        if (tg1->_name != tg2->_name || tg1->_impl_type != tg2->_impl_type)
+        bool unboxed = false;
+        if (t1->getClass() == T_TAG)
         {
-            if (reason)
-                *reason = "tag: different tag name or tag type.";
-            return false;
-        }
-        t1 = tg1->getImpl();
-        t2 = tg2->getImpl();
-        unboxed = true;
-    }
-
-    if (t1->getClass() == T_STRUCT)  // struct
-    {
-        assert(unboxed);
-        // number, names, types
-        const StructTypeImpl *s1 = dynamic_cast<const StructTypeImpl *>(t1);
-        const StructTypeImpl *s2 = dynamic_cast<const StructTypeImpl *>(t2);
-        if (s1->_member_name.size() != s2->_member_name.size())
-        {
-            if (reason)
-                *reason = "struct: different member number.";
-            return false;
-        }
-        for (size_t i = 0; i < s1->_member_name.size(); ++i)
-        {
-            if (s1->_member_name[i] != s2->_member_name[i] ||
-                !Compatible(s1->_member_type[i], s2->_member_type[i]))
+            const TagType *tg1 = dynamic_cast<const TagType *>(t1);
+            const TagType *tg2 = dynamic_cast<const TagType *>(t2);
+            if (tg1->_name != tg2->_name || tg1->_impl_type != tg2->_impl_type)
             {
                 if (reason)
-                    *reason = "struct: different member name or type.";
+                    *reason = "tag: different tag name or tag type.";
                 return false;
             }
+            t1 = tg1->getImpl();
+            t2 = tg2->getImpl();
+            unboxed = true;
         }
-        // goto test_size_and_align
-    }
-    else if (t1->getClass() == T_UNION)  // union
-    {
-        assert(unboxed);
-        // number, names, types
-        const StructTypeImpl *s1 = dynamic_cast<const StructTypeImpl *>(t1);
-        const StructTypeImpl *s2 = dynamic_cast<const StructTypeImpl *>(t2);
-        if (s1->_member_name.size() != s2->_member_name.size())
-            return false;
-        for (size_t i = 0; i < s1->_member_name.size(); ++i)
+
+        if (t1->getClass() == T_STRUCT)  // struct
         {
-            for (size_t j = 0; j < s2->_member_name.size(); ++j)
+            assert(unboxed);
+            // number, names, types
+            const StructTypeImpl *s1 = dynamic_cast<const StructTypeImpl *>(t1);
+            const StructTypeImpl *s2 = dynamic_cast<const StructTypeImpl *>(t2);
+            if (s1->_member_name.size() != s2->_member_name.size())
             {
-                if (s1->_member_name[i] == s2->_member_name[j])
+                if (reason)
+                    *reason = "struct: different member number.";
+                return false;
+            }
+            for (size_t i = 0; i < s1->_member_name.size(); ++i)
+            {
+                if (s1->_member_name[i] != s2->_member_name[i] ||
+                    !Compatible(s1->_member_type[i], s2->_member_type[i]))
                 {
-                    if (!Compatible(s1->_member_type[i], s2->_member_type[j]))
+                    if (reason)
+                        *reason = "struct: different member name or type.";
+                    return false;
+                }
+            }
+            // goto test_size_and_align
+        }
+        else if (t1->getClass() == T_UNION)  // union
+        {
+            assert(unboxed);
+            // number, names, types
+            const StructTypeImpl *s1 = dynamic_cast<const StructTypeImpl *>(t1);
+            const StructTypeImpl *s2 = dynamic_cast<const StructTypeImpl *>(t2);
+            if (s1->_member_name.size() != s2->_member_name.size())
+            {
+                if (reason)
+                    *reason = "union: different member number.";
+                return false;
+            }
+            for (size_t i = 0; i < s1->_member_name.size(); ++i)
+            {
+                bool matched = false;
+                for (size_t j = 0; j < s2->_member_name.size(); ++j)
+                {
+                    if (s1->_member_name[i] == s2->_member_name[j])
                     {
-                        if (reason)
-                            *reason = "union: different member type.";
-                        return false;
+                        matched = true;
+                        if (!Compatible(s1->_member_type[i],
+                                        s2->_member_type[j]))
+                        {
+                            if (reason)
+                                *reason = "union: different member type.";
+                            return false;
+                        }
+                        else
+                            break;
                     }
-                    else
-                        break;
                 }
+                if (!matched)
+                    return false;
             }
+            // goto test_size_and_align
         }
-        // goto test_size_and_align
-    }
-    else if (t1->getClass() == T_ENUM)  // enum
-    {
-        assert(unboxed);
-        // number, names, values
-        const EnumTypeImpl *e1 = dynamic_cast<const EnumTypeImpl *>(t1);
-        const EnumTypeImpl *e2 = dynamic_cast<const EnumTypeImpl *>(t2);
-        if (e1->_members.size() != e2->_members.size())
-            return false;
-        for (auto const &em1 : e1->_members)
+        else if (t1->getClass() == T_ENUM)  // enum
         {
-            bool matched = false;
-            for (auto const &em2 : e2->_members)
-            {
-                if (em1->_name == em2->_name && em1->_value == em2->_value)
-                {
-                    matched = true;
-                    break;
-                }
-            }
-            if (!matched)
+            assert(unboxed);
+            // number, names, values
+            const EnumTypeImpl *e1 = dynamic_cast<const EnumTypeImpl *>(t1);
+            const EnumTypeImpl *e2 = dynamic_cast<const EnumTypeImpl *>(t2);
+            if (e1->_members.size() != e2->_members.size())
             {
                 if (reason)
-                    *reason = "enum: unmatched enum constant.";
+                    *reason = "enum: different member number.";
                 return false;
             }
+            for (auto const &em1 : e1->_members)
+            {
+                bool matched = false;
+                for (auto const &em2 : e2->_members)
+                {
+                    if (em1->_name == em2->_name && em1->_value == em2->_value)
+                    {
+                        matched = true;
+                        break;
+                    }
+                }
+                if (!matched)
+                {
+                    if (reason)
+                        *reason = "enum: unmatched enum constant.";
+                    return false;
+                }
+            }
+            // goto test_size_and_align
         }
-        // goto test_size_and_align
-    }
-    else if (t1->getClass() == T_ENUM_CONST)
-    {
-        const EnumConstType *ec1 = dynamic_cast<const EnumConstType *>(t1);
-        const EnumConstType *ec2 = dynamic_cast<const EnumConstType *>(t2);
-        if (ec1->_name != ec2->_name || ec1->_value != ec2->_value)
+        else if (t1->getClass() == T_ENUM_CONST)
         {
-            if (reason)
-                *reason = "enum-const: unmatched.";
-            return false;
+            const EnumConstType *ec1 = dynamic_cast<const EnumConstType *>(t1);
+            const EnumConstType *ec2 = dynamic_cast<const EnumConstType *>(t2);
+            if (ec1->_name != ec2->_name || ec1->_value != ec2->_value)
+            {
+                if (reason)
+                    *reason = "enum-const: unmatched.";
+                return false;
+            }
+            // goto test_size_and_align
         }
-    }
 
-    // declarator
-    if (t1->getClass() == T_POINTER)  // pointer
-    {
-        if (!Compatible(TargetType(t1), TargetType(t2)))
-        {
-            if (reason)
-                *reason = "pointer: incompatible target type.";
-            return false;
-        }
-        else
-            return true;
-    }
-    else if (t1->getClass() == T_ARRAY)  // array
-    {
-        if (!t1->isIncomplete() && !t2->isIncomplete() &&
-            dynamic_cast<const ArrayType *>(t1)->_n !=
-                dynamic_cast<const ArrayType *>(t2)->_n)
-        {
-            if (reason)
-                *reason = "array: unmatched size.";
-            return false;
-        }
-        else
+        // declarator
+        if (t1->getClass() == T_POINTER)  // pointer
         {
             if (!Compatible(TargetType(t1), TargetType(t2)))
             {
                 if (reason)
-                    *reason = "array: incompatible target type.";
+                    *reason = "pointer: incompatible target type.";
                 return false;
             }
             else
                 return true;
         }
-    }
-    else if (t1->getClass() == T_FUNCTION)  // function
-    {
-        SyntaxError("not implemented.");
-    }
-
-    // char/integer/floating/enum-const
-    if (t1->isIntegral() && t2->isIntegral())
-    {
-        const IntegralType *i1 = dynamic_cast<const IntegralType *>(t1);
-        const IntegralType *i2 = dynamic_cast<const IntegralType *>(t2);
-        if (i1->isSigned() != i2->isSigned())
+        else if (t1->getClass() == T_ARRAY)  // array
         {
-            if (reason)
-                *reason = "integral: unmatched signedness.";
-            return false;
+            if (!t1->isIncomplete() && !t2->isIncomplete() &&
+                dynamic_cast<const ArrayType *>(t1)->_n !=
+                    dynamic_cast<const ArrayType *>(t2)->_n)
+            {
+                if (reason)
+                    *reason = "array: unmatched size.";
+                return false;
+            }
+            else
+            {
+                if (!Compatible(TargetType(t1), TargetType(t2)))
+                {
+                    if (reason)
+                        *reason = "array: incompatible target type.";
+                    return false;
+                }
+                else
+                    return true;
+            }
         }
-        // goto test_size_and_align
+        else if (t1->getClass() == T_FUNCTION)  // function
+        {
+            SyntaxError("not implemented.");
+        }
+
+        // char/integer/floating/enum-const
+        if (t1->isIntegral() && t2->isIntegral())
+        {
+            const IntegralType *i1 = dynamic_cast<const IntegralType *>(t1);
+            const IntegralType *i2 = dynamic_cast<const IntegralType *>(t2);
+            if (i1->isSigned() != i2->isSigned())
+            {
+                if (reason)
+                    *reason = "integral: unmatched signedness.";
+                return false;
+            }
+            // goto test_size_and_align
+        }
+        // void/label
     }
-    // void/label
 
     if (t1->getSize() != t2->getSize() ||
         t1->getAlignment() != t2->getAlignment())
