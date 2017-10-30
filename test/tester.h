@@ -52,3 +52,17 @@ class Tester
             _has_error = true;                           \
         }                                                \
     } while (false)
+
+#define EXPECT_EQ_PRINT(expect, actual, msg)            \
+    do                                                  \
+    {                                                   \
+        auto e = (expect);                              \
+        auto a = (actual);                              \
+        if (!((e) == (a)))                              \
+        {                                               \
+            std::cerr << "Expect: " << (e) << std::endl \
+                      << "Actual: " << (a) << std::endl \
+                      << (msg) << std::endl;            \
+            _has_error = true;                          \
+        }                                               \
+    } while (false)

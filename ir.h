@@ -1,6 +1,9 @@
 #pragma once
 
+#include "symbol.h"
+
 #include <list>
+#include <string>
 #include <vector>
 
 enum EIRAddressMode
@@ -23,13 +26,16 @@ struct IRAddress
 
     std::string toString() const;
 
-    static IRAddress imm_0() {
+    static IRAddress imm_0()
+    {
         return {OP_ADDR_imm, sizeof(int), {0}};
     }
-    static IRAddress imm_1() {
+    static IRAddress imm_1()
+    {
         return {OP_ADDR_imm, sizeof(int), {1}};
     }
-    static IRAddress imm_2() {
+    static IRAddress imm_2()
+    {
         return {OP_ADDR_imm, sizeof(int), {2}};
     }
 };
@@ -74,8 +80,8 @@ enum EIROpcode
     IR_OPCODE_not,
     IR_OPCODE_shl,
     IR_OPCODE_shr,
-    IR_OPCODE_sal, // signed shift left
-    IR_OPCODE_sar, // signed shift right
+    IR_OPCODE_sal,  // signed shift left
+    IR_OPCODE_sar,  // signed shift right
     // arithmetic
     IR_OPCODE_add,
     IR_OPCODE_sub,
@@ -90,9 +96,9 @@ enum EIROpcode
     // integer conversion
     // IR_OPCODE_s2u,
     // IR_OPCODE_u2s,
-    IR_OPCODE_sx, // signed extend
-    IR_OPCODE_zx, // unsigned extend
-    IR_OPCODE_shrk, // shrink
+    IR_OPCODE_sx,    // signed extend
+    IR_OPCODE_zx,    // unsigned extend
+    IR_OPCODE_shrk,  // shrink
 
     // FPU
     IR_OPCODE_fld,
@@ -104,8 +110,8 @@ enum EIROpcode
     IR_OPCODE_fmul,
     IR_OPCODE_fdiv,
     // floating-point conversion
-    IR_OPCODE_fext, // extend
-    IR_OPCODE_fshrk, // shrink
+    IR_OPCODE_fext,   // extend
+    IR_OPCODE_fshrk,  // shrink
     IR_OPCODE_f2i,
     IR_OPCODE_i2f,
 };
@@ -334,7 +340,7 @@ struct IRObject
     IRValue value;
     IRAddress addr;
 
-    IRCode *code; // only used by function object
+    IRCode *code;  // only used by function object
 
     std::string toString() const;
 };
@@ -568,12 +574,24 @@ class IR_to_x64 : public IRTranslator
     std::string _data;
     std::string _data_const;
     std::string _data_bss;
+
    public:
     virtual void onObject(const IRObject &object);
     virtual void onInstruction(const IRInstruction &inst);
     virtual std::string emit() const;
 };
-//
+
+// Execute simple IRInstruction sequence.
+class IRSimulator
+{
+    static char memory[4096];
+    int get_value(const IRAddress &addr);
+    char *get_addr(const IRAddress &addr);
+
+   public:
+    int run(const IRCode &code);
+};
+
 class IRUtil
 {
    public:

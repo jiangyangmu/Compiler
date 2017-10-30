@@ -1644,8 +1644,7 @@ void sn_function_definition::afterParamList(ParserParams &params)
                 .withSymbolLinkage(func_def->linkage)
                 .withSyntaxStorage(storage_info)
                 .withName(func_def->name)
-                .withCode(
-                    &dynamic_cast<sn_statement *>(getLastChild())->code_info_)
+                .withCode(&code_info_)
                 .build());
     }
 }
@@ -1659,6 +1658,12 @@ void sn_function_definition::afterChildren(ParserParams &params)
     }
     else if (params.pass == 1)
     {
+    }
+    else if (params.pass == 2)
+    {
+        code_info_.append(params.env->getStorage()->allocCode());
+        code_info_.append(
+            dynamic_cast<sn_statement *>(getLastChild())->code_info_);
     }
 
     // restore environment
@@ -2420,8 +2425,6 @@ void sn_compound_statement::afterChildren(ParserParams &params)
         // declaration_list
         // already handled by declaration
 
-        code_info_.append(env->getStorage()->allocCode());
-
         // statement_list
         if (getLastChild()->nodeType() == SN_STATEMENT_LIST)
         {
@@ -2431,8 +2434,6 @@ void sn_compound_statement::afterChildren(ParserParams &params)
                     dynamic_cast<sn_statement *>(child)->code_info_);
             }
         }
-
-        code_info_.append(env->getStorage()->freeCode());
     }
 
     // restore environment
@@ -2787,9 +2788,9 @@ void sn_or_expression::afterChildren(ParserParams &params)
         // ... right code ...
         // cmp right, #0
         // jne L_true
-        // L_false: mov #1, result
+        // L_false: mov #0, result
         //        jmp #1
-        // L_true: mov #0, result
+        // L_true: mov #1, result
         code_info_.append(left->code_info_);
         // NEED: IR system: fast 0 in int/float/pointer, like ZeroOfType(type)
         code_info_.add(
@@ -2798,15 +2799,15 @@ void sn_or_expression::afterChildren(ParserParams &params)
             {OP_ADDR_imm, sizeof(void *), {right->code_info_.size() + 4}}));
         code_info_.append(right->code_info_);
         code_info_.add(
-            IRInstructionBuilder::Cmp(left->result_info_, IRAddress::imm_0()));
+            IRInstructionBuilder::Cmp(right->result_info_, IRAddress::imm_0()));
         code_info_.add(
             IRInstructionBuilder::Jne({OP_ADDR_imm, sizeof(void *), {2}}));
         code_info_.add(IRInstructionBuilder::Mov(
-            {OP_ADDR_imm, sizeof(int), {1}}, result_info_));
+            {OP_ADDR_imm, sizeof(int), {0}}, result_info_));
         code_info_.add(
             IRInstructionBuilder::Jmp({OP_ADDR_imm, sizeof(void *), {1}}));
         code_info_.add(IRInstructionBuilder::Mov(
-            {OP_ADDR_imm, sizeof(int), {0}}, result_info_));
+            {OP_ADDR_imm, sizeof(int), {1}}, result_info_));
     }
 }
 void sn_and_expression::afterChildren(ParserParams &params)

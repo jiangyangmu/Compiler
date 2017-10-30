@@ -468,4 +468,12 @@ using namespace std;
         assert(false);                                      \
     } while (0)
 
+#define IRError(msg)                                        \
+    do                                                      \
+    {                                                       \
+        cerr << "IR: " << msg << " at " << __FILE__ << ':'  \
+             << to_string(__LINE__) << endl;                \
+        assert(false);                                      \
+    } while (0)
+
 #endif

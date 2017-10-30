@@ -22,12 +22,23 @@ JCC_TEST_OBJ = $(patsubst %.cpp, ${BUILD_DIR}/%.o, \
 			   $(patsubst ${TEST_DIR}/%.cpp, ${BUILD_DIR}/%.o, \
 			   ${JCC_TEST_SRC}))
 
+IR_TEST = ir_test
+IR_TEST_SRC = ${TEST_DIR}/tester.cpp \
+			  ${TEST_DIR}/ir_test.cpp \
+			  ${JCC_LIB}
+IR_TEST_OBJ = $(patsubst %.cpp, ${BUILD_DIR}/%.o, \
+			  $(patsubst ${TEST_DIR}/%.cpp, ${BUILD_DIR}/%.o, \
+			  ${IR_TEST_SRC}))
+
 .PHONY: all test clean rebuild
 
 all : dir ${HOME}/bin/${JCC}
 
 test : ${HOME}/bin/${JCC_TEST}
 	${JCC_TEST}
+
+ir_test : ${HOME}/bin/ir_test
+	ir_test
 
 clean :
 	rm ${BUILD_DIR}/*.o
@@ -43,10 +54,16 @@ ${HOME}/bin/${JCC} : ${BUILD_DIR}/${JCC}
 ${HOME}/bin/${JCC_TEST} : ${BUILD_DIR}/${JCC_TEST}
 	[ -e "$$HOME/bin/${JCC_TEST}" ] || ln -s ${PROJECT_DIR}/${BUILD_DIR}/${JCC_TEST} ${HOME}/bin/${JCC_TEST}
 
+${HOME}/bin/${IR_TEST} : ${BUILD_DIR}/${IR_TEST}
+	[ -e "$$HOME/bin/${IR_TEST}" ] || ln -s ${PROJECT_DIR}/${BUILD_DIR}/${IR_TEST} ${HOME}/bin/${IR_TEST}
+
 ${BUILD_DIR}/${JCC} : ${JCC_OBJ}
 	${LD} $^ -o $@
 
 ${BUILD_DIR}/${JCC_TEST} : ${JCC_TEST_OBJ}
+	${LD} $^ -o $@
+
+${BUILD_DIR}/${IR_TEST} : ${IR_TEST_OBJ}
 	${LD} $^ -o $@
 
 ${BUILD_DIR}/%.o : %.cpp

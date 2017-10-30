@@ -1096,6 +1096,212 @@ StringRef IRUtil::GenerateLabel()
     return StringRef(labels.back().data());
 }
 
+// -------- IR simulator -------
+char IRSimulator::memory[4096];
+int IRSimulator::get_value(const IRAddress &addr)
+{
+    int value = 0;
+    assert(addr.width <= 8);
+
+    if (addr.mode == OP_ADDR_mem)
+    {
+        char *top = memory + 4096;
+        memcpy(&value, top - addr.mem, addr.width);
+    }
+    else if (addr.mode == OP_ADDR_imm)
+    {
+        memcpy(&value, &addr.imm, addr.width);
+    }
+    else
+    {
+        IRError("unsupported addressing mode.");
+    }
+
+    return value;
+}
+char *IRSimulator::get_addr(const IRAddress &addr)
+{
+    assert(addr.mode == OP_ADDR_mem);
+    assert(addr.mem <= 4096);
+    return memory + 4096 - addr.mem;
+}
+int IRSimulator::run(const IRCode &code)
+{
+    std::fill_n(memory, 4096, '\0');
+    int flag = 0;
+    char *top = memory + 4096;
+
+    std::vector<IRInstruction> insts(code.get().begin(), code.get().end());
+    int ret = 0, tmp, t1, t2;
+    for (int idx = 0; idx < (int)insts.size(); ++idx)
+    {
+        assert(idx >= 0);
+        IRInstruction &i = insts[idx];
+        switch (i.op)
+        {
+            case IR_OPCODE_alloc:
+            case IR_OPCODE_free:
+                break;
+            case IR_OPCODE_cmp:
+                flag = get_value(i.arg1) - get_value(i.arg2);
+                break;
+            case IR_OPCODE_mov:
+                tmp = get_value(i.arg1);
+                memcpy(get_addr(i.arg2), &tmp, i.arg1.width);
+                break;
+            case IR_OPCODE_je:
+                if (flag == 0) idx += get_value(i.arg1);
+                break;
+            case IR_OPCODE_jne:
+                if (flag != 0) idx += get_value(i.arg1);
+                break;
+            case IR_OPCODE_jl:
+            case IR_OPCODE_jb:
+                if (flag < 0) idx += get_value(i.arg1);
+                break;
+            case IR_OPCODE_jle:
+            case IR_OPCODE_jbe:
+                if (flag <= 0) idx += get_value(i.arg1);
+                break;
+            case IR_OPCODE_jg:
+            case IR_OPCODE_ja:
+                if (flag > 0) idx += get_value(i.arg1);
+                break;
+            case IR_OPCODE_jge:
+            case IR_OPCODE_jae:
+                if (flag >= 0) idx += get_value(i.arg1);
+                break;
+            case IR_OPCODE_jmp:
+                idx += get_value(i.arg1);
+                break;
+            case IR_OPCODE_inc:
+                tmp = get_value(i.arg1) + 1;
+                memcpy(get_addr(i.arg1), &tmp, i.arg1.width);
+                break;
+            case IR_OPCODE_dec:
+                tmp = get_value(i.arg1) - 1;
+                memcpy(get_addr(i.arg1), &tmp, i.arg1.width);
+                break;
+            case IR_OPCODE_neg:
+                tmp = -get_value(i.arg1);
+                memcpy(get_addr(i.arg1), &tmp, i.arg1.width);
+                break;
+            case IR_OPCODE_or:
+                t1 = get_value(i.arg1);
+                t2 = get_value(i.arg2);
+                tmp = t1 | t2;
+                memcpy(get_addr(i.arg3), &tmp, i.arg3.width);
+                break;
+            case IR_OPCODE_xor:
+                t1 = get_value(i.arg1);
+                t2 = get_value(i.arg2);
+                tmp = t1 ^ t2;
+                memcpy(get_addr(i.arg3), &tmp, i.arg3.width);
+                break;
+            case IR_OPCODE_and:
+                t1 = get_value(i.arg1);
+                t2 = get_value(i.arg2);
+                tmp = t1 & t2;
+                memcpy(get_addr(i.arg3), &tmp, i.arg3.width);
+                break;
+            case IR_OPCODE_shl:
+            case IR_OPCODE_sal:
+                t1 = get_value(i.arg1);
+                t2 = get_value(i.arg2);
+                assert(t2 >= 0);
+                tmp = t1 << t2;
+                memcpy(get_addr(i.arg3), &tmp, i.arg3.width);
+                break;
+            case IR_OPCODE_shr:
+                t1 = get_value(i.arg1);
+                t2 = get_value(i.arg2);
+                while (t2-- > 0)
+                {
+                    tmp = (t1 >> 1) | (t1 & (1 << (i.arg1.width * 8 - 1)));
+                    t1 = tmp;
+                }
+                tmp = t1;
+                memcpy(get_addr(i.arg3), &tmp, i.arg3.width);
+            case IR_OPCODE_sar:
+                t1 = get_value(i.arg1);
+                t2 = get_value(i.arg2);
+                while (t2-- > 0)
+                {
+                    tmp = (t1 >> 1) & ~(1 << (i.arg1.width * 8 - 1));
+                    t1 = tmp;
+                }
+                tmp = t1;
+                memcpy(get_addr(i.arg3), &tmp, i.arg3.width);
+                break;
+            case IR_OPCODE_add:
+                t1 = get_value(i.arg1);
+                t2 = get_value(i.arg2);
+                tmp = t1 + t2;
+                memcpy(get_addr(i.arg3), &tmp, i.arg3.width);
+                break;
+            case IR_OPCODE_sub:
+                t1 = get_value(i.arg1);
+                t2 = get_value(i.arg2);
+                tmp = t1 - t2;
+                memcpy(get_addr(i.arg3), &tmp, i.arg3.width);
+                break;
+            case IR_OPCODE_mul:
+                t1 = get_value(i.arg1);
+                t2 = get_value(i.arg2);
+                tmp = t1 * t2;
+                memcpy(get_addr(i.arg3), &tmp, i.arg3.width);
+                break;
+            case IR_OPCODE_div:
+                t1 = get_value(i.arg1);
+                t2 = get_value(i.arg2);
+                tmp = t1 / t2;
+                memcpy(get_addr(i.arg3), &tmp, i.arg3.width);
+                break;
+            case IR_OPCODE_mod:
+                t1 = get_value(i.arg1);
+                t2 = get_value(i.arg2);
+                tmp = t1 % t2;
+                memcpy(get_addr(i.arg3), &tmp, i.arg3.width);
+                break;
+            case IR_OPCODE_sx:
+                tmp = get_value(i.arg1);
+                memcpy(get_addr(i.arg2), &tmp, i.arg1.width);
+                tmp = tmp > 0 ? 0 : 0xFF;
+                memcpy(get_addr(i.arg2) + i.arg1.width, &tmp, i.arg2.width - 1);
+                break;
+            case IR_OPCODE_zx:
+                tmp = get_value(i.arg1);
+                memcpy(get_addr(i.arg2), &tmp, i.arg1.width);
+                tmp = 0;
+                memcpy(get_addr(i.arg2) + i.arg1.width, &tmp, i.arg2.width - 1);
+                break;
+            case IR_OPCODE_shrk:
+                tmp = get_value(i.arg1);
+                memcpy(get_addr(i.arg2), &tmp, i.arg2.width);
+                break;
+            case IR_OPCODE_ref:
+                tmp = get_addr(i.arg1) - memory;
+                memcpy(get_addr(i.arg2), &tmp, i.arg2.width);
+                break;
+            case IR_OPCODE_deref:
+                tmp = get_value(i.arg1);
+                memcpy(get_addr(i.arg2), top - tmp, i.arg2.width);
+                break;
+            case IR_OPCODE_ret:
+                ret = get_value(i.arg1);
+                break;
+            case IR_OPCODE_fext:
+            case IR_OPCODE_fshrk:
+            case IR_OPCODE_f2i:
+            case IR_OPCODE_i2f:
+            default:
+                IRError("not implemented. Instruction: " + i.toString());
+                break;
+        }
+    }
+    return ret;
+}
+
 // -------- symbol management -------
 
 Symbol *Environment::findSymbol(ESymbolNamespace space, StringRef name) const
