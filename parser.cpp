@@ -15,6 +15,18 @@
 #include <string>
 // using namespace std;
 
+void Parser::parse()
+{
+    tu = sn_translation_unit::parse(lex);
+    st = new IRStorage();
+    env = new Environment(st);
+    tu->visit(env, 0);
+    tu->visit(env, 1);
+    tu->visit(env, 2);
+
+    // SymbolFactory::check();
+}
+
 // TODO: check if symbol is typedef-name
 bool first(uint64_t types, Token t)
 {
@@ -1564,7 +1576,7 @@ void sn_function_definition::beforeParamList(Environment *&env, const int pass)
     if (pass == 0)
     {
         // create new environment
-        body_env_ = new Environment();
+        body_env_ = new Environment(new IRStorage());
         body_env_->setParent(env);
     }
 
@@ -1622,7 +1634,7 @@ void sn_function_definition::afterParamList(Environment *&env, const int pass)
                     ->storage_info_;
 
         env->parent()->addSymbol(func_def);
-        env->parent()->getStorage().add(
+        env->parent()->getStorage()->add(
             IRObjectBuilder()
                 .withSymbolLinkage(func_def->linkage)
                 .withSyntaxStorage(storage_info)
@@ -1695,14 +1707,17 @@ void sn_declaration::afterChildren(Environment *&env, const int pass)
             if (type->isObject() && !type->isIncomplete())
             {
                 // TODO: deal with initialization code
-                env->getStorage().add(
-                    IRObjectBuilder()
-                        .withSymbolLinkage(obj_def->linkage)
-                        .withSyntaxStorage(storage)
-                        .withName(obj_def->name)
-                        .withValue(IRValueFactory::CreateZero(
-                            type->getSize(), type->getAlignment()))
-                        .build());
+                if (env->hasStorage())
+                {
+                    env->getStorage()->add(
+                        IRObjectBuilder()
+                            .withSymbolLinkage(obj_def->linkage)
+                            .withSyntaxStorage(storage)
+                            .withName(obj_def->name)
+                            .withValue(IRValueFactory::CreateZero(
+                                type->getSize(), type->getAlignment()))
+                            .build());
+                }
             }
             type_infos_.push_back(type);
         }
@@ -2070,7 +2085,7 @@ void sn_struct_union_specifier::beforeDefinition(Environment *&env,
     if (pass == 0)
     {
         // create new environment for struct/union
-        Environment *block = new Environment();
+        Environment *block = new Environment(nullptr);
         block->setParent(env);
         env = block;
     }
@@ -2340,6 +2355,7 @@ void sn_label_statement::afterChildren(Environment *&env, const int pass)
 }
 void sn_compound_statement::visit(Environment *&env, const int pass)
 {
+    beforeChildren(env, pass);
     if (getChildrenCount() > 0)
     {
         if (getFirstChild()->nodeType() == SN_DECLARATION_LIST)
@@ -2349,6 +2365,17 @@ void sn_compound_statement::visit(Environment *&env, const int pass)
             getLastChild()->visit(env, pass);
     }
     afterChildren(env, pass);
+}
+void sn_compound_statement::beforeChildren(Environment *&env, const int pass)
+{
+    if (pass == 0)
+    {
+        // create new environment
+        body_env_ = new Environment(env->getStorage());
+        body_env_->setParent(env);
+    }
+
+    env = body_env_;
 }
 void sn_compound_statement::afterDeclarations(Environment *&env, const int pass)
 {
@@ -2368,7 +2395,7 @@ void sn_compound_statement::afterChildren(Environment *&env, const int pass)
         // declaration_list
         // already handled by declaration
 
-        code_info_.append(env->getStorage().allocCode());
+        code_info_.append(env->getStorage()->allocCode());
 
         // statement_list
         if (getLastChild()->nodeType() == SN_STATEMENT_LIST)
@@ -2380,8 +2407,11 @@ void sn_compound_statement::afterChildren(Environment *&env, const int pass)
             }
         }
 
-        code_info_.append(env->getStorage().freeCode());
+        code_info_.append(env->getStorage()->freeCode());
     }
+
+    // restore environment
+    env = env->parent();
 }
 void sn_expression_statement::afterChildren(Environment *&env, const int pass)
 {
@@ -2486,7 +2516,7 @@ void sn_jump_statement::afterChildren(Environment *&env, const int pass)
             sn_expression *expr =
                 dynamic_cast<sn_expression *>(getFirstChild());
             code_info_.append(expr->code_info_);
-            code_info_.append(env->getStorage().freeCode());
+            code_info_.append(env->getStorage()->freeCode());
             code_info_.add(IRInstructionBuilder::Ret(expr->result_info_));
         }
         else
@@ -2635,7 +2665,7 @@ void sn_cond_expression::afterChildren(Environment *&env, const int pass)
     }
     else if (pass == 2)  // code generation
     {
-        IRStorage &st = env->getStorage();
+        IRStorage &st = *(env->getStorage());
 
         if (lt->getClass() != T_VOID || rt->getClass() != T_VOID)
         {
@@ -2716,7 +2746,7 @@ void sn_or_expression::afterChildren(Environment *&env, const int pass)
     }
     else if (pass == 2)  // code generation
     {
-        IRStorage &st = env->getStorage();
+        IRStorage &st = *(env->getStorage());
 
         result_info_ = st.addAndGetAddress(
             IRObjectBuilder()
@@ -2774,7 +2804,7 @@ void sn_and_expression::afterChildren(Environment *&env, const int pass)
     }
     else if (pass == 2)  // code generation
     {
-        IRStorage &st = env->getStorage();
+        IRStorage &st = *(env->getStorage());
 
         result_info_ = st.addAndGetAddress(
             IRObjectBuilder()
@@ -2849,7 +2879,7 @@ void sn_bitor_expression::afterChildren(Environment *&env, const int pass)
     }
     else if (pass == 2)  // code generation
     {
-        IRStorage &st = env->getStorage();
+        IRStorage &st = *(env->getStorage());
 
         result_info_ = st.addAndGetAddress(
             IRObjectBuilder()
@@ -2901,7 +2931,7 @@ void sn_bitxor_expression::afterChildren(Environment *&env, const int pass)
     }
     else if (pass == 2)  // code generation
     {
-        IRStorage &st = env->getStorage();
+        IRStorage &st = *(env->getStorage());
 
         result_info_ = st.addAndGetAddress(
             IRObjectBuilder()
@@ -2953,7 +2983,7 @@ void sn_bitand_expression::afterChildren(Environment *&env, const int pass)
     }
     else if (pass == 2)  // code generation
     {
-        IRStorage &st = env->getStorage();
+        IRStorage &st = *(env->getStorage());
 
         result_info_ = st.addAndGetAddress(
             IRObjectBuilder()
@@ -3012,7 +3042,7 @@ void sn_eq_expression::afterChildren(Environment *&env, const int pass)
     }
     else if (pass == 2)  // code generation
     {
-        IRStorage &st = env->getStorage();
+        IRStorage &st = *(env->getStorage());
 
         // type(result) == 'int'
         result_info_ = st.addAndGetAddress(
@@ -3097,7 +3127,7 @@ void sn_rel_expression::afterChildren(Environment *&env, const int pass)
     }
     else if (pass == 2)  // code generation
     {
-        IRStorage &st = env->getStorage();
+        IRStorage &st = *(env->getStorage());
 
         // type(result) == 'int'
         result_info_ = st.addAndGetAddress(
@@ -3202,7 +3232,7 @@ void sn_shift_expression::afterChildren(Environment *&env, const int pass)
     }
     else if (pass == 2)  // code generation
     {
-        IRStorage &st = env->getStorage();
+        IRStorage &st = *(env->getStorage());
 
         result_info_ = st.addAndGetAddress(
             IRObjectBuilder()
@@ -3291,7 +3321,7 @@ void sn_add_expression::afterChildren(Environment *&env, const int pass)
     }
     else if (pass == 2)  // code generation
     {
-        IRStorage &st = env->getStorage();
+        IRStorage &st = *(env->getStorage());
         code_info_.append(left->code_info_);
         code_info_.append(right->code_info_);
         assert(lt->getSize() == rt->getSize());
@@ -3426,7 +3456,7 @@ void sn_mul_expression::afterChildren(Environment *&env, const int pass)
     }
     else if (pass == 2)  // code generation
     {
-        IRStorage &st = env->getStorage();
+        IRStorage &st = *(env->getStorage());
         code_info_.append(left->code_info_);
         code_info_.append(right->code_info_);
 
@@ -3483,10 +3513,11 @@ void sn_cast_expression::afterChildren(Environment *&env, const int pass)
     }
     else if (pass == 2)  // code generation
     {
+        // TODO: check "is this cast ok?"
         sn_expression *e = dynamic_cast<sn_expression *>(getLastChild());
         code_info_.append(e->code_info_);
 
-        IRStorage &st = env->getStorage();
+        IRStorage &st = *(env->getStorage());
 
         const Type *to = type_;
         const Type *from = e->type_;
@@ -3616,7 +3647,7 @@ void sn_unary_expression::afterChildren(Environment *&env, const int pass)
     }
     else if (pass == 2)  // code generation
     {
-        IRStorage &st = env->getStorage();
+        IRStorage &st = *(env->getStorage());
 
         // const Type *impl_type = nullptr;
 
@@ -3798,7 +3829,7 @@ void sn_postfix_expression::afterChildren(Environment *&env, const int pass)
     }
     else if (pass == 2)  // code generation
     {
-        IRStorage &st = env->getStorage();
+        IRStorage &st = *(env->getStorage());
 
         IRAddress t1, t2, t3;
         size_t offset;
@@ -3908,7 +3939,7 @@ void sn_primary_expression::afterChildren(Environment *&env, const int pass)
     }
     else if (pass == 2)  // code generation
     {
-        IRStorage &st = env->getStorage();
+        IRStorage &st = *(env->getStorage());
         switch (t.type)
         {
             case SYMBOL: result_info_ = st.getAddressByName(t.symbol); break;

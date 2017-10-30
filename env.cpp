@@ -1201,7 +1201,7 @@ const Symbol *Environment::SameNameSymbolInFileScope(const Environment *env,
 void Environment::traverse(IRTranslator &t) const
 {
     // all objects and function objects
-    for (auto &o : storage.get())
+    for (auto &o : storage->get())
     {
         t.onObject(o);
     }
@@ -1289,7 +1289,7 @@ void Environment::debugPrint() const
 
 std::string Environment::DebugString() const
 {
-    const int buffer_size = 4096;
+    const int buffer_size = 65536;
     static char buffer[buffer_size];
     const char fmt[] =
         "environment %d = {>\n"
@@ -1302,11 +1302,20 @@ std::string Environment::DebugString() const
         str_symbols += '\n';
     });
     std::string str_envs;
-    auto children = getChildren();
-    std::for_each(
-        children.begin(), children.end(),
-        [&str_envs](Environment *e) { str_envs += e->DebugString(); });
+    {
+        auto children = getChildren();
+        std::for_each(
+            children.begin(), children.end(),
+            [&str_envs](Environment *e) { str_envs += e->DebugString(); });
+    }
+    std::string str_storage;
+    {
+        if (parent() && storage == parent()->getStorage())
+            str_storage = "... see parent ...";
+        else
+            str_storage = storage->toString().data();
+    }
     snprintf(buffer, buffer_size, fmt, id, str_symbols.data(),
-             storage.toString().data(), str_envs.data());
+             str_storage.data(), str_envs.data());
     return std::string(buffer);
 }

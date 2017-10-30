@@ -2,6 +2,7 @@
 
 #include "../parser.h"
 #include "../type.h"
+#include "../ir.h" // IRStorage
 
 #include <queue>
 #include <vector>
@@ -35,7 +36,7 @@ class TypeTester : public Tester
         // Not recycle str, so when function ends, symbol info still there.
         StringBuf *sb = new StringBuf(str);
         lex.tokenize(*sb);
-        Environment *env = new Environment();
+        Environment *env = new Environment(new IRStorage());
         sn_translation_unit *tu = sn_translation_unit::parse(lex);
         for (int p = 0; p < pass; ++p)
             tu->visit(env, p);

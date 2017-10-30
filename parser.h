@@ -603,6 +603,7 @@ class sn_compound_statement : public sn_statement
 {
     // sn_declaration_list *dl;
     // sn_statement_list *sl;
+    Environment *body_env_;
 
    public:
     sn_compound_statement() : sn_statement(SN_COMPOUND_STATEMENT) {}
@@ -610,6 +611,7 @@ class sn_compound_statement : public sn_statement
 
     // Visitor
     virtual void visit(Environment *&env, const int pass);
+    virtual void beforeChildren(Environment *&env, const int pass);
     virtual void afterDeclarations(Environment *&env, const int pass);
     virtual void afterChildren(Environment *&env, const int pass);
 };
@@ -942,23 +944,14 @@ void __debugPrint(string &&s);
 // Pass 1: type derivation & code generation
 class Parser
 {
-    // Environment env;
     Lexer &lex;
     sn_translation_unit *tu;
     Environment *env;
+    IRStorage *st;
 
    public:
     Parser(Lexer &l) : lex(l) {}
-    void parse()
-    {
-        tu = sn_translation_unit::parse(lex);
-        env = new Environment();
-        tu->visit(env, 0);
-        tu->visit(env, 1);
-        tu->visit(env, 2);
-
-        // SymbolFactory::check();
-    }
+    void parse();
     void DebugPrintEnvironment()
     {
         env->debugPrint();

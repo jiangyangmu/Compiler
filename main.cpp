@@ -15,11 +15,12 @@ using namespace std;
 static bool lflag = false; // show Lexer output
 static bool sflag = false; // show Syntax output
 static bool eflag = false; // show Environment output
+static bool cflag = false; // show Code output
 
 void options(int &argc, char ** &argv)
 {
     int ch;
-    while ((ch = getopt(argc, argv, "lse")) != -1) {
+    while ((ch = getopt(argc, argv, "lsec")) != -1) {
         switch (ch) {
             case 'l':
                 lflag = true;
@@ -30,10 +31,14 @@ void options(int &argc, char ** &argv)
             case 'e':
                 eflag = true;
                 break;
+            case 'c':
+                cflag = true;
+                break;
             default:
                 break;
         }
     }
+    cflag = !((lflag || sflag || eflag) && !cflag);
     argc -= optind;
     argv += optind;
 }
@@ -122,7 +127,8 @@ int main(int argc, char *argv[])
         p.DebugPrintEnvironment();
 
     // cout << "-------------- code --------------" << endl;
-    p.emit();
+    if (cflag)
+        p.emit();
     // cout << Emitted() << endl;
 
     // system("pause");

@@ -23,10 +23,10 @@ class Environment : public TreeLike<Environment>
     static int idgen;
     int id;
     std::vector<Symbol *> symbols;
-    IRStorage storage;
+    IRStorage *storage;
 
    public:
-    Environment() : id(idgen++) {}
+    Environment(IRStorage *s) : id(idgen++), storage(s) {}
     void debugPrint() const;
     std::string DebugString() const;
 
@@ -47,8 +47,13 @@ class Environment : public TreeLike<Environment>
     // > constant management
     // > temporary management (only live within a statement)
     // > code generation
-    IRStorage &getStorage()
+    bool hasStorage() const
     {
+        return (storage != nullptr);
+    }
+    IRStorage *getStorage()
+    {
+        assert(storage != nullptr);
         return storage;
     }
 
