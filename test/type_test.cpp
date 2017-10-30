@@ -36,18 +36,24 @@ class TypeTester : public Tester
         // Not recycle str, so when function ends, symbol info still there.
         StringBuf *sb = new StringBuf(str);
         lex.tokenize(*sb);
-        Environment *env = new Environment(new IRStorage());
+
+        ParserParams params;
+        params.env = new Environment(new IRStorage());
+
         sn_translation_unit *tu = sn_translation_unit::parse(lex);
         for (int p = 0; p < pass; ++p)
-            tu->visit(env, p);
+        {
+            params.pass = p;
+            tu->visit(params);
+        }
         if (debug)
-            env->debugPrint();
+            params.env->debugPrint();
 
         auto names = SplitString(obj, ',');
         std::vector<Symbol *> result;
 
         std::queue<Environment *> q;
-        q.push(env);
+        q.push(params.env);
         while (!q.empty())
         {
             Environment *curr = q.front();

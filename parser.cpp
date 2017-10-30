@@ -18,11 +18,12 @@
 void Parser::parse()
 {
     tu = sn_translation_unit::parse(lex);
-    st = new IRStorage();
-    env = new Environment(st);
-    tu->visit(env, 0);
-    tu->visit(env, 1);
-    tu->visit(env, 2);
+    params.env = new Environment(new IRStorage());
+    for (int pass = 0; pass <= 2; ++pass)
+    {
+        params.pass = pass;
+        tu->visit(params);
+    }
 
     // SymbolFactory::check();
 }
@@ -1515,33 +1516,33 @@ ESymbolScope SyntaxNode::getScope() const
 
     return scope;
 }
-void SyntaxNode::visit(Environment *&env, const int pass)
+void SyntaxNode::visit(ParserParams &params)
 {
-    beforeChildren(env, pass);
+    beforeChildren(params);
     for (auto *child : getChildren())
     {
-        child->visit(env, pass);
+        child->visit(params);
     }
-    afterChildren(env, pass);
+    afterChildren(params);
 }
 
-void SyntaxNode::beforeChildren(Environment *&env, const int pass)
+void SyntaxNode::beforeChildren(ParserParams &params)
 {
     // SyntaxWarning(std::string(DebugSyntaxNode(nodeType())) +
     //               ": beforeChildren() not implemented");
 }
-void SyntaxNode::afterChildren(Environment *&env, const int pass)
+void SyntaxNode::afterChildren(ParserParams &params)
 {
     // SyntaxWarning(std::string(DebugSyntaxNode(nodeType())) +
     //               ": afterChildren() not implemented");
 }
 
-// void sn_translation_unit::afterChildren(Environment *&env, const int pass);
+// void sn_translation_unit::afterChildren(ParserParams &params);
 // void sn_external_declaration::afterChildren(Environment *&env, const int
 // pass);
 
 // type, name, linkage, statement
-void sn_function_definition::visit(Environment *&env, const int pass)
+void sn_function_definition::visit(ParserParams &params)
 {
     assert(getChildrenCount() >= 1);
 
@@ -1551,29 +1552,31 @@ void sn_function_definition::visit(Environment *&env, const int pass)
     // declaration_specifiers
     if (child->nodeType() == SN_DECLARATION_SPECIFIERS)
     {
-        child->visit(env, pass);
+        child->visit(params);
         child = getChild(index++);
     }
 
     // declarator, declaration_list
-    beforeParamList(env, pass);
+    beforeParamList(params);
     {
-        child->visit(env, pass);
+        child->visit(params);
         child = getChild(index++);
         if (child->nodeType() == SN_DECLARATION_LIST)
         {
-            child->visit(env, pass);
+            child->visit(params);
             child = getChild(index++);
         }
     }
-    afterParamList(env, pass);
+    afterParamList(params);
 
-    child->visit(env, pass);
-    afterChildren(env, pass);
+    child->visit(params);
+    afterChildren(params);
 }
-void sn_function_definition::beforeParamList(Environment *&env, const int pass)
+void sn_function_definition::beforeParamList(ParserParams &params)
 {
-    if (pass == 0)
+    Environment *&env = params.env;
+
+    if (params.pass == 0)
     {
         // create new environment
         body_env_ = new Environment(new IRStorage());
@@ -1582,14 +1585,16 @@ void sn_function_definition::beforeParamList(Environment *&env, const int pass)
 
     env = body_env_;
 }
-void sn_function_definition::afterParamList(Environment *&env, const int pass)
+void sn_function_definition::afterParamList(ParserParams &params)
 {
-    if (pass == 0)
+    Environment *&env = params.env;
+
+    if (params.pass == 0)
     {
         // if need, match declarator with declaration_list
         // if need, add parameters information to FuncType
     }
-    else if (pass == 1)
+    else if (params.pass == 1)
     {
         // type_info_
         // name_info_
@@ -1644,26 +1649,28 @@ void sn_function_definition::afterParamList(Environment *&env, const int pass)
                 .build());
     }
 }
-void sn_function_definition::afterChildren(Environment *&env, const int pass)
+void sn_function_definition::afterChildren(ParserParams &params)
 {
-    if (pass == 0)
+    if (params.pass == 0)
     {
         // collect function body statements
 
         // mark function complete
     }
-    else if (pass == 1)
+    else if (params.pass == 1)
     {
     }
 
     // restore environment
-    env = env->parent();
+    params.env = params.env->parent();
 }
 
 // vector<linkage, type, name, expression> => symbols in environment
-void sn_declaration::afterChildren(Environment *&env, const int pass)
+void sn_declaration::afterChildren(ParserParams &params)
 {
-    if (pass == 0)
+    Environment *&env = params.env;
+
+    if (params.pass == 0)
     {
         // declaration_specifiers
         Type *spec = dynamic_cast<sn_declaration_specifiers *>(getFirstChild())
@@ -1723,12 +1730,12 @@ void sn_declaration::afterChildren(Environment *&env, const int pass)
         }
     }
 }
-// void sn_declaration_list::afterChildren(Environment *&env, const int pass) {}
+// void sn_declaration_list::afterChildren(ParserParams &params) {}
 
 // type, name, expression
-void sn_init_declarator::afterChildren(Environment *&env, const int pass)
+void sn_init_declarator::afterChildren(ParserParams &params)
 {
-    if (pass == 0)
+    if (params.pass == 0)
     {
         type_info_ = dynamic_cast<sn_declarator *>(getFirstChild())->type_info_;
         name_info_ = dynamic_cast<sn_declarator *>(getFirstChild())->name_info_;
@@ -1741,9 +1748,9 @@ void sn_init_declarator::afterChildren(Environment *&env, const int pass)
 // pass) {}
 
 // type, name
-void sn_declarator::afterChildren(Environment *&env, const int pass)
+void sn_declarator::afterChildren(ParserParams &params)
 {
-    if (pass == 0)
+    if (params.pass == 0)
     {
         Type *type = nullptr;
         if (getFirstChild()->nodeType() == SN_POINTER)
@@ -1759,9 +1766,9 @@ void sn_declarator::afterChildren(Environment *&env, const int pass)
         // Env::CheckRedecl(name_info_);
     }
 }
-void sn_direct_declarator::afterChildren(Environment *&env, const int pass)
+void sn_direct_declarator::afterChildren(ParserParams &params)
 {
-    if (pass == 0)
+    if (params.pass == 0)
     {
         type_info_ = nullptr;
         for (auto *child : getChildren())
@@ -1808,9 +1815,9 @@ void sn_direct_declarator::afterChildren(Environment *&env, const int pass)
 }
 
 // type
-void sn_abstract_declarator::afterChildren(Environment *&env, const int pass)
+void sn_abstract_declarator::afterChildren(ParserParams &params)
 {
-    if (pass == 0)
+    if (params.pass == 0)
     {
         type_info_ = nullptr;
         // pointer
@@ -1829,10 +1836,9 @@ void sn_abstract_declarator::afterChildren(Environment *&env, const int pass)
         }
     }
 }
-void sn_direct_abstract_declarator::afterChildren(Environment *&env,
-                                                  const int pass)
+void sn_direct_abstract_declarator::afterChildren(ParserParams &params)
 {
-    if (pass == 0)
+    if (params.pass == 0)
     {
         type_info_ = nullptr;
         if (getFirstChild()->nodeType() == SN_ABSTRACT_DECLARATOR)
@@ -1865,13 +1871,13 @@ void sn_direct_abstract_declarator::afterChildren(Environment *&env,
 }
 
 // expression(constant-ness)
-// void sn_initializer::afterChildren(Environment *&env, const int pass);
-// void sn_initializer_list::afterChildren(Environment *&env, const int pass);
+// void sn_initializer::afterChildren(ParserParams &params);
+// void sn_initializer_list::afterChildren(ParserParams &params);
 
 // type(FuncType)
-void sn_parameter_type_list::afterChildren(Environment *&env, const int pass)
+void sn_parameter_type_list::afterChildren(ParserParams &params)
 {
-    if (pass == 0)
+    if (params.pass == 0)
     {
         type_info_ =
             dynamic_cast<sn_parameter_list *>(getFirstChild())->type_info_;
@@ -1879,9 +1885,9 @@ void sn_parameter_type_list::afterChildren(Environment *&env, const int pass)
             dynamic_cast<FuncType *>(type_info_)->setVarArg();
     }
 }
-void sn_parameter_list::afterChildren(Environment *&env, const int pass)
+void sn_parameter_list::afterChildren(ParserParams &params)
 {
-    if (pass == 0)
+    if (params.pass == 0)
     {
         FuncType *func = new FuncType();
         for (auto *child : getChildren())
@@ -1895,9 +1901,9 @@ void sn_parameter_list::afterChildren(Environment *&env, const int pass)
     }
 }
 // type, name
-void sn_parameter_declaration::afterChildren(Environment *&env, const int pass)
+void sn_parameter_declaration::afterChildren(ParserParams &params)
 {
-    if (pass == 0)
+    if (params.pass == 0)
     {
         type_info_ = dynamic_cast<sn_declaration_specifiers *>(getFirstChild())
                          ->type_info_;
@@ -1925,9 +1931,11 @@ void sn_parameter_declaration::afterChildren(Environment *&env, const int pass)
 }
 
 // type, linkage(storage_info_)
-void sn_declaration_specifiers::afterChildren(Environment *&env, const int pass)
+void sn_declaration_specifiers::afterChildren(ParserParams &params)
 {
-    if (pass == 0)
+    Environment *&env = params.env;
+
+    if (params.pass == 0)
     {
         TypeSpecifiersBuilder sb;
         TypeQualifiersBuilder qb;
@@ -1957,10 +1965,11 @@ void sn_declaration_specifiers::afterChildren(Environment *&env, const int pass)
     }
 }
 // type
-void sn_specifier_qualifier_list::afterChildren(Environment *&env,
-                                                const int pass)
+void sn_specifier_qualifier_list::afterChildren(ParserParams &params)
 {
-    if (pass == 0)
+    Environment *&env = params.env;
+
+    if (params.pass == 0)
     {
         TypeSpecifiersBuilder sb;
         TypeQualifiersBuilder qb;
@@ -1985,14 +1994,14 @@ void sn_specifier_qualifier_list::afterChildren(Environment *&env,
         type_info_->setQualifier(qb.build());
     }
 }
-// void sn_storage_specifier::afterChildren(Environment *&env, const int pass)
+// void sn_storage_specifier::afterChildren(ParserParams &params)
 // {}
-// void sn_type_qualifier::afterChildren(Environment *&env, const int pass) {}
-// void sn_type_qualifier_list::afterChildren(Environment *&env, const int pass)
+// void sn_type_qualifier::afterChildren(ParserParams &params) {}
+// void sn_type_qualifier_list::afterChildren(ParserParams &params)
 // {}
-void sn_type_specifier::afterChildren(Environment *&env, const int pass)
+void sn_type_specifier::afterChildren(ParserParams &params)
 {
-    if (pass == 0)
+    if (params.pass == 0)
     {
         type_info_ = nullptr;
         switch (t)
@@ -2015,30 +2024,32 @@ void sn_type_specifier::afterChildren(Environment *&env, const int pass)
         }
     }
 }
-void sn_struct_union_specifier::visit(Environment *&env, const int pass)
+void sn_struct_union_specifier::visit(ParserParams &params)
 {
     SyntaxNode *child = getFirstChild();
 
     if (child->nodeType() == SN_IDENTIFIER)
     {
-        child->visit(env, pass);
+        child->visit(params);
         child = getChildrenCount() == 2 ? getLastChild() : nullptr;
     }
 
-    afterTag(env, pass);
+    afterTag(params);
 
     if (child != nullptr && child->nodeType() == SN_STRUCT_DECLARATION_LIST)
     {
-        beforeDefinition(env, pass);
-        child->visit(env, pass);
-        afterDefinition(env, pass);
+        beforeDefinition(params);
+        child->visit(params);
+        afterDefinition(params);
     }
 
-    afterChildren(env, pass);
+    afterChildren(params);
 }
-void sn_struct_union_specifier::afterTag(Environment *&env, const int pass)
+void sn_struct_union_specifier::afterTag(ParserParams &params)
 {
-    if (pass == 0)
+    Environment *&env = params.env;
+
+    if (params.pass == 0)
     {
         // tag info
         StringRef tag;
@@ -2079,10 +2090,11 @@ void sn_struct_union_specifier::afterTag(Environment *&env, const int pass)
         }
     }
 }
-void sn_struct_union_specifier::beforeDefinition(Environment *&env,
-                                                 const int pass)
+void sn_struct_union_specifier::beforeDefinition(ParserParams &params)
 {
-    if (pass == 0)
+    Environment *&env = params.env;
+
+    if (params.pass == 0)
     {
         // create new environment for struct/union
         Environment *block = new Environment(nullptr);
@@ -2090,18 +2102,19 @@ void sn_struct_union_specifier::beforeDefinition(Environment *&env,
         env = block;
     }
 }
-void sn_struct_union_specifier::afterDefinition(Environment *&env,
-                                                const int pass)
+void sn_struct_union_specifier::afterDefinition(ParserParams &params)
 {
-    if (pass == 0)
+    Environment *&env = params.env;
+
+    if (params.pass == 0)
     {
         // restore environment
         env = env->parent();
     }
 }
-void sn_struct_union_specifier::afterChildren(Environment *&env, const int pass)
+void sn_struct_union_specifier::afterChildren(ParserParams &params)
 {
-    if (pass == 0)
+    if (params.pass == 0)
     {
         // struct tag impl info
         if (getLastChild()->nodeType() == SN_STRUCT_DECLARATION_LIST)
@@ -2119,27 +2132,29 @@ void sn_struct_union_specifier::afterChildren(Environment *&env, const int pass)
         }
     }
 }
-void sn_enum_specifier::visit(Environment *&env, const int pass)
+void sn_enum_specifier::visit(ParserParams &params)
 {
     SyntaxNode *child = getFirstChild();
 
     if (child->nodeType() == SN_IDENTIFIER)
     {
-        child->visit(env, pass);
+        child->visit(params);
         child = getChildrenCount() == 2 ? getLastChild() : nullptr;
     }
 
     if (child != nullptr && child->nodeType() == SN_ENUMERATOR_LIST)
     {
-        beforeDefinition(env, pass);
-        child->visit(env, pass);
+        beforeDefinition(params);
+        child->visit(params);
     }
 
-    afterChildren(env, pass);
+    afterChildren(params);
 }
-void sn_enum_specifier::beforeDefinition(Environment *&env, const int pass)
+void sn_enum_specifier::beforeDefinition(ParserParams &params)
 {
-    if (pass == 0)
+    Environment *&env = params.env;
+
+    if (params.pass == 0)
     {
         // tag info
         StringRef tag;
@@ -2161,9 +2176,11 @@ void sn_enum_specifier::beforeDefinition(Environment *&env, const int pass)
         env->addSymbol(builder.build());
     }
 }
-void sn_enum_specifier::afterChildren(Environment *&env, const int pass)
+void sn_enum_specifier::afterChildren(ParserParams &params)
 {
-    if (pass == 0)
+    Environment *&env = params.env;
+
+    if (params.pass == 0)
     {
         // enum tag impl info
         if (getLastChild()->nodeType() == SN_ENUMERATOR_LIST)
@@ -2199,9 +2216,11 @@ void sn_enum_specifier::afterChildren(Environment *&env, const int pass)
         }
     }
 }
-void sn_struct_declaration::afterChildren(Environment *&env, const int pass)
+void sn_struct_declaration::afterChildren(ParserParams &params)
 {
-    if (pass == 0)
+    Environment *&env = params.env;
+
+    if (params.pass == 0)
     {
         // Note: member info is already in StructTypeImpl, but we need to put
         // them
@@ -2229,9 +2248,9 @@ void sn_struct_declaration::afterChildren(Environment *&env, const int pass)
 }
 // void sn_struct_declaration_list::afterChildren(Environment *&env, const int
 // pass) {}
-void sn_struct_declarator::afterChildren(Environment *&env, const int pass)
+void sn_struct_declarator::afterChildren(ParserParams &params)
 {
-    if (pass == 0)
+    if (params.pass == 0)
     {
         type_info_ = nullptr;
         if (getFirstChild()->nodeType() == SN_DECLARATOR)
@@ -2249,13 +2268,13 @@ void sn_struct_declarator::afterChildren(Environment *&env, const int pass)
 }
 // void sn_struct_declarator_list::afterChildren(Environment *&env, const int
 // pass) {}
-// void sn_enumerator_list::afterChildren(Environment *&env, const int pass) {}
-// void sn_enumerator::afterChildren(Environment *&env, const int pass) {}
+// void sn_enumerator_list::afterChildren(ParserParams &params) {}
+// void sn_enumerator::afterChildren(ParserParams &params) {}
 // void sn_enumeration_constant::afterChildren(Environment *&env, const int
 // pass) {}
-void sn_type_name::afterChildren(Environment *&env, const int pass)
+void sn_type_name::afterChildren(ParserParams &params)
 {
-    if (pass == 0)
+    if (params.pass == 0)
     {
         type_info_ =
             dynamic_cast<sn_specifier_qualifier_list *>(getFirstChild())
@@ -2270,9 +2289,9 @@ void sn_type_name::afterChildren(Environment *&env, const int pass)
     }
 }
 // type
-void sn_pointer::afterChildren(Environment *&env, const int pass)
+void sn_pointer::afterChildren(ParserParams &params)
 {
-    if (pass == 0)
+    if (params.pass == 0)
     {
         type_info_ = new PointerType();
 
@@ -2302,16 +2321,16 @@ void sn_pointer::afterChildren(Environment *&env, const int pass)
 }
 
 // name
-void sn_identifier::afterChildren(Environment *&env, const int pass)
+void sn_identifier::afterChildren(ParserParams &params)
 {
-    if (pass == 0)
+    if (params.pass == 0)
     {
         name_info_ = id.symbol;
     }
 }
-void sn_identifier_list::afterChildren(Environment *&env, const int pass)
+void sn_identifier_list::afterChildren(ParserParams &params)
 {
-    if (pass == 0)
+    if (params.pass == 0)
     {
         FuncType *func = new FuncType();
         for (auto *child : getChildren())
@@ -2322,9 +2341,11 @@ void sn_identifier_list::afterChildren(Environment *&env, const int pass)
         type_info_ = func;
     }
 }
-void sn_typedef_name::afterChildren(Environment *&env, const int pass)
+void sn_typedef_name::afterChildren(ParserParams &params)
 {
-    if (pass == 0)
+    Environment *&env = params.env;
+
+    if (params.pass == 0)
     {
         StringRef name =
             dynamic_cast<sn_identifier *>(getFirstChild())->name_info_;
@@ -2344,31 +2365,33 @@ void sn_typedef_name::afterChildren(Environment *&env, const int pass)
 //      add implicit conversion ?
 
 // statement
-// void sn_statement::afterChildren(Environment *&env, const int pass) {}
-// void sn_statement_list::afterChildren(Environment *&env, const int pass) {}
-void sn_label_statement::afterChildren(Environment *&env, const int pass)
+// void sn_statement::afterChildren(ParserParams &params) {}
+// void sn_statement_list::afterChildren(ParserParams &params) {}
+void sn_label_statement::afterChildren(ParserParams &params)
 {
-    if (pass == 1)
+    if (params.pass == 1)
     {
         SyntaxError("not implemented.");
     }
 }
-void sn_compound_statement::visit(Environment *&env, const int pass)
+void sn_compound_statement::visit(ParserParams &params)
 {
-    beforeChildren(env, pass);
+    beforeChildren(params);
     if (getChildrenCount() > 0)
     {
         if (getFirstChild()->nodeType() == SN_DECLARATION_LIST)
-            getFirstChild()->visit(env, pass);
-        afterDeclarations(env, pass);
+            getFirstChild()->visit(params);
+        afterDeclarations(params);
         if (getLastChild()->nodeType() == SN_STATEMENT_LIST)
-            getLastChild()->visit(env, pass);
+            getLastChild()->visit(params);
     }
-    afterChildren(env, pass);
+    afterChildren(params);
 }
-void sn_compound_statement::beforeChildren(Environment *&env, const int pass)
+void sn_compound_statement::beforeChildren(ParserParams &params)
 {
-    if (pass == 0)
+    Environment *&env = params.env;
+
+    if (params.pass == 0)
     {
         // create new environment
         body_env_ = new Environment(env->getStorage());
@@ -2377,17 +2400,19 @@ void sn_compound_statement::beforeChildren(Environment *&env, const int pass)
 
     env = body_env_;
 }
-void sn_compound_statement::afterDeclarations(Environment *&env, const int pass)
+void sn_compound_statement::afterDeclarations(ParserParams &params)
 {
-    if (pass == 2)
+    if (params.pass == 2)
     {
         // auto code = env->getStorage().generateCode();
         // code_info_.append(code);
     }
 }
-void sn_compound_statement::afterChildren(Environment *&env, const int pass)
+void sn_compound_statement::afterChildren(ParserParams &params)
 {
-    if (pass == 2)
+    Environment *&env = params.env;
+
+    if (params.pass == 2)
     {
         if (getChildrenCount() == 0)
             return;
@@ -2413,9 +2438,9 @@ void sn_compound_statement::afterChildren(Environment *&env, const int pass)
     // restore environment
     env = env->parent();
 }
-void sn_expression_statement::afterChildren(Environment *&env, const int pass)
+void sn_expression_statement::afterChildren(ParserParams &params)
 {
-    if (pass == 2)
+    if (params.pass == 2)
     {
         if (getChildrenCount() != 0)
         {
@@ -2424,9 +2449,9 @@ void sn_expression_statement::afterChildren(Environment *&env, const int pass)
         }
     }
 }
-void sn_selection_statement::afterChildren(Environment *&env, const int pass)
+void sn_selection_statement::afterChildren(ParserParams &params)
 {
-    if (pass == 2)
+    if (params.pass == 2)
     {
         if (t == IF)
         {
@@ -2469,16 +2494,18 @@ void sn_selection_statement::afterChildren(Environment *&env, const int pass)
         }
     }
 }
-void sn_iteration_statement::afterChildren(Environment *&env, const int pass)
+void sn_iteration_statement::afterChildren(ParserParams &params)
 {
-    if (pass == 2)
+    if (params.pass == 2)
     {
         SyntaxError("not implemented");
     }
 }
-void sn_jump_statement::afterChildren(Environment *&env, const int pass)
+void sn_jump_statement::afterChildren(ParserParams &params)
 {
-    if (pass == 1)  // type derivation
+    Environment *&env = params.env;
+
+    if (params.pass == 1)  // type derivation
     {
         if (t == RETURN)
         {
@@ -2509,7 +2536,7 @@ void sn_jump_statement::afterChildren(Environment *&env, const int pass)
         else
             SyntaxError("not implemented");
     }
-    if (pass == 2)  // code generation
+    if (params.pass == 2)  // code generation
     {
         if (t == RETURN)
         {
@@ -2526,9 +2553,9 @@ void sn_jump_statement::afterChildren(Environment *&env, const int pass)
 
 // expression(constant-ness)
 // DEBUG default, should not implement
-void sn_expression::afterChildren(Environment *&env, const int pass)
+void sn_expression::afterChildren(ParserParams &params)
 {
-    if (pass == 2)
+    if (params.pass == 2)
     {
         SyntaxWarning(std::string(DebugSyntaxNode(nodeType())) +
                       ": not implemented, use default behavior.");
@@ -2541,13 +2568,13 @@ void sn_expression::afterChildren(Environment *&env, const int pass)
         }
     }
 }
-void sn_comma_expression::afterChildren(Environment *&env, const int pass)
+void sn_comma_expression::afterChildren(ParserParams &params)
 {
-    if (pass == 1)  // type derivation
+    if (params.pass == 1)  // type derivation
     {
         type_ = dynamic_cast<sn_expression *>(getLastChild())->type_;
     }
-    else if (pass == 2)  // code generation
+    else if (params.pass == 2)  // code generation
     {
         for (auto *child : getChildren())
         {
@@ -2558,9 +2585,9 @@ void sn_comma_expression::afterChildren(Environment *&env, const int pass)
             dynamic_cast<sn_expression *>(getLastChild())->result_info_;
     }
 }
-void sn_assign_expression::afterChildren(Environment *&env, const int pass)
+void sn_assign_expression::afterChildren(ParserParams &params)
 {
-    if (pass == 1)  // type derivation
+    if (params.pass == 1)  // type derivation
     {
         sn_expression *to = dynamic_cast<sn_expression *>(getFirstChild());
         sn_expression *from = dynamic_cast<sn_expression *>(getLastChild());
@@ -2579,7 +2606,7 @@ void sn_assign_expression::afterChildren(Environment *&env, const int pass)
 
         type_ = to->type_;
     }
-    else if (pass == 2)  // code generation
+    else if (params.pass == 2)  // code generation
     {
         sn_expression *left = dynamic_cast<sn_expression *>(getFirstChild());
         sn_expression *right = dynamic_cast<sn_expression *>(getLastChild());
@@ -2597,7 +2624,7 @@ void sn_assign_expression::afterChildren(Environment *&env, const int pass)
         }
     }
 }
-void sn_cond_expression::afterChildren(Environment *&env, const int pass)
+void sn_cond_expression::afterChildren(ParserParams &params)
 {
     sn_expression *cond = dynamic_cast<sn_expression *>(getChild(0));
     sn_expression *left = dynamic_cast<sn_expression *>(getChild(1));
@@ -2606,7 +2633,7 @@ void sn_cond_expression::afterChildren(Environment *&env, const int pass)
     Type *lt = left->type_;
     Type *rt = right->type_;
 
-    if (pass == 1)  // type derivation
+    if (params.pass == 1)  // type derivation
     {
         if (!ct->isScalar())
         {
@@ -2663,9 +2690,9 @@ void sn_cond_expression::afterChildren(Environment *&env, const int pass)
             SyntaxError("can't compare, type mismatch or not support.");
         }
     }
-    else if (pass == 2)  // code generation
+    else if (params.pass == 2)  // code generation
     {
-        IRStorage &st = *(env->getStorage());
+        IRStorage &st = *(params.env->getStorage());
 
         if (lt->getClass() != T_VOID || rt->getClass() != T_VOID)
         {
@@ -2724,14 +2751,14 @@ void sn_cond_expression::afterChildren(Environment *&env, const int pass)
     }
 }
 
-void sn_or_expression::afterChildren(Environment *&env, const int pass)
+void sn_or_expression::afterChildren(ParserParams &params)
 {
     sn_expression *left = dynamic_cast<sn_expression *>(getFirstChild());
     sn_expression *right = dynamic_cast<sn_expression *>(getLastChild());
     Type *lt = left->type_;
     Type *rt = right->type_;
 
-    if (pass == 1)  // type derivation
+    if (params.pass == 1)  // type derivation
     {
         if (lt->isScalar() && rt->isScalar())
         {
@@ -2744,9 +2771,9 @@ void sn_or_expression::afterChildren(Environment *&env, const int pass)
             SyntaxError("can't compare, type mismatch or not support.");
         }
     }
-    else if (pass == 2)  // code generation
+    else if (params.pass == 2)  // code generation
     {
-        IRStorage &st = *(env->getStorage());
+        IRStorage &st = *(params.env->getStorage());
 
         result_info_ = st.addAndGetAddress(
             IRObjectBuilder()
@@ -2782,14 +2809,14 @@ void sn_or_expression::afterChildren(Environment *&env, const int pass)
             {OP_ADDR_imm, sizeof(int), {0}}, result_info_));
     }
 }
-void sn_and_expression::afterChildren(Environment *&env, const int pass)
+void sn_and_expression::afterChildren(ParserParams &params)
 {
     sn_expression *left = dynamic_cast<sn_expression *>(getFirstChild());
     sn_expression *right = dynamic_cast<sn_expression *>(getLastChild());
     Type *lt = left->type_;
     Type *rt = right->type_;
 
-    if (pass == 1)  // type derivation
+    if (params.pass == 1)  // type derivation
     {
         if (lt->isScalar() && rt->isScalar())
         {
@@ -2802,9 +2829,9 @@ void sn_and_expression::afterChildren(Environment *&env, const int pass)
             SyntaxError("can't compare, type mismatch or not support.");
         }
     }
-    else if (pass == 2)  // code generation
+    else if (params.pass == 2)  // code generation
     {
-        IRStorage &st = *(env->getStorage());
+        IRStorage &st = *(params.env->getStorage());
 
         result_info_ = st.addAndGetAddress(
             IRObjectBuilder()
@@ -2841,14 +2868,14 @@ void sn_and_expression::afterChildren(Environment *&env, const int pass)
     }
 }
 
-void sn_bitor_expression::afterChildren(Environment *&env, const int pass)
+void sn_bitor_expression::afterChildren(ParserParams &params)
 {
     sn_expression *left = dynamic_cast<sn_expression *>(getFirstChild());
     sn_expression *right = dynamic_cast<sn_expression *>(getLastChild());
     Type *lt = left->type_;
     Type *rt = right->type_;
 
-    if (pass == 1)  // type derivation
+    if (params.pass == 1)  // type derivation
     {
         if (lt->isIntegral() && rt->isIntegral())
         {
@@ -2877,9 +2904,9 @@ void sn_bitor_expression::afterChildren(Environment *&env, const int pass)
             SyntaxError("can't compare, type mismatch or not support.");
         }
     }
-    else if (pass == 2)  // code generation
+    else if (params.pass == 2)  // code generation
     {
-        IRStorage &st = *(env->getStorage());
+        IRStorage &st = *(params.env->getStorage());
 
         result_info_ = st.addAndGetAddress(
             IRObjectBuilder()
@@ -2893,14 +2920,14 @@ void sn_bitor_expression::afterChildren(Environment *&env, const int pass)
             left->result_info_, right->result_info_, result_info_));
     }
 }
-void sn_bitxor_expression::afterChildren(Environment *&env, const int pass)
+void sn_bitxor_expression::afterChildren(ParserParams &params)
 {
     sn_expression *left = dynamic_cast<sn_expression *>(getFirstChild());
     sn_expression *right = dynamic_cast<sn_expression *>(getLastChild());
     Type *lt = left->type_;
     Type *rt = right->type_;
 
-    if (pass == 1)  // type derivation
+    if (params.pass == 1)  // type derivation
     {
         if (lt->isIntegral() && rt->isIntegral())
         {
@@ -2929,9 +2956,9 @@ void sn_bitxor_expression::afterChildren(Environment *&env, const int pass)
             SyntaxError("can't compare, type mismatch or not support.");
         }
     }
-    else if (pass == 2)  // code generation
+    else if (params.pass == 2)  // code generation
     {
-        IRStorage &st = *(env->getStorage());
+        IRStorage &st = *(params.env->getStorage());
 
         result_info_ = st.addAndGetAddress(
             IRObjectBuilder()
@@ -2945,14 +2972,14 @@ void sn_bitxor_expression::afterChildren(Environment *&env, const int pass)
             left->result_info_, right->result_info_, result_info_));
     }
 }
-void sn_bitand_expression::afterChildren(Environment *&env, const int pass)
+void sn_bitand_expression::afterChildren(ParserParams &params)
 {
     sn_expression *left = dynamic_cast<sn_expression *>(getFirstChild());
     sn_expression *right = dynamic_cast<sn_expression *>(getLastChild());
     Type *lt = left->type_;
     Type *rt = right->type_;
 
-    if (pass == 1)  // type derivation
+    if (params.pass == 1)  // type derivation
     {
         if (lt->isIntegral() && rt->isIntegral())
         {
@@ -2981,9 +3008,9 @@ void sn_bitand_expression::afterChildren(Environment *&env, const int pass)
             SyntaxError("can't compare, type mismatch or not support.");
         }
     }
-    else if (pass == 2)  // code generation
+    else if (params.pass == 2)  // code generation
     {
-        IRStorage &st = *(env->getStorage());
+        IRStorage &st = *(params.env->getStorage());
 
         result_info_ = st.addAndGetAddress(
             IRObjectBuilder()
@@ -2998,14 +3025,14 @@ void sn_bitand_expression::afterChildren(Environment *&env, const int pass)
     }
 }
 
-void sn_eq_expression::afterChildren(Environment *&env, const int pass)
+void sn_eq_expression::afterChildren(ParserParams &params)
 {
     sn_expression *left = dynamic_cast<sn_expression *>(getFirstChild());
     sn_expression *right = dynamic_cast<sn_expression *>(getLastChild());
     Type *lt = left->type_;
     Type *rt = right->type_;
 
-    if (pass == 1)  // type derivation
+    if (params.pass == 1)  // type derivation
     {
         if (lt->isArithmetic() && rt->isArithmetic())
         {
@@ -3040,9 +3067,9 @@ void sn_eq_expression::afterChildren(Environment *&env, const int pass)
 
         type_ = new IntegerType("i");
     }
-    else if (pass == 2)  // code generation
+    else if (params.pass == 2)  // code generation
     {
-        IRStorage &st = *(env->getStorage());
+        IRStorage &st = *(params.env->getStorage());
 
         // type(result) == 'int'
         result_info_ = st.addAndGetAddress(
@@ -3083,14 +3110,14 @@ void sn_eq_expression::afterChildren(Environment *&env, const int pass)
         }
     }
 }
-void sn_rel_expression::afterChildren(Environment *&env, const int pass)
+void sn_rel_expression::afterChildren(ParserParams &params)
 {
     sn_expression *left = dynamic_cast<sn_expression *>(getFirstChild());
     sn_expression *right = dynamic_cast<sn_expression *>(getLastChild());
     Type *lt = left->type_;
     Type *rt = right->type_;
 
-    if (pass == 1)  // type derivation
+    if (params.pass == 1)  // type derivation
     {
         if (lt->isArithmetic() && rt->isArithmetic())
         {
@@ -3125,9 +3152,9 @@ void sn_rel_expression::afterChildren(Environment *&env, const int pass)
 
         type_ = new IntegerType("i");
     }
-    else if (pass == 2)  // code generation
+    else if (params.pass == 2)  // code generation
     {
-        IRStorage &st = *(env->getStorage());
+        IRStorage &st = *(params.env->getStorage());
 
         // type(result) == 'int'
         result_info_ = st.addAndGetAddress(
@@ -3196,14 +3223,14 @@ void sn_rel_expression::afterChildren(Environment *&env, const int pass)
         }
     }
 }
-void sn_shift_expression::afterChildren(Environment *&env, const int pass)
+void sn_shift_expression::afterChildren(ParserParams &params)
 {
     sn_expression *left = dynamic_cast<sn_expression *>(getFirstChild());
     sn_expression *right = dynamic_cast<sn_expression *>(getLastChild());
     Type *lt = left->type_;
     Type *rt = right->type_;
 
-    if (pass == 1)  // type derivation
+    if (params.pass == 1)  // type derivation
     {
         if (!lt->isIntegral() || !rt->isIntegral())
         {
@@ -3230,9 +3257,9 @@ void sn_shift_expression::afterChildren(Environment *&env, const int pass)
 
         type_ = ltype;
     }
-    else if (pass == 2)  // code generation
+    else if (params.pass == 2)  // code generation
     {
-        IRStorage &st = *(env->getStorage());
+        IRStorage &st = *(params.env->getStorage());
 
         result_info_ = st.addAndGetAddress(
             IRObjectBuilder()
@@ -3259,14 +3286,14 @@ void sn_shift_expression::afterChildren(Environment *&env, const int pass)
         }
     }
 }
-void sn_add_expression::afterChildren(Environment *&env, const int pass)
+void sn_add_expression::afterChildren(ParserParams &params)
 {
     sn_expression *left = dynamic_cast<sn_expression *>(getFirstChild());
     sn_expression *right = dynamic_cast<sn_expression *>(getLastChild());
     Type *lt = left->type_;
     Type *rt = right->type_;
 
-    if (pass == 1)  // type derivation
+    if (params.pass == 1)  // type derivation
     {
         if (lt->isArithmetic() && rt->isArithmetic())
         {
@@ -3319,9 +3346,9 @@ void sn_add_expression::afterChildren(Environment *&env, const int pass)
             SyntaxError("can't add these two types.");
         }
     }
-    else if (pass == 2)  // code generation
+    else if (params.pass == 2)  // code generation
     {
-        IRStorage &st = *(env->getStorage());
+        IRStorage &st = *(params.env->getStorage());
         code_info_.append(left->code_info_);
         code_info_.append(right->code_info_);
         assert(lt->getSize() == rt->getSize());
@@ -3411,14 +3438,14 @@ void sn_add_expression::afterChildren(Environment *&env, const int pass)
         }
     }
 }
-void sn_mul_expression::afterChildren(Environment *&env, const int pass)
+void sn_mul_expression::afterChildren(ParserParams &params)
 {
     sn_expression *left = dynamic_cast<sn_expression *>(getFirstChild());
     sn_expression *right = dynamic_cast<sn_expression *>(getLastChild());
     Type *lt = left->type_;
     Type *rt = right->type_;
 
-    if (pass == 1)  // type derivation
+    if (params.pass == 1)  // type derivation
     {
         if (lt->isArithmetic() && rt->isArithmetic())
         {
@@ -3454,9 +3481,9 @@ void sn_mul_expression::afterChildren(Environment *&env, const int pass)
             SyntaxError("multiplicative operation require arithmetic types.");
         }
     }
-    else if (pass == 2)  // code generation
+    else if (params.pass == 2)  // code generation
     {
-        IRStorage &st = *(env->getStorage());
+        IRStorage &st = *(params.env->getStorage());
         code_info_.append(left->code_info_);
         code_info_.append(right->code_info_);
 
@@ -3502,22 +3529,22 @@ void sn_mul_expression::afterChildren(Environment *&env, const int pass)
         }
     }
 }
-void sn_cast_expression::afterChildren(Environment *&env, const int pass)
+void sn_cast_expression::afterChildren(ParserParams &params)
 {
-    if (pass == 1)  // type derivation
+    if (params.pass == 1)  // type derivation
     {
         if (getFirstChild()->nodeType() == SN_TYPE_NAME)
             type_ = dynamic_cast<sn_type_name *>(getFirstChild())->type_info_;
         else
             assert(type_ != nullptr);
     }
-    else if (pass == 2)  // code generation
+    else if (params.pass == 2)  // code generation
     {
         // TODO: check "is this cast ok?"
         sn_expression *e = dynamic_cast<sn_expression *>(getLastChild());
         code_info_.append(e->code_info_);
 
-        IRStorage &st = *(env->getStorage());
+        IRStorage &st = *(params.env->getStorage());
 
         const Type *to = type_;
         const Type *from = e->type_;
@@ -3584,7 +3611,7 @@ void sn_cast_expression::afterChildren(Environment *&env, const int pass)
         }
     }
 }
-void sn_unary_expression::afterChildren(Environment *&env, const int pass)
+void sn_unary_expression::afterChildren(ParserParams &params)
 {
     SyntaxNode *child = getFirstChild();
     Type *child_type = nullptr;
@@ -3595,7 +3622,7 @@ void sn_unary_expression::afterChildren(Environment *&env, const int pass)
     sn_expression *expr =
         (op == SIZEOF ? nullptr : dynamic_cast<sn_expression *>(child));
 
-    if (pass == 1)  // type derivation
+    if (params.pass == 1)  // type derivation
     {
         // ++, --: scalar type & modifiable lvalue
         // & * + - ~ !
@@ -3645,9 +3672,9 @@ void sn_unary_expression::afterChildren(Environment *&env, const int pass)
             default: assert(false); break;
         }
     }
-    else if (pass == 2)  // code generation
+    else if (params.pass == 2)  // code generation
     {
-        IRStorage &st = *(env->getStorage());
+        IRStorage &st = *(params.env->getStorage());
 
         // const Type *impl_type = nullptr;
 
@@ -3750,7 +3777,7 @@ void sn_unary_expression::afterChildren(Environment *&env, const int pass)
         }
     }
 }
-void sn_postfix_expression::afterChildren(Environment *&env, const int pass)
+void sn_postfix_expression::afterChildren(ParserParams &params)
 {
     sn_expression *left = nullptr;
     sn_expression *right = nullptr;
@@ -3758,7 +3785,7 @@ void sn_postfix_expression::afterChildren(Environment *&env, const int pass)
     const Type *left_impl = nullptr;
     StringRef member_name;
 
-    if (pass == 1)  // type derivation
+    if (params.pass == 1)  // type derivation
     {
         // used in switch
         Type *left_type = nullptr;
@@ -3827,9 +3854,9 @@ void sn_postfix_expression::afterChildren(Environment *&env, const int pass)
             default: SyntaxError("Should not reach here."); break;
         }
     }
-    else if (pass == 2)  // code generation
+    else if (params.pass == 2)  // code generation
     {
-        IRStorage &st = *(env->getStorage());
+        IRStorage &st = *(params.env->getStorage());
 
         IRAddress t1, t2, t3;
         size_t offset;
@@ -3903,17 +3930,17 @@ void sn_postfix_expression::afterChildren(Environment *&env, const int pass)
         }
     }
 }
-void sn_primary_expression::afterChildren(Environment *&env, const int pass)
+void sn_primary_expression::afterChildren(ParserParams &params)
 {
     Symbol *s = nullptr;
 
-    if (pass == 1)  // type derivation
+    if (params.pass == 1)  // type derivation
     {
         switch (t.type)
         {
             case SYMBOL:
                 // obj or enum-const
-                s = env->findSymbol(SYMBOL_NAMESPACE_id, t.symbol);
+                s = params.env->findSymbol(SYMBOL_NAMESPACE_id, t.symbol);
                 if (s == nullptr)
                 {
                     SyntaxError("symbol not found:" + t.symbol.toString());
@@ -3937,9 +3964,9 @@ void sn_primary_expression::afterChildren(Environment *&env, const int pass)
                 break;
         }
     }
-    else if (pass == 2)  // code generation
+    else if (params.pass == 2)  // code generation
     {
-        IRStorage &st = *(env->getStorage());
+        IRStorage &st = *(params.env->getStorage());
         switch (t.type)
         {
             case SYMBOL: result_info_ = st.getAddressByName(t.symbol); break;
@@ -3967,10 +3994,10 @@ void sn_primary_expression::afterChildren(Environment *&env, const int pass)
         }
     }
 }
-void sn_const_expression::afterChildren(Environment *&env, const int pass)
+void sn_const_expression::afterChildren(ParserParams &params)
 {
     // TODO: remove sn_const_expression
-    if (pass == 0)
+    if (params.pass == 0)
     {
         if (getChildrenCount() == 0)
         {
