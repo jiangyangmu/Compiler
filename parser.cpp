@@ -2465,12 +2465,18 @@ void sn_selection_statement::afterChildren(ParserParams &params)
             sn_expression *expr =
                 dynamic_cast<sn_expression *>(getFirstChild());
 
+            // ... expr ...
+            // cmp result_info_, 0
+            code_info_.append(expr->code_info_);
             code_info_.add(IRInstructionBuilder::Cmp(
                 {OP_ADDR_imm, expr->result_info_.width, {0}},
                 expr->result_info_));
 
             if (getChildrenCount() == 2)  // if (expr) stmt
             {
+                // je end
+                // ... if-stmt ...
+                // end:
                 sn_statement *stmt = dynamic_cast<sn_statement *>(getChild(1));
 
                 code_info_.add(IRInstructionBuilder::Je(
@@ -2480,6 +2486,11 @@ void sn_selection_statement::afterChildren(ParserParams &params)
             }
             else  // if (expr) stmt else stmt
             {
+                // je Lelse
+                // ... if-stmt ...
+                // jmp end
+                // Lelse: ... else-stmt ...
+                // end:
                 sn_statement *stmt1 = dynamic_cast<sn_statement *>(getChild(1));
                 sn_statement *stmt2 = dynamic_cast<sn_statement *>(getChild(2));
 
@@ -2500,17 +2511,30 @@ void sn_selection_statement::afterChildren(ParserParams &params)
         }
     }
 }
+void sn_iteration_statement::beforeChildren(ParserParams &params)
+{
+    if (params.pass == 2)
+    {
+        begin = new StringRef(IRUtil::GenerateLabel());
+        end = new StringRef(IRUtil::GenerateLabel());
+        // store parent's begin & end, let children see self's begin & end
+        std::swap(begin, params.begin);
+        std::swap(end, params.end);
+    }
+}
 void sn_iteration_statement::afterChildren(ParserParams &params)
 {
     if (params.pass == 2)
     {
+        // get back self's begin & end
+        std::swap(begin, params.begin);
+        std::swap(end, params.end);
+
         if (t == WHILE)
         {
             sn_expression *expr =
                 dynamic_cast<sn_expression *>(getFirstChild());
             sn_statement *stmt = dynamic_cast<sn_statement *>(getLastChild());
-            StringRef *begin = new StringRef(IRUtil::GenerateLabel());
-            StringRef *end = new StringRef(IRUtil::GenerateLabel());
 
             // begin: ... expr ...
             // cmp result_info_, 0
@@ -2531,8 +2555,6 @@ void sn_iteration_statement::afterChildren(ParserParams &params)
         {
             sn_statement *stmt = dynamic_cast<sn_statement *>(getFirstChild());
             sn_expression *expr = dynamic_cast<sn_expression *>(getLastChild());
-            StringRef *begin = new StringRef(IRUtil::GenerateLabel());
-            StringRef *end = new StringRef(IRUtil::GenerateLabel());
 
             // begin: ... stmt ...
             // ... expr ...
@@ -2563,41 +2585,44 @@ void sn_iteration_statement::afterChildren(ParserParams &params)
                 e3 = dynamic_cast<sn_expression *>(getChild(i++));
             stmt = dynamic_cast<sn_statement *>(getChild(i));
 
-            StringRef *begin = new StringRef(IRUtil::GenerateLabel());
-            StringRef *end = new StringRef(IRUtil::GenerateLabel());
+            StringRef *head = new StringRef(IRUtil::GenerateLabel());
 
             // ... e1 ...
-            // begin: ... e2 ...
+            // head: ... e2 ...
             // cmp result_info_, 0
             // je end
             // ... stmt ...
-            // ... e3 ...
-            // jmp begin
+            // begin: ... e3 ...
+            // jmp head
             // end:
             if (e1)
                 code_info_.append(e1->code_info_);
             if (e2)
             {
-                e2->code_info_.addLabel(begin, nullptr);
+                e2->code_info_.addLabel(head, nullptr);
                 code_info_.append(e2->code_info_);
                 code_info_.add(IRInstructionBuilder::Cmp(e2->result_info_,
                                                          IRAddress::imm_0()));
                 code_info_.add(
                     IRInstructionBuilder::Je(IRAddress::FromLabel(end)));
                 code_info_.append(stmt->code_info_);
-                if (e3)
-                    code_info_.append(e3->code_info_);
-                code_info_.add(IRInstructionBuilder::Jmp(
-                    IRAddress::FromLabel(begin), nullptr, end));
             }
             else
             {
-                stmt->code_info_.addLabel(begin, nullptr);
+                stmt->code_info_.addLabel(head, nullptr);
                 code_info_.append(stmt->code_info_);
-                if (e3)
-                    code_info_.append(e3->code_info_);
+            }
+            if (e3)
+            {
+                e3->code_info_.addLabel(begin, nullptr);
+                code_info_.append(e3->code_info_);
                 code_info_.add(IRInstructionBuilder::Jmp(
-                    IRAddress::FromLabel(begin), nullptr, end));
+                    IRAddress::FromLabel(head), nullptr, end));
+            }
+            else
+            {
+                code_info_.add(IRInstructionBuilder::Jmp(
+                    IRAddress::FromLabel(head), begin, end));
             }
         }
     }
@@ -2634,12 +2659,24 @@ void sn_jump_statement::afterChildren(ParserParams &params)
                              cast_expr);  // XXX: syntax tree is modified here.
             }
         }
-        else
-            SyntaxError("not implemented");
     }
-    if (params.pass == 2)  // code generation
+    else if (params.pass == 2)  // code generation
     {
-        if (t == RETURN)
+        if (t == BREAK)
+        {
+            if (params.begin == nullptr || params.end == nullptr)
+                SyntaxError("can't break here.");
+            code_info_.add(
+                IRInstructionBuilder::Jmp(IRAddress::FromLabel(params.end)));
+        }
+        else if (t == CONTINUE)
+        {
+            if (params.begin == nullptr || params.end == nullptr)
+                SyntaxError("can't continue here.");
+            code_info_.add(
+                IRInstructionBuilder::Jmp(IRAddress::FromLabel(params.begin)));
+        }
+        else if (t == RETURN)
         {
             sn_expression *expr =
                 dynamic_cast<sn_expression *>(getFirstChild());
@@ -4041,7 +4078,8 @@ void sn_primary_expression::afterChildren(ParserParams &params)
         {
             case SYMBOL:
                 // obj or enum-const
-                s = params.env->findSymbol(SYMBOL_NAMESPACE_id, t.symbol);
+                s = params.env->findSymbolRecursive(SYMBOL_NAMESPACE_id,
+                                                    t.symbol);
                 if (s == nullptr)
                 {
                     SyntaxError("symbol not found:" + t.symbol.toString());

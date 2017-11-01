@@ -7,7 +7,10 @@
 class IRTester : public Tester
 {
    protected:
-    virtual void setUp() {}
+    virtual void setUp()
+    {
+        debug = false;
+    }
     virtual void shutDown() {}
 
     int executeProgramAndGetExitCode(const char *prog,
@@ -36,6 +39,12 @@ class IRTester : public Tester
                     code.append(*o.code);
             }
 
+            if (debug)
+            {
+                __debugPrint(tu->toString());
+                std::cout << prog << std::endl;
+                std::cout << code.toString() << std::endl;
+            }
             ret = simu.run(code);
             if (msg)
             {
@@ -46,6 +55,8 @@ class IRTester : public Tester
 
         return ret;
     }
+
+    bool debug;
 };
 
 // TEST_F(IRTester, IRValueFactory)
@@ -207,4 +218,25 @@ TEST_F(IRTester, Statement)
         msg);
 
     // jump statement
+    // goto
+    // continue
+    EXPECT_EQ_PRINT(3,
+                    executeProgramAndGetExitCode(
+                        "int main() { int a; a = 1; while (a < 5) if (a < 3) a "
+                        "= a + 1; else break; return a; }",
+                        &msg),
+                    msg);
+    // break
+    EXPECT_EQ_PRINT(
+        103,
+        executeProgramAndGetExitCode(
+            "int main() { int a; for (a = 1; a < 5; a = a + 1) if (a < 2) "
+            "continue; else a = a + 100; return a; }",
+            &msg),
+        msg);
+    // return
+    EXPECT_EQ_PRINT(5,
+                    executeProgramAndGetExitCode(
+                        "int main() { int a; a = 5; return a; }", &msg),
+                    msg);
 }

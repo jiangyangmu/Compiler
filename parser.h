@@ -656,12 +656,14 @@ class sn_iteration_statement : public sn_statement
                   // sn_expression *expr3;
                   // sn_statement *stmt;
     bool pre, mid, post; // used by for
+    StringRef *begin, *end;
 
    public:
     sn_iteration_statement() : sn_statement(SN_ITERATION_STATEMENT) {}
     static sn_statement *parse(Lexer &lex);
 
     // Visitor
+    virtual void beforeChildren(ParserParams &params);
     virtual void afterChildren(ParserParams &params);
 };
 class sn_jump_statement : public sn_statement
