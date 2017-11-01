@@ -85,6 +85,7 @@ struct ParserParams
 {
     Environment *env;
     int pass;
+    StringRef *begin, *end;
 };
 
 class SyntaxNode : public TreeLike<SyntaxNode>, public Stringable

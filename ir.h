@@ -38,6 +38,12 @@ struct IRAddress
     {
         return {OP_ADDR_imm, sizeof(int), {2}};
     }
+    static IRAddress FromLabel(StringRef *l)
+    {
+        IRAddress addr = {OP_ADDR_label, sizeof(void *), {}};
+        addr.label = l;
+        return addr;
+    }
 };
 
 enum EIROpcode
@@ -119,165 +125,226 @@ struct IRInstruction
 {
     EIROpcode op;
     IRAddress arg1, arg2, arg3;
-    StringRef *label;  // can be jump destination
+    StringRef *prelabel, *postlabel;  // can be jump destination
 
     std::string toString() const;
 };
 class IRInstructionBuilder
 {
    public:
-    static IRInstruction Cmp(IRAddress arg1, IRAddress arg2)
+    static IRInstruction Cmp(IRAddress arg1, IRAddress arg2,
+                             StringRef *begin = nullptr,
+                             StringRef *end = nullptr)
     {
-        return {IR_OPCODE_cmp, arg1, arg2, {}, nullptr};
+        return {IR_OPCODE_cmp, arg1, arg2, {}, begin, end};
     }
-    static IRInstruction Mov(IRAddress arg1, IRAddress arg2)
+    static IRInstruction Mov(IRAddress arg1, IRAddress arg2,
+                             StringRef *begin = nullptr,
+                             StringRef *end = nullptr)
     {
         assert(arg1.mode != OP_ADDR_invalid && arg2.mode != OP_ADDR_invalid);
-        return {IR_OPCODE_mov, arg1, arg2, {}, nullptr};
+        return {IR_OPCODE_mov, arg1, arg2, {}, begin, end};
     }
-    static IRInstruction Je(IRAddress arg1)
+    static IRInstruction Je(IRAddress arg1, StringRef *begin = nullptr,
+                            StringRef *end = nullptr)
     {
-        return {IR_OPCODE_je, arg1, {}, {}, nullptr};
+        return {IR_OPCODE_je, arg1, {}, {}, begin, end};
     }
-    static IRInstruction Jne(IRAddress arg1)
+    static IRInstruction Jne(IRAddress arg1, StringRef *begin = nullptr,
+                             StringRef *end = nullptr)
     {
-        return {IR_OPCODE_jne, arg1, {}, {}, nullptr};
+        return {IR_OPCODE_jne, arg1, {}, {}, begin, end};
     }
-    static IRInstruction Jl(IRAddress arg1)
+    static IRInstruction Jl(IRAddress arg1, StringRef *begin = nullptr,
+                            StringRef *end = nullptr)
     {
-        return {IR_OPCODE_jl, arg1, {}, {}, nullptr};
+        return {IR_OPCODE_jl, arg1, {}, {}, begin, end};
     }
-    static IRInstruction Jle(IRAddress arg1)
+    static IRInstruction Jle(IRAddress arg1, StringRef *begin = nullptr,
+                             StringRef *end = nullptr)
     {
-        return {IR_OPCODE_jle, arg1, {}, {}, nullptr};
+        return {IR_OPCODE_jle, arg1, {}, {}, begin, end};
     }
-    static IRInstruction Jg(IRAddress arg1)
+    static IRInstruction Jg(IRAddress arg1, StringRef *begin = nullptr,
+                            StringRef *end = nullptr)
     {
-        return {IR_OPCODE_jg, arg1, {}, {}, nullptr};
+        return {IR_OPCODE_jg, arg1, {}, {}, begin, end};
     }
-    static IRInstruction Jge(IRAddress arg1)
+    static IRInstruction Jge(IRAddress arg1, StringRef *begin = nullptr,
+                             StringRef *end = nullptr)
     {
-        return {IR_OPCODE_jge, arg1, {}, {}, nullptr};
+        return {IR_OPCODE_jge, arg1, {}, {}, begin, end};
     }
-    static IRInstruction Jb(IRAddress arg1)
+    static IRInstruction Jb(IRAddress arg1, StringRef *begin = nullptr,
+                            StringRef *end = nullptr)
     {
-        return {IR_OPCODE_jb, arg1, {}, {}, nullptr};
+        return {IR_OPCODE_jb, arg1, {}, {}, begin, end};
     }
-    static IRInstruction Jbe(IRAddress arg1)
+    static IRInstruction Jbe(IRAddress arg1, StringRef *begin = nullptr,
+                             StringRef *end = nullptr)
     {
-        return {IR_OPCODE_jbe, arg1, {}, {}, nullptr};
+        return {IR_OPCODE_jbe, arg1, {}, {}, begin, end};
     }
-    static IRInstruction Ja(IRAddress arg1)
+    static IRInstruction Ja(IRAddress arg1, StringRef *begin = nullptr,
+                            StringRef *end = nullptr)
     {
-        return {IR_OPCODE_ja, arg1, {}, {}, nullptr};
+        return {IR_OPCODE_ja, arg1, {}, {}, begin, end};
     }
-    static IRInstruction Jae(IRAddress arg1)
+    static IRInstruction Jae(IRAddress arg1, StringRef *begin = nullptr,
+                             StringRef *end = nullptr)
     {
-        return {IR_OPCODE_jae, arg1, {}, {}, nullptr};
+        return {IR_OPCODE_jae, arg1, {}, {}, begin, end};
     }
-    static IRInstruction Jmp(IRAddress arg1)
+    static IRInstruction Jmp(IRAddress arg1, StringRef *begin = nullptr,
+                             StringRef *end = nullptr)
     {
-        return {IR_OPCODE_jmp, arg1, {}, {}, nullptr};
+        return {IR_OPCODE_jmp, arg1, {}, {}, begin, end};
     }
-    static IRInstruction Inc(IRAddress arg1)
+    static IRInstruction Inc(IRAddress arg1, StringRef *begin = nullptr,
+                             StringRef *end = nullptr)
     {
-        return {IR_OPCODE_inc, arg1, {}, {}, nullptr};
+        return {IR_OPCODE_inc, arg1, {}, {}, begin, end};
     }
-    static IRInstruction Dec(IRAddress arg1)
+    static IRInstruction Dec(IRAddress arg1, StringRef *begin = nullptr,
+                             StringRef *end = nullptr)
     {
-        return {IR_OPCODE_dec, arg1, {}, {}, nullptr};
+        return {IR_OPCODE_dec, arg1, {}, {}, begin, end};
     }
-    static IRInstruction Neg(IRAddress arg1)
+    static IRInstruction Neg(IRAddress arg1, StringRef *begin = nullptr,
+                             StringRef *end = nullptr)
     {
-        return {IR_OPCODE_neg, arg1, {}, {}, nullptr};
+        return {IR_OPCODE_neg, arg1, {}, {}, begin, end};
     }
-    static IRInstruction Or(IRAddress arg1, IRAddress arg2, IRAddress arg3)
+    static IRInstruction Or(IRAddress arg1, IRAddress arg2, IRAddress arg3,
+                            StringRef *begin = nullptr,
+                            StringRef *end = nullptr)
     {
-        return {IR_OPCODE_or, arg1, arg2, arg3, nullptr};
+        return {IR_OPCODE_or, arg1, arg2, arg3, begin, end};
     }
-    static IRInstruction Xor(IRAddress arg1, IRAddress arg2, IRAddress arg3)
+    static IRInstruction Xor(IRAddress arg1, IRAddress arg2, IRAddress arg3,
+                             StringRef *begin = nullptr,
+                             StringRef *end = nullptr)
     {
-        return {IR_OPCODE_xor, arg1, arg2, arg3, nullptr};
+        return {IR_OPCODE_xor, arg1, arg2, arg3, begin, end};
     }
-    static IRInstruction And(IRAddress arg1, IRAddress arg2, IRAddress arg3)
+    static IRInstruction And(IRAddress arg1, IRAddress arg2, IRAddress arg3,
+                             StringRef *begin = nullptr,
+                             StringRef *end = nullptr)
     {
-        return {IR_OPCODE_and, arg1, arg2, arg3, nullptr};
+        return {IR_OPCODE_and, arg1, arg2, arg3, begin, end};
     }
-    static IRInstruction Shl(IRAddress arg1, IRAddress arg2, IRAddress arg3)
+    static IRInstruction Shl(IRAddress arg1, IRAddress arg2, IRAddress arg3,
+                             StringRef *begin = nullptr,
+                             StringRef *end = nullptr)
     {
-        return {IR_OPCODE_shl, arg1, arg2, arg3, nullptr};
+        return {IR_OPCODE_shl, arg1, arg2, arg3, begin, end};
     }
-    static IRInstruction Sal(IRAddress arg1, IRAddress arg2, IRAddress arg3)
+    static IRInstruction Sal(IRAddress arg1, IRAddress arg2, IRAddress arg3,
+                             StringRef *begin = nullptr,
+                             StringRef *end = nullptr)
     {
-        return {IR_OPCODE_shl, arg1, arg2, arg3, nullptr};
+        return {IR_OPCODE_shl, arg1, arg2, arg3, begin, end};
     }
-    static IRInstruction Shr(IRAddress arg1, IRAddress arg2, IRAddress arg3)
+    static IRInstruction Shr(IRAddress arg1, IRAddress arg2, IRAddress arg3,
+                             StringRef *begin = nullptr,
+                             StringRef *end = nullptr)
     {
-        return {IR_OPCODE_shr, arg1, arg2, arg3, nullptr};
+        return {IR_OPCODE_shr, arg1, arg2, arg3, begin, end};
     }
-    static IRInstruction Sar(IRAddress arg1, IRAddress arg2, IRAddress arg3)
+    static IRInstruction Sar(IRAddress arg1, IRAddress arg2, IRAddress arg3,
+                             StringRef *begin = nullptr,
+                             StringRef *end = nullptr)
     {
-        return {IR_OPCODE_sar, arg1, arg2, arg3, nullptr};
+        return {IR_OPCODE_sar, arg1, arg2, arg3, begin, end};
     }
-    static IRInstruction Add(IRAddress arg1, IRAddress arg2, IRAddress arg3)
+    static IRInstruction Add(IRAddress arg1, IRAddress arg2, IRAddress arg3,
+                             StringRef *begin = nullptr,
+                             StringRef *end = nullptr)
     {
-        return {IR_OPCODE_add, arg1, arg2, arg3, nullptr};
+        return {IR_OPCODE_add, arg1, arg2, arg3, begin, end};
     }
-    static IRInstruction Sub(IRAddress arg1, IRAddress arg2, IRAddress arg3)
+    static IRInstruction Sub(IRAddress arg1, IRAddress arg2, IRAddress arg3,
+                             StringRef *begin = nullptr,
+                             StringRef *end = nullptr)
     {
-        return {IR_OPCODE_sub, arg1, arg2, arg3, nullptr};
+        return {IR_OPCODE_sub, arg1, arg2, arg3, begin, end};
     }
-    static IRInstruction Mul(IRAddress arg1, IRAddress arg2, IRAddress arg3)
+    static IRInstruction Mul(IRAddress arg1, IRAddress arg2, IRAddress arg3,
+                             StringRef *begin = nullptr,
+                             StringRef *end = nullptr)
     {
-        return {IR_OPCODE_mul, arg1, arg2, arg3, nullptr};
+        return {IR_OPCODE_mul, arg1, arg2, arg3, begin, end};
     }
-    static IRInstruction Div(IRAddress arg1, IRAddress arg2, IRAddress arg3)
+    static IRInstruction Div(IRAddress arg1, IRAddress arg2, IRAddress arg3,
+                             StringRef *begin = nullptr,
+                             StringRef *end = nullptr)
     {
-        return {IR_OPCODE_div, arg1, arg2, arg3, nullptr};
+        return {IR_OPCODE_div, arg1, arg2, arg3, begin, end};
     }
-    static IRInstruction Mod(IRAddress arg1, IRAddress arg2, IRAddress arg3)
+    static IRInstruction Mod(IRAddress arg1, IRAddress arg2, IRAddress arg3,
+                             StringRef *begin = nullptr,
+                             StringRef *end = nullptr)
     {
-        return {IR_OPCODE_mod, arg1, arg2, arg3, nullptr};
+        return {IR_OPCODE_mod, arg1, arg2, arg3, begin, end};
     }
-    static IRInstruction SX(IRAddress arg1, IRAddress arg2)
+    static IRInstruction SX(IRAddress arg1, IRAddress arg2,
+                            StringRef *begin = nullptr,
+                            StringRef *end = nullptr)
     {
-        return {IR_OPCODE_sx, arg1, arg2, {}, nullptr};
+        return {IR_OPCODE_sx, arg1, arg2, {}, begin, end};
     }
-    static IRInstruction ZX(IRAddress arg1, IRAddress arg2)
+    static IRInstruction ZX(IRAddress arg1, IRAddress arg2,
+                            StringRef *begin = nullptr,
+                            StringRef *end = nullptr)
     {
-        return {IR_OPCODE_zx, arg1, arg2, {}, nullptr};
+        return {IR_OPCODE_zx, arg1, arg2, {}, begin, end};
     }
-    static IRInstruction SHRK(IRAddress arg1, IRAddress arg2)
+    static IRInstruction SHRK(IRAddress arg1, IRAddress arg2,
+                              StringRef *begin = nullptr,
+                              StringRef *end = nullptr)
     {
-        return {IR_OPCODE_shrk, arg1, arg2, {}, nullptr};
+        return {IR_OPCODE_shrk, arg1, arg2, {}, begin, end};
     }
-    static IRInstruction FEXT(IRAddress arg1, IRAddress arg2)
+    static IRInstruction FEXT(IRAddress arg1, IRAddress arg2,
+                              StringRef *begin = nullptr,
+                              StringRef *end = nullptr)
     {
-        return {IR_OPCODE_fext, arg1, arg2, {}, nullptr};
+        return {IR_OPCODE_fext, arg1, arg2, {}, begin, end};
     }
-    static IRInstruction FSHRK(IRAddress arg1, IRAddress arg2)
+    static IRInstruction FSHRK(IRAddress arg1, IRAddress arg2,
+                               StringRef *begin = nullptr,
+                               StringRef *end = nullptr)
     {
-        return {IR_OPCODE_fshrk, arg1, arg2, {}, nullptr};
+        return {IR_OPCODE_fshrk, arg1, arg2, {}, begin, end};
     }
-    static IRInstruction F2I(IRAddress arg1, IRAddress arg2)
+    static IRInstruction F2I(IRAddress arg1, IRAddress arg2,
+                             StringRef *begin = nullptr,
+                             StringRef *end = nullptr)
     {
-        return {IR_OPCODE_f2i, arg1, arg2, {}, nullptr};
+        return {IR_OPCODE_f2i, arg1, arg2, {}, begin, end};
     }
-    static IRInstruction I2F(IRAddress arg1, IRAddress arg2)
+    static IRInstruction I2F(IRAddress arg1, IRAddress arg2,
+                             StringRef *begin = nullptr,
+                             StringRef *end = nullptr)
     {
-        return {IR_OPCODE_i2f, arg1, arg2, {}, nullptr};
+        return {IR_OPCODE_i2f, arg1, arg2, {}, begin, end};
     }
-    static IRInstruction Ref(IRAddress arg1, IRAddress arg2)
+    static IRInstruction Ref(IRAddress arg1, IRAddress arg2,
+                             StringRef *begin = nullptr,
+                             StringRef *end = nullptr)
     {
-        return {IR_OPCODE_ref, arg1, arg2, {}, nullptr};
+        return {IR_OPCODE_ref, arg1, arg2, {}, begin, end};
     }
-    static IRInstruction Deref(IRAddress arg1, IRAddress arg2)
+    static IRInstruction Deref(IRAddress arg1, IRAddress arg2,
+                               StringRef *begin = nullptr,
+                               StringRef *end = nullptr)
     {
-        return {IR_OPCODE_deref, arg1, arg2, {}, nullptr};
+        return {IR_OPCODE_deref, arg1, arg2, {}, begin, end};
     }
-    static IRInstruction Ret(IRAddress arg1)
+    static IRInstruction Ret(IRAddress arg1, StringRef *begin = nullptr,
+                             StringRef *end = nullptr)
     {
-        return {IR_OPCODE_ret, arg1, {}, {}, nullptr};
+        return {IR_OPCODE_ret, arg1, {}, {}, begin, end};
     }
 };
 // Usage:
@@ -533,6 +600,12 @@ class IRCode
     {
         _code.push_back(code);
     }
+    void addLabel(StringRef *begin, StringRef *end)
+    {
+        assert(!_code.empty());
+        _code.front().prelabel = begin;
+        _code.back().postlabel = end;
+    }
     void append(IRCode &code)
     {
         _code.insert(_code.end(), code._code.begin(), code._code.end());
@@ -582,10 +655,13 @@ class IR_to_x64 : public IRTranslator
 };
 
 // Execute simple IRInstruction sequence.
+#include <unordered_map>
 class IRSimulator
 {
     static char memory[4096];
+    std::unordered_map<std::string, int> label_pos;
     int get_value(const IRAddress &addr);
+    int get_value_or_label(const IRAddress &addr, int i);
     char *get_addr(const IRAddress &addr);
 
    public:

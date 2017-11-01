@@ -19,6 +19,7 @@ void Parser::parse()
 {
     tu = sn_translation_unit::parse(lex);
     params.env = new Environment(new IRStorage());
+    params.begin = params.end = nullptr;
     for (int pass = 0; pass <= 2; ++pass)
     {
         params.pass = pass;
@@ -2508,6 +2509,8 @@ void sn_iteration_statement::afterChildren(ParserParams &params)
             sn_expression *expr =
                 dynamic_cast<sn_expression *>(getFirstChild());
             sn_statement *stmt = dynamic_cast<sn_statement *>(getLastChild());
+            StringRef *begin = new StringRef(IRUtil::GenerateLabel());
+            StringRef *end = new StringRef(IRUtil::GenerateLabel());
 
             // begin: ... expr ...
             // cmp result_info_, 0
@@ -2515,34 +2518,34 @@ void sn_iteration_statement::afterChildren(ParserParams &params)
             // ... stmt ...
             // jmp begin
             // end:
+            expr->code_info_.addLabel(begin, nullptr);
             code_info_.append(expr->code_info_);
             code_info_.add(IRInstructionBuilder::Cmp(expr->result_info_,
                                                      IRAddress::imm_0()));
-            code_info_.add(IRInstructionBuilder::Je(
-                {OP_ADDR_imm, sizeof(void *), {stmt->code_info_.size() + 1}}));
+            code_info_.add(IRInstructionBuilder::Je(IRAddress::FromLabel(end)));
             code_info_.append(stmt->code_info_);
             code_info_.add(IRInstructionBuilder::Jmp(
-                {OP_ADDR_imm,
-                 sizeof(void *),
-                 {-(expr->code_info_.size() + stmt->code_info_.size() + 3)}}));
+                IRAddress::FromLabel(begin), nullptr, end));
         }
         else if (t == DO)
         {
             sn_statement *stmt = dynamic_cast<sn_statement *>(getFirstChild());
             sn_expression *expr = dynamic_cast<sn_expression *>(getLastChild());
+            StringRef *begin = new StringRef(IRUtil::GenerateLabel());
+            StringRef *end = new StringRef(IRUtil::GenerateLabel());
 
             // begin: ... stmt ...
             // ... expr ...
             // cmp result_info_, 0
             // jne begin
+            // end:
+            stmt->code_info_.addLabel(begin, nullptr);
             code_info_.append(stmt->code_info_);
             code_info_.append(expr->code_info_);
             code_info_.add(IRInstructionBuilder::Cmp(expr->result_info_,
                                                      IRAddress::imm_0()));
             code_info_.add(IRInstructionBuilder::Jne(
-                {OP_ADDR_imm,
-                 sizeof(void *),
-                 {-(stmt->code_info_.size() + expr->code_info_.size() + 2)}}));
+                IRAddress::FromLabel(begin), nullptr, end));
         }
         else
         {
@@ -2560,6 +2563,9 @@ void sn_iteration_statement::afterChildren(ParserParams &params)
                 e3 = dynamic_cast<sn_expression *>(getChild(i++));
             stmt = dynamic_cast<sn_statement *>(getChild(i));
 
+            StringRef *begin = new StringRef(IRUtil::GenerateLabel());
+            StringRef *end = new StringRef(IRUtil::GenerateLabel());
+
             // ... e1 ...
             // begin: ... e2 ...
             // cmp result_info_, 0
@@ -2572,34 +2578,26 @@ void sn_iteration_statement::afterChildren(ParserParams &params)
                 code_info_.append(e1->code_info_);
             if (e2)
             {
+                e2->code_info_.addLabel(begin, nullptr);
                 code_info_.append(e2->code_info_);
                 code_info_.add(IRInstructionBuilder::Cmp(e2->result_info_,
                                                          IRAddress::imm_0()));
-                code_info_.add(IRInstructionBuilder::Je(
-                    {OP_ADDR_imm,
-                     sizeof(void *),
-                     {stmt->code_info_.size() +
-                      (e3 ? e3->code_info_.size() : 0) + 1}}));
+                code_info_.add(
+                    IRInstructionBuilder::Je(IRAddress::FromLabel(end)));
                 code_info_.append(stmt->code_info_);
                 if (e3)
                     code_info_.append(e3->code_info_);
                 code_info_.add(IRInstructionBuilder::Jmp(
-                    {OP_ADDR_imm,
-                     sizeof(void *),
-                     {-(e2->code_info_.size() +
-                        (e3 ? e3->code_info_.size() : 0) +
-                        stmt->code_info_.size() + 3)}}));
+                    IRAddress::FromLabel(begin), nullptr, end));
             }
             else
             {
+                stmt->code_info_.addLabel(begin, nullptr);
                 code_info_.append(stmt->code_info_);
                 if (e3)
                     code_info_.append(e3->code_info_);
                 code_info_.add(IRInstructionBuilder::Jmp(
-                    {OP_ADDR_imm,
-                     sizeof(void *),
-                     {-((e3 ? e3->code_info_.size() : 0) +
-                        stmt->code_info_.size() + 1)}}));
+                    IRAddress::FromLabel(begin), nullptr, end));
             }
         }
     }

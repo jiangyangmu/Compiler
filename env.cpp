@@ -567,7 +567,14 @@ std::string IRAddress::toString() const
 }
 std::string IRInstruction::toString() const
 {
-    std::string s = IRUtil::OpcodeToString(op);
+    std::string s;
+    if (prelabel)
+    {
+        s += '\n';
+        s += prelabel->toString();
+        s += ":\n";
+    }
+    s += IRUtil::OpcodeToString(op);
     s += ' ';
     s += arg1.toString();
     s += ',';
@@ -576,6 +583,12 @@ std::string IRInstruction::toString() const
     s += ',';
     s += ' ';
     s += arg3.toString();
+    if (postlabel)
+    {
+        s += '\n';
+        s += postlabel->toString();
+        s += ":";
+    }
     return s;
 }
 std::string IRObject::toString() const
@@ -709,7 +722,8 @@ std::list<IRInstruction> IRStorage::allocCode() const
             {OP_ADDR_imm, sizeof(void *), {_alloc + _tmp_alloc_max}},
             {},
             {},
-            new StringRef("")};
+            nullptr,
+            nullptr};
         code.push_back(alloc);
     }
     return code;
@@ -724,7 +738,8 @@ std::list<IRInstruction> IRStorage::freeCode() const
             {OP_ADDR_imm, sizeof(void *), {_alloc + _tmp_alloc_max}},
             {},
             {},
-            new StringRef("")};
+            nullptr,
+            nullptr};
         code.push_back(free);
     }
     return code;
@@ -1091,7 +1106,7 @@ std::string IRUtil::LinkageToString(EIRLinkage linkage)
 StringRef IRUtil::GenerateLabel()
 {
     static int label_id = 0;
-    static std::vector<std::string> labels;
+    static std::list<std::string> labels;
     labels.push_back("L._" + std::to_string(label_id++));
     return StringRef(labels.back().data());
 }
@@ -1119,6 +1134,26 @@ int IRSimulator::get_value(const IRAddress &addr)
 
     return value;
 }
+int IRSimulator::get_value_or_label(const IRAddress &addr, int i)
+{
+    int value = 0;
+    assert(addr.width <= 8);
+
+    if (addr.mode == OP_ADDR_label)
+    {
+        value = label_pos[addr.label->toString()] - i - 1;
+    }
+    else if (addr.mode == OP_ADDR_imm)
+    {
+        memcpy(&value, &addr.imm, addr.width);
+    }
+    else
+    {
+        IRError("unsupported addressing mode.");
+    }
+
+    return value;
+}
 char *IRSimulator::get_addr(const IRAddress &addr)
 {
     assert(addr.mode == OP_ADDR_mem);
@@ -1132,6 +1167,15 @@ int IRSimulator::run(const IRCode &code)
     char *top = memory + 4096;
 
     std::vector<IRInstruction> insts(code.get().begin(), code.get().end());
+    label_pos.clear();
+    for (int idx = 0; idx < (int)insts.size(); ++idx)
+    {
+        if (insts[idx].prelabel)
+            label_pos[insts[idx].prelabel->toString()] = idx;
+        if (insts[idx].postlabel)
+            label_pos[insts[idx].postlabel->toString()] = idx + 1;
+    }
+
     int ret = 0, tmp, t1, t2;
     for (int idx = 0; idx < (int)insts.size(); ++idx)
     {
@@ -1140,8 +1184,7 @@ int IRSimulator::run(const IRCode &code)
         switch (i.op)
         {
             case IR_OPCODE_alloc:
-            case IR_OPCODE_free:
-                break;
+            case IR_OPCODE_free: break;
             case IR_OPCODE_cmp:
                 flag = get_value(i.arg1) - get_value(i.arg2);
                 break;
@@ -1150,30 +1193,34 @@ int IRSimulator::run(const IRCode &code)
                 memcpy(get_addr(i.arg2), &tmp, i.arg1.width);
                 break;
             case IR_OPCODE_je:
-                if (flag == 0) idx += get_value(i.arg1);
+                if (flag == 0)
+                    idx += get_value_or_label(i.arg1, idx);
                 break;
             case IR_OPCODE_jne:
-                if (flag != 0) idx += get_value(i.arg1);
+                if (flag != 0)
+                    idx += get_value_or_label(i.arg1, idx);
                 break;
             case IR_OPCODE_jl:
             case IR_OPCODE_jb:
-                if (flag < 0) idx += get_value(i.arg1);
+                if (flag < 0)
+                    idx += get_value_or_label(i.arg1, idx);
                 break;
             case IR_OPCODE_jle:
             case IR_OPCODE_jbe:
-                if (flag <= 0) idx += get_value(i.arg1);
+                if (flag <= 0)
+                    idx += get_value_or_label(i.arg1, idx);
                 break;
             case IR_OPCODE_jg:
             case IR_OPCODE_ja:
-                if (flag > 0) idx += get_value(i.arg1);
+                if (flag > 0)
+                    idx += get_value_or_label(i.arg1, idx);
                 break;
             case IR_OPCODE_jge:
             case IR_OPCODE_jae:
-                if (flag >= 0) idx += get_value(i.arg1);
+                if (flag >= 0)
+                    idx += get_value_or_label(i.arg1, idx);
                 break;
-            case IR_OPCODE_jmp:
-                idx += get_value(i.arg1);
-                break;
+            case IR_OPCODE_jmp: idx += get_value_or_label(i.arg1, idx); break;
             case IR_OPCODE_inc:
                 tmp = get_value(i.arg1) + 1;
                 memcpy(get_addr(i.arg1), &tmp, i.arg1.width);
@@ -1287,9 +1334,7 @@ int IRSimulator::run(const IRCode &code)
                 tmp = get_value(i.arg1);
                 memcpy(get_addr(i.arg2), top - tmp, i.arg2.width);
                 break;
-            case IR_OPCODE_ret:
-                ret = get_value(i.arg1);
-                break;
+            case IR_OPCODE_ret: ret = get_value(i.arg1); break;
             case IR_OPCODE_fext:
             case IR_OPCODE_fshrk:
             case IR_OPCODE_f2i:
