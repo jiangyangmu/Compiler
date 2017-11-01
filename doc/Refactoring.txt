@@ -13,25 +13,21 @@
 
 + full lex support [C_Lexer.txt]
     ...
-    [-] ensure lexical correctness
+    [X] ensure lexical correctness
         > all tokens are valid
 
 + full syntax support [C_Syntax.txt]
-    [x] ensure BNF correctness
+    [ ] ensure AST correctness
         > can find a derivation (syntax tree exists)
 
 + full semantics support
-    [-] ensure semantics correctness
+    [ ] ensure semantics correctness
         > align to c89 standard
-    [!] collect information in parsing
-        > environment
-            * declaration: build symbol table
-            * reference: resolve symbol binding
+    [ ] annotate AST
 
 + full code generation support [C_x64.txt]
-    [!] assembly code generation
-        > declaration => data
-        > function body => code
+    [ ] IR code generation
+    [ ] assembly code generation
 
 + more
     [ ] front-end features
