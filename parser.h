@@ -654,6 +654,7 @@ class sn_iteration_statement : public sn_statement
                   // sn_expression *expr2;
                   // sn_expression *expr3;
                   // sn_statement *stmt;
+    bool pre, mid, post; // used by for
 
    public:
     sn_iteration_statement() : sn_statement(SN_ITERATION_STATEMENT) {}

@@ -556,7 +556,7 @@ std::string IRAddress::toString() const
             break;
         case OP_ADDR_imm:
             s += '#';
-            s += std::to_string(imm);
+            s += std::to_string((int64_t)imm);
             break;
         case OP_ADDR_label:
             assert(label->size() < 1000000);

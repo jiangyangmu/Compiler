@@ -797,14 +797,18 @@ sn_statement *sn_iteration_statement::parse(Lexer &lex)
             break;
         case FOR:
             EXPECT(LP);
+            stmt->pre = stmt->mid = stmt->post = false;
             if (lex.peakNext().type != STMT_END)
-                stmt->addChild(sn_comma_expression::parse(lex));
+                stmt->addChild(sn_comma_expression::parse(lex)),
+                    stmt->pre = true;
             EXPECT(STMT_END);
             if (lex.peakNext().type != STMT_END)
-                stmt->addChild(sn_comma_expression::parse(lex));
+                stmt->addChild(sn_comma_expression::parse(lex)),
+                    stmt->mid = true;
             EXPECT(STMT_END);
             if (lex.peakNext().type != RP)
-                stmt->addChild(sn_comma_expression::parse(lex));
+                stmt->addChild(sn_comma_expression::parse(lex)),
+                    stmt->post = true;
             EXPECT(RP);
             stmt->addChild(sn_statement::parse(lex));
             break;
@@ -2499,7 +2503,105 @@ void sn_iteration_statement::afterChildren(ParserParams &params)
 {
     if (params.pass == 2)
     {
-        SyntaxError("not implemented");
+        if (t == WHILE)
+        {
+            sn_expression *expr =
+                dynamic_cast<sn_expression *>(getFirstChild());
+            sn_statement *stmt = dynamic_cast<sn_statement *>(getLastChild());
+
+            // begin: ... expr ...
+            // cmp result_info_, 0
+            // je end
+            // ... stmt ...
+            // jmp begin
+            // end:
+            code_info_.append(expr->code_info_);
+            code_info_.add(IRInstructionBuilder::Cmp(expr->result_info_,
+                                                     IRAddress::imm_0()));
+            code_info_.add(IRInstructionBuilder::Je(
+                {OP_ADDR_imm, sizeof(void *), {stmt->code_info_.size() + 1}}));
+            code_info_.append(stmt->code_info_);
+            code_info_.add(IRInstructionBuilder::Jmp(
+                {OP_ADDR_imm,
+                 sizeof(void *),
+                 {-(expr->code_info_.size() + stmt->code_info_.size() + 3)}}));
+        }
+        else if (t == DO)
+        {
+            sn_statement *stmt = dynamic_cast<sn_statement *>(getFirstChild());
+            sn_expression *expr = dynamic_cast<sn_expression *>(getLastChild());
+
+            // begin: ... stmt ...
+            // ... expr ...
+            // cmp result_info_, 0
+            // jne begin
+            code_info_.append(stmt->code_info_);
+            code_info_.append(expr->code_info_);
+            code_info_.add(IRInstructionBuilder::Cmp(expr->result_info_,
+                                                     IRAddress::imm_0()));
+            code_info_.add(IRInstructionBuilder::Jne(
+                {OP_ADDR_imm,
+                 sizeof(void *),
+                 {-(stmt->code_info_.size() + expr->code_info_.size() + 2)}}));
+        }
+        else
+        {
+            assert(t == FOR);
+            sn_expression *e1, *e2, *e3;
+            sn_statement *stmt;
+            size_t i = 0;
+
+            e1 = e2 = e3 = nullptr;
+            if (pre)
+                e1 = dynamic_cast<sn_expression *>(getChild(i++));
+            if (mid)
+                e2 = dynamic_cast<sn_expression *>(getChild(i++));
+            if (post)
+                e3 = dynamic_cast<sn_expression *>(getChild(i++));
+            stmt = dynamic_cast<sn_statement *>(getChild(i));
+
+            // ... e1 ...
+            // begin: ... e2 ...
+            // cmp result_info_, 0
+            // je end
+            // ... stmt ...
+            // ... e3 ...
+            // jmp begin
+            // end:
+            if (e1)
+                code_info_.append(e1->code_info_);
+            if (e2)
+            {
+                code_info_.append(e2->code_info_);
+                code_info_.add(IRInstructionBuilder::Cmp(e2->result_info_,
+                                                         IRAddress::imm_0()));
+                code_info_.add(IRInstructionBuilder::Je(
+                    {OP_ADDR_imm,
+                     sizeof(void *),
+                     {stmt->code_info_.size() +
+                      (e3 ? e3->code_info_.size() : 0) + 1}}));
+                code_info_.append(stmt->code_info_);
+                if (e3)
+                    code_info_.append(e3->code_info_);
+                code_info_.add(IRInstructionBuilder::Jmp(
+                    {OP_ADDR_imm,
+                     sizeof(void *),
+                     {-(e2->code_info_.size() +
+                        (e3 ? e3->code_info_.size() : 0) +
+                        stmt->code_info_.size() + 3)}}));
+            }
+            else
+            {
+                code_info_.append(stmt->code_info_);
+                if (e3)
+                    code_info_.append(e3->code_info_);
+                code_info_.add(IRInstructionBuilder::Jmp(
+                    {OP_ADDR_imm,
+                     sizeof(void *),
+                     {-((e3 ? e3->code_info_.size() : 0) +
+                        stmt->code_info_.size() + 1)}}));
+            }
+        }
     }
 }
 void sn_jump_statement::afterChildren(ParserParams &params)
