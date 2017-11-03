@@ -181,7 +181,36 @@ TEST_F(IRTester, Statement)
 {
     std::string msg;
     // expression statement
+    EXPECT_EQ_PRINT(1,
+                    executeProgramAndGetExitCode(
+                        "int main() { int a; ; a = 1; return a; }", &msg),
+                    msg);
     // selection statement
+    // if
+    EXPECT_EQ_PRINT(
+        1,
+        executeProgramAndGetExitCode(
+            "int main() { int a; a = 1; if (a < 1) a = 5; return a; }", &msg),
+        msg);
+    EXPECT_EQ_PRINT(
+        5,
+        executeProgramAndGetExitCode(
+            "int main() { int a; a = 1; if (a >= 1) a = 5; return a; }", &msg),
+        msg);
+    // if-else
+    EXPECT_EQ_PRINT(
+        5,
+        executeProgramAndGetExitCode("int main() { int a; a = 0; if (a < 1) a "
+                                     "= 5; else a = 6; return a; }",
+                                     &msg),
+        msg);
+    EXPECT_EQ_PRINT(
+        6,
+        executeProgramAndGetExitCode("int main() { int a; a = 1; if (a < 1) a "
+                                     "= 5; else a = 6; return a; }",
+                                     &msg),
+        msg);
+    // switch
 
     // iteration statement
     // while
@@ -228,10 +257,11 @@ TEST_F(IRTester, Statement)
 
     // jump statement
     // goto
-    EXPECT_EQ_PRINT(1,
-                    executeProgramAndGetExitCode(
-                        "int main() { int a; a = 1; goto L; a = 5; L: return a; }", &msg),
-                    msg);
+    EXPECT_EQ_PRINT(
+        1,
+        executeProgramAndGetExitCode(
+            "int main() { int a; a = 1; goto L; a = 5; L: return a; }", &msg),
+        msg);
     // continue
     EXPECT_EQ_PRINT(3,
                     executeProgramAndGetExitCode(
