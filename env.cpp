@@ -570,9 +570,8 @@ std::string IRInstruction::toString() const
     std::string s;
     if (prelabel)
     {
-        s += '\n';
         s += prelabel->toString();
-        s += ":\n";
+        s += ": ";
     }
     s += IRUtil::OpcodeToString(op);
     s += ' ';
@@ -585,7 +584,7 @@ std::string IRInstruction::toString() const
     s += arg3.toString();
     if (postlabel)
     {
-        s += '\n';
+        s += ' ';
         s += postlabel->toString();
         s += ":";
     }

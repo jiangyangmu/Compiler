@@ -70,6 +70,7 @@ TEST_F(IRTester, BasicExpression)
               executeProgramAndGetExitCode("int main() { return 2,3,11,49; }"));
 
     // assign
+    // TODO: more assignment form
     EXPECT_EQ(49, executeProgramAndGetExitCode(
                       "int main() { int a; a = 49; return a; }"));
 
@@ -216,9 +217,21 @@ TEST_F(IRTester, Statement)
             "int main() { int a; a = 1; for (; a < 5; ) a = a + 1; return a; }",
             &msg),
         msg);
+    // nested loop
+    EXPECT_EQ_PRINT(
+        1000,
+        executeProgramAndGetExitCode(
+            "int main() { int a, b, c, d; d = 0; for (a = 1; a <= 10; ++a) for "
+            "(b = 1; b <= 10; ++b) for (c = 1; c <= 10; ++c) ++d; return d; }",
+            &msg),
+        msg);
 
     // jump statement
     // goto
+    EXPECT_EQ_PRINT(1,
+                    executeProgramAndGetExitCode(
+                        "int main() { int a; a = 1; goto L; a = 5; L: return a; }", &msg),
+                    msg);
     // continue
     EXPECT_EQ_PRINT(3,
                     executeProgramAndGetExitCode(

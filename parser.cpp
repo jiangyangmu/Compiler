@@ -2379,9 +2379,31 @@ void sn_typedef_name::afterChildren(ParserParams &params)
 // void sn_statement_list::afterChildren(ParserParams &params) {}
 void sn_label_statement::afterChildren(ParserParams &params)
 {
-    if (params.pass == 1)
+    Environment *&env = params.env;
+
+    if (params.pass == 0)
     {
-        SyntaxError("not implemented.");
+        if (getFirstChild()->nodeType() == SN_IDENTIFIER)
+        {
+            SymbolBuilder builder;
+            builder.setName(
+                dynamic_cast<sn_identifier *>(getFirstChild())->name_info_);
+            builder.setNamespace(SYMBOL_NAMESPACE_label);
+            builder.setScope(SYMBOL_SCOPE_func);
+            builder.setType(new LabelType());
+            env->addSymbol(builder.build());
+        }
+    }
+    else if (params.pass == 2)
+    {
+        if (getFirstChild()->nodeType() == SN_IDENTIFIER)
+        {
+            sn_statement *stmt = dynamic_cast<sn_statement *>(getLastChild());
+            stmt->code_info_.addLabel(
+                &dynamic_cast<sn_identifier *>(getFirstChild())->name_info_,
+                nullptr);
+            code_info_.append(stmt->code_info_);
+        }
     }
 }
 void sn_compound_statement::visit(ParserParams &params)
@@ -2659,10 +2681,24 @@ void sn_jump_statement::afterChildren(ParserParams &params)
                              cast_expr);  // XXX: syntax tree is modified here.
             }
         }
+        else if (t == GOTO)
+        {
+            StringRef label =
+                dynamic_cast<sn_identifier *>(getFirstChild())->name_info_;
+            if (env->findSymbol(SYMBOL_NAMESPACE_label, label) == nullptr)
+                SyntaxError("label '" + label.toString() + "' not defined.");
+        }
     }
     else if (params.pass == 2)  // code generation
     {
-        if (t == BREAK)
+        if (t == GOTO)
+        {
+            StringRef label =
+                dynamic_cast<sn_identifier *>(getFirstChild())->name_info_;
+            code_info_.add(IRInstructionBuilder::Jmp(
+                IRAddress::FromLabel(new StringRef(label))));
+        }
+        else if (t == BREAK)
         {
             if (params.begin == nullptr || params.end == nullptr)
                 SyntaxError("can't break here.");
