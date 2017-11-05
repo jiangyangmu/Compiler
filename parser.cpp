@@ -2394,16 +2394,73 @@ void sn_label_statement::afterChildren(ParserParams &params)
             env->addSymbol(builder.build());
         }
     }
-    else if (params.pass == 2)
+    else if (params.pass == 1)
     {
         if (getFirstChild()->nodeType() == SN_IDENTIFIER)
         {
-            sn_statement *stmt = dynamic_cast<sn_statement *>(getLastChild());
-            stmt->code_info_.addLabel(
-                &dynamic_cast<sn_identifier *>(getFirstChild())->name_info_,
-                nullptr);
-            code_info_.append(stmt->code_info_);
+            label = dynamic_cast<sn_identifier *>(getFirstChild())->name_info_;
         }
+        else if (getFirstChild()->nodeType() == SN_CONST_EXPRESSION)
+        {
+            // check in switch context
+            sn_selection_statement *switch_stmt = nullptr;
+            for (SyntaxNode *node = parent(); node; node = node->parent())
+            {
+                if (node->nodeType() == SN_SELECTION_STATEMENT)
+                {
+                    sn_selection_statement *stmt = dynamic_cast<sn_selection_statement *>(node);
+                    if (stmt->t == SWITCH)
+                    {
+                        switch_stmt = stmt;
+                        break;
+                    }
+                }
+            }
+            if (switch_stmt == nullptr)
+                SyntaxError("'case' statement should be enclosed by 'switch'.");
+
+            // add case
+            // TODO: case value to switch-expr type
+            int value = dynamic_cast<sn_const_expression *>(getFirstChild())->value();
+            for (auto const &vl : switch_stmt->value_to_label)
+            {
+                if (vl.first == value)
+                    SyntaxError("duplicate case value: " + std::to_string(value));
+            }
+            label = IRUtil::GenerateLabel();
+            switch_stmt->value_to_label.emplace_back(value, label);
+        }
+        else
+        {
+            // check in switch context
+            sn_selection_statement *switch_stmt = nullptr;
+            for (SyntaxNode *node = parent(); node; node = node->parent())
+            {
+                if (node->nodeType() == SN_SELECTION_STATEMENT)
+                {
+                    sn_selection_statement *stmt = dynamic_cast<sn_selection_statement *>(node);
+                    if (stmt->t == SWITCH)
+                    {
+                        switch_stmt = stmt;
+                        break;
+                    }
+                }
+            }
+            if (switch_stmt == nullptr)
+                SyntaxError("'default' statement should be enclosed by 'switch'.");
+
+            // add default
+            if (!switch_stmt->default_label.empty())
+                SyntaxError("'default' statement already exists.");
+            else
+                switch_stmt->default_label = label = IRUtil::GenerateLabel();
+        }
+    }
+    else if (params.pass == 2)
+    {
+        sn_statement *stmt = dynamic_cast<sn_statement *>(getLastChild());
+        stmt->code_info_.addLabel(new StringRef(label), nullptr);
+        code_info_.append(stmt->code_info_);
     }
 }
 void sn_compound_statement::visit(ParserParams &params)
@@ -2477,9 +2534,40 @@ void sn_expression_statement::afterChildren(ParserParams &params)
         }
     }
 }
-void sn_selection_statement::afterChildren(ParserParams &params)
+void sn_selection_statement::beforeChildren(ParserParams &params)
 {
     if (params.pass == 2)
+    {
+        if (t == SWITCH)
+        {
+            begin = nullptr; // switch don't support 'continue'
+            end = new StringRef(IRUtil::GenerateLabel());
+            // store parent's begin & end, let children see self's begin & end
+            std::swap(begin, params.begin);
+            std::swap(end, params.end);
+        }
+    }
+}
+void sn_selection_statement::afterChildren(ParserParams &params)
+{
+    if (params.pass == 1)  // type derivation
+    {
+        if (t == SWITCH)
+        {
+            // do IntegerPromotion on switch-expr
+            sn_expression *expr = dynamic_cast<sn_expression *>(getFirstChild());
+            Type *type = TypeConversion::IntegerPromotion(expr->type_);
+            if (!TypeUtil::Equal(type, expr->type_))
+            {
+                sn_cast_expression *cast_expr = new sn_cast_expression();
+                cast_expr->type_ = type;
+                cast_expr->addChild(expr);
+                expr = cast_expr;
+                replaceChild(0, expr);  // XXX: syntax tree is modified here.
+            }
+        }
+    }
+    else if (params.pass == 2)  // code generation
     {
         if (t == IF)
         {
@@ -2529,7 +2617,48 @@ void sn_selection_statement::afterChildren(ParserParams &params)
         }
         else  // switch
         {
-            SyntaxError("not implemented");
+            assert(t == SWITCH);
+
+            // get back self's begin & end
+            std::swap(begin, params.begin);
+            std::swap(end, params.end);
+
+            sn_expression *expr =
+                dynamic_cast<sn_expression *>(getFirstChild());
+            sn_statement *stmt =
+                dynamic_cast<sn_statement *>(getLastChild());
+
+            // begin: ... expr ...
+            // cmp result_info_, value
+            // je label
+            // jmp default_label / end
+            // ... stmt ...
+            // end:
+            code_info_.append(expr->code_info_);
+            for (auto const &vl : value_to_label)
+            {
+                code_info_.add(IRInstructionBuilder::Cmp(
+                            expr->result_info_,
+                            {OP_ADDR_imm, sizeof(int), {(uint64_t)vl.first}}
+                            ));
+                code_info_.add(IRInstructionBuilder::Je(
+                            IRAddress::FromLabel(new StringRef(vl.second))
+                            ));
+            }
+            if (!default_label.empty())
+            {
+                code_info_.add(IRInstructionBuilder::Jmp(
+                            IRAddress::FromLabel(new StringRef(default_label))
+                            ));
+            }
+            else
+            {
+                code_info_.add(IRInstructionBuilder::Jmp(
+                            IRAddress::FromLabel(end)
+                            ));
+            }
+            stmt->code_info_.addLabel(nullptr, end);
+            code_info_.append(stmt->code_info_);
         }
     }
 }
@@ -2700,14 +2829,14 @@ void sn_jump_statement::afterChildren(ParserParams &params)
         }
         else if (t == BREAK)
         {
-            if (params.begin == nullptr || params.end == nullptr)
+            if (params.end == nullptr)
                 SyntaxError("can't break here.");
             code_info_.add(
                 IRInstructionBuilder::Jmp(IRAddress::FromLabel(params.end)));
         }
         else if (t == CONTINUE)
         {
-            if (params.begin == nullptr || params.end == nullptr)
+            if (params.begin == nullptr)
                 SyntaxError("can't continue here.");
             code_info_.add(
                 IRInstructionBuilder::Jmp(IRAddress::FromLabel(params.begin)));

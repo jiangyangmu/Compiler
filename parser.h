@@ -599,6 +599,8 @@ class sn_label_statement : public sn_statement
     //     sn_const_expression *value;
     // };
     // sn_statement *stat;
+   public:
+    StringRef label; // used by case, default
 
    public:
     sn_label_statement() : sn_statement(SN_LABEL_STATEMENT) {}
@@ -636,16 +638,24 @@ class sn_expression_statement : public sn_statement
 };
 class sn_selection_statement : public sn_statement
 {
+   public:
     TokenType t;  // if or switch
                   // sn_expression *expr;
                   // sn_statement *stmt;
                   // sn_statement *stmt2;
+    StringRef *begin, *end;
+
+   public:
+    // TODO: fully support switch expr type (e.g. long)
+    std::vector< std::pair<int, StringRef> > value_to_label;
+    StringRef default_label;
 
    public:
     sn_selection_statement() : sn_statement(SN_SELECTION_STATEMENT) {}
     static sn_statement *parse(Lexer &lex);
 
     // Visitor
+    virtual void beforeChildren(ParserParams &params);
     virtual void afterChildren(ParserParams &params);
 };
 class sn_iteration_statement : public sn_statement

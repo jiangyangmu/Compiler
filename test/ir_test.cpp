@@ -45,11 +45,16 @@ class IRTester : public Tester
                 std::cout << prog << std::endl;
                 std::cout << code.toString() << std::endl;
             }
-            ret = simu.run(code);
             if (msg)
             {
                 *msg = prog;
                 *msg += "\n" + code.toString();
+                *msg += "------- Run --------\n";
+            }
+            ret = simu.run(code, msg);
+            if (msg)
+            {
+                *msg += "---- End of Run ----\n";
             }
         }
 
@@ -211,6 +216,27 @@ TEST_F(IRTester, Statement)
                                      &msg),
         msg);
     // switch
+    // case-break
+    EXPECT_EQ_PRINT(1,
+                    executeProgramAndGetExitCode(
+                        "int main() { int a; a = 0; switch (a) { case 0: a = a + "
+                        "1; break; default: a = a + 2; }  return a; }",
+                        &msg),
+                    msg);
+    // case-no-break
+    EXPECT_EQ_PRINT(3,
+                    executeProgramAndGetExitCode(
+                        "int main() { int a; a = 0; switch (a) { case 0: a = a + "
+                        "1; default: a = a + 2; }  return a; }",
+                        &msg),
+                    msg);
+    // default
+    EXPECT_EQ_PRINT(12,
+                    executeProgramAndGetExitCode(
+                        "int main() { int a; a = 10; switch (a) { case 0: a = a + "
+                        "1; break; default: a = a + 2; break; }  return a; }",
+                        &msg),
+                    msg);
 
     // iteration statement
     // while

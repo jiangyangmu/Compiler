@@ -603,8 +603,14 @@ class IRCode
     void addLabel(StringRef *begin, StringRef *end)
     {
         assert(!_code.empty());
-        _code.front().prelabel = begin;
-        _code.back().postlabel = end;
+        StringRef *&pre = _code.front().prelabel;
+        StringRef *&post = _code.back().postlabel;
+        if (pre != nullptr && begin != nullptr)
+            SyntaxError("reset pre-label '" + pre->toString() + "'.");
+        if (post != nullptr && end != nullptr)
+            SyntaxError("reset post-label '" + post->toString() + "'.");
+        pre = begin ? begin : pre;
+        post = end ? end : post;
     }
     void append(IRCode &code)
     {
@@ -665,7 +671,7 @@ class IRSimulator
     char *get_addr(const IRAddress &addr);
 
    public:
-    int run(const IRCode &code);
+    int run(const IRCode &code, std::string *seq = nullptr);
 };
 
 class IRUtil

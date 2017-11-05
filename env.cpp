@@ -1106,7 +1106,7 @@ StringRef IRUtil::GenerateLabel()
 {
     static int label_id = 0;
     static std::list<std::string> labels;
-    labels.push_back("L._" + std::to_string(label_id++));
+    labels.push_back(".L" + std::to_string(label_id++));
     return StringRef(labels.back().data());
 }
 
@@ -1140,7 +1140,11 @@ int IRSimulator::get_value_or_label(const IRAddress &addr, int i)
 
     if (addr.mode == OP_ADDR_label)
     {
-        value = label_pos[addr.label->toString()] - i - 1;
+        std::string label = addr.label->toString();
+        auto it = label_pos.find(label);
+        if (it == label_pos.end())
+            IRError("can't find label '" + label + "'.");
+        value = it->second - i - 1;
     }
     else if (addr.mode == OP_ADDR_imm)
     {
@@ -1159,7 +1163,7 @@ char *IRSimulator::get_addr(const IRAddress &addr)
     assert(addr.mem <= 4096);
     return memory + 4096 - addr.mem;
 }
-int IRSimulator::run(const IRCode &code)
+int IRSimulator::run(const IRCode &code, std::string *seq)
 {
     std::fill_n(memory, 4096, '\0');
     int flag = 0;
@@ -1180,6 +1184,8 @@ int IRSimulator::run(const IRCode &code)
     {
         assert(idx >= 0);
         IRInstruction &i = insts[idx];
+        if (seq)
+            *seq += i.toString() + "\n";
         switch (i.op)
         {
             case IR_OPCODE_alloc:
