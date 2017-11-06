@@ -682,6 +682,7 @@ IRObject IRObjectBuilder::build() const
 
     return o;
 }
+
 void IRStorage::add(IRObject o)
 {
     _objects.push_back(o);
@@ -742,6 +743,41 @@ std::list<IRInstruction> IRStorage::freeCode() const
         code.push_back(free);
     }
     return code;
+}
+
+void IRCode::add(IRInstruction code)
+{
+    _code.push_back(code);
+}
+void IRCode::addLabel(StringRef *begin, StringRef *end)
+{
+    assert(!_code.empty());
+    StringRef *&pre = _code.front().prelabel;
+    StringRef *&post = _code.back().postlabel;
+    if (pre != nullptr && begin != nullptr)
+        SyntaxError("reset pre-label '" + pre->toString() + "'.");
+    if (post != nullptr && end != nullptr)
+        SyntaxError("reset post-label '" + post->toString() + "'.");
+    pre = begin ? begin : pre;
+    post = end ? end : post;
+}
+void IRCode::append(IRCode &code)
+{
+    _code.insert(_code.end(), code._code.begin(), code._code.end());
+    // _code.splice(_code.end(), code._code);
+}
+void IRCode::append(std::list<IRInstruction> &&code)
+{
+    _code.insert(_code.end(), code.begin(), code.end());
+    // _code.splice(_code.end(), code);
+}
+size_t IRCode::size() const
+{
+    return _code.size();
+}
+const std::list<IRInstruction> &IRCode::get() const
+{
+    return _code;
 }
 
 void IR_to_x64::onObject(const IRObject &o)

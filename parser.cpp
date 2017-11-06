@@ -2408,7 +2408,8 @@ void sn_label_statement::afterChildren(ParserParams &params)
             {
                 if (node->nodeType() == SN_SELECTION_STATEMENT)
                 {
-                    sn_selection_statement *stmt = dynamic_cast<sn_selection_statement *>(node);
+                    sn_selection_statement *stmt =
+                        dynamic_cast<sn_selection_statement *>(node);
                     if (stmt->t == SWITCH)
                     {
                         switch_stmt = stmt;
@@ -2421,11 +2422,13 @@ void sn_label_statement::afterChildren(ParserParams &params)
 
             // add case
             // TODO: case value to switch-expr type
-            int value = dynamic_cast<sn_const_expression *>(getFirstChild())->value();
+            int value =
+                dynamic_cast<sn_const_expression *>(getFirstChild())->value();
             for (auto const &vl : switch_stmt->value_to_label)
             {
                 if (vl.first == value)
-                    SyntaxError("duplicate case value: " + std::to_string(value));
+                    SyntaxError("duplicate case value: " +
+                                std::to_string(value));
             }
             label = IRUtil::GenerateLabel();
             switch_stmt->value_to_label.emplace_back(value, label);
@@ -2438,7 +2441,8 @@ void sn_label_statement::afterChildren(ParserParams &params)
             {
                 if (node->nodeType() == SN_SELECTION_STATEMENT)
                 {
-                    sn_selection_statement *stmt = dynamic_cast<sn_selection_statement *>(node);
+                    sn_selection_statement *stmt =
+                        dynamic_cast<sn_selection_statement *>(node);
                     if (stmt->t == SWITCH)
                     {
                         switch_stmt = stmt;
@@ -2447,7 +2451,8 @@ void sn_label_statement::afterChildren(ParserParams &params)
                 }
             }
             if (switch_stmt == nullptr)
-                SyntaxError("'default' statement should be enclosed by 'switch'.");
+                SyntaxError(
+                    "'default' statement should be enclosed by 'switch'.");
 
             // add default
             if (!switch_stmt->default_label.empty())
@@ -2540,7 +2545,7 @@ void sn_selection_statement::beforeChildren(ParserParams &params)
     {
         if (t == SWITCH)
         {
-            begin = nullptr; // switch don't support 'continue'
+            begin = nullptr;  // switch don't support 'continue'
             end = new StringRef(IRUtil::GenerateLabel());
             // store parent's begin & end, let children see self's begin & end
             std::swap(begin, params.begin);
@@ -2555,7 +2560,8 @@ void sn_selection_statement::afterChildren(ParserParams &params)
         if (t == SWITCH)
         {
             // do IntegerPromotion on switch-expr
-            sn_expression *expr = dynamic_cast<sn_expression *>(getFirstChild());
+            sn_expression *expr =
+                dynamic_cast<sn_expression *>(getFirstChild());
             Type *type = TypeConversion::IntegerPromotion(expr->type_);
             if (!TypeUtil::Equal(type, expr->type_))
             {
@@ -2625,8 +2631,7 @@ void sn_selection_statement::afterChildren(ParserParams &params)
 
             sn_expression *expr =
                 dynamic_cast<sn_expression *>(getFirstChild());
-            sn_statement *stmt =
-                dynamic_cast<sn_statement *>(getLastChild());
+            sn_statement *stmt = dynamic_cast<sn_statement *>(getLastChild());
 
             // begin: ... expr ...
             // cmp result_info_, value
@@ -2638,24 +2643,20 @@ void sn_selection_statement::afterChildren(ParserParams &params)
             for (auto const &vl : value_to_label)
             {
                 code_info_.add(IRInstructionBuilder::Cmp(
-                            expr->result_info_,
-                            {OP_ADDR_imm, sizeof(int), {(uint64_t)vl.first}}
-                            ));
+                    expr->result_info_,
+                    {OP_ADDR_imm, sizeof(int), {(uint64_t)vl.first}}));
                 code_info_.add(IRInstructionBuilder::Je(
-                            IRAddress::FromLabel(new StringRef(vl.second))
-                            ));
+                    IRAddress::FromLabel(new StringRef(vl.second))));
             }
             if (!default_label.empty())
             {
                 code_info_.add(IRInstructionBuilder::Jmp(
-                            IRAddress::FromLabel(new StringRef(default_label))
-                            ));
+                    IRAddress::FromLabel(new StringRef(default_label))));
             }
             else
             {
-                code_info_.add(IRInstructionBuilder::Jmp(
-                            IRAddress::FromLabel(end)
-                            ));
+                code_info_.add(
+                    IRInstructionBuilder::Jmp(IRAddress::FromLabel(end)));
             }
             stmt->code_info_.addLabel(nullptr, end);
             code_info_.append(stmt->code_info_);
