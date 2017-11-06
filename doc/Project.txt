@@ -1,4 +1,6 @@
-知识补充
+-------------------------------------------------------------------------------
+Knowledge Required
+
     > code generation
         > floating 运算系统
         > x64 Instruction Selection
@@ -7,6 +9,13 @@
             有哪些寄存器？各自有什么使用限制？
 
 -------------------------------------------------------------------------------
+Util
+
++ garbage-collection
++ regular-expression engine
+
+-------------------------------------------------------------------------------
+Compiler Core
 
 + full PP support.
     ...
@@ -17,12 +26,13 @@
         > all tokens are valid
 
 + full syntax support [C_Syntax.txt]
-    [ ] ensure AST correctness
+    [X] ensure AST correctness
         > can find a derivation (syntax tree exists)
 
 + full semantics support
     [ ] ensure semantics correctness
         > align to c89 standard
+        > type checking
     [ ] annotate AST
 
 + full code generation support [C_x64.txt]
@@ -31,7 +41,8 @@
 
 + more
     [ ] front-end features
-        > user: error report
+        > gcc/llvm warning/error list
+        > gcc/llvm extensions
     [ ] std library
 
 -------------------------------------------------------------------------------
