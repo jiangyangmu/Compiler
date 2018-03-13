@@ -1,0 +1,169 @@
+Node:
+
+    terminal:
+        'a', "hello", ival
+    non-terminal:
+        { Node+ }
+    code:
+        { ... code ... }
+
+Production:
+
+    and, or:
+        N = N1
+        N = N1 & N2
+        N = N1 | N2 & N3
+    recursion:
+        N = N1 & N
+        N = N1 & N & N & N
+    empty:
+        N = N1 | ε
+
+    *ε is a production concept
+
+Algorithm 1: construct N and P from grammer
+
+    ## structure - normalized hierarchy
+
+        P_or = { P_and*, ε }
+        P_and = { P_node* }
+        P_node = { N }
+
+    ## rules
+
+        eval left-to-right: &, |
+        eval right-to-left: =
+        priority: & > | > =
+
+        ANY = { N, ε, node(...), and(...), or(...) }
+        ANY & ANY                   -> ERROR
+        ANY | ANY                   -> ERROR
+        ANY = ANY                   -> ERROR
+
+        N & N                       -> and( node(N), node(N) )
+        and(...) & N                -> and( ..., node(N)     )
+
+        N | N                       -> or( and(node(N)), and(node(N)) )
+        N | ε                       -> or( and(node(N)), ε            )
+        N | and(...)                -> or( and(node(N)), and(...)     )
+        ε | N                       -> or( ε, and(node(N))            )
+        ε | and(...)                -> or( ε, and(...)                )
+        and(...) | N                -> or( and(...), and(node(N))     )
+        and(...) | ε                -> or( and(...), ε                )
+        and(...) | and(...)         -> or( and(...), and(...)         )
+        or(...) | N                 -> or( ..., and(node(N))          )
+        or(...) | ε                 -> or( ..., ε                     )
+        or(...) | and(...)          -> or( ..., and(...)              )
+
+        N = N                       -> N = or(and(node(N)))
+        N = ε                       -> N = or(ε)
+        N = and(...)                -> N = or(and(...))
+        N = or(...)                 -> OK
+
+    ## examples
+
+        N = N & N
+            N =    and(node(N), node(N))
+            N = or(and(node(N), node(N)))
+        N = N & N & N
+            N =    and(node(N), node(N)
+            N =    and(node(N), node(N), node(N))
+            N = or(and(node(N), node(N), node(N)))
+        N = N | N & N | N
+            N =                  and(node(N), node(N))
+            N = or(and(node(N)), and(node(N), node(N))              )
+            N = or(and(node(N)), and(node(N), node(N)), and(node(N)))
+        N = 'a' & N | ε
+            N =    and(node('a'), node(N))
+            N = or(and(node('a'), node(N)), ε)
+
+Algorithm 1.1: grammer sanity check
+
+    check_production_hierarchy(Grammer & G)
+    {
+        // not needed, enforced by rules
+    }
+
+    check_left_recursion(Grammer & G)
+    {
+        for each N in G:
+            for all first N' in N.P:
+                check N' != N
+    }
+
+Algorithm 2: compute FIRST(), FOLLOW():
+
+    ## rules
+        N = TOKEN;
+
+        first rule:
+            FIRST(N) = TOKEN
+
+        N = N1 & N2 | N3 & N4 | N5 | epsilon;
+
+        first rule:
+            // N1,N3,N5 must not be N
+            FIRST(N) = FIRST(N1,N3,N5) + FOLLOW(N)
+
+        follow rule 1:
+            FOLLOW(N1) += FIRST(N2)
+            FOLLOW(N3) += FIRST(N4)
+        follow rule 2:
+            // N2,N4,N5 is not N
+            FOLLOW(N2,N4,N5) += FOLLOW(N)
+
+    // fill G.{N}.{first,follow}
+    compute_first_follow(Grammer & G)
+    {
+        // collect eval dependancies
+        D <- {}
+        for each N in G:
+            P_or = N.P
+            // first rule
+            for each P_node in P_or.and_heads:
+                D += (N.first <- P_node.N.first)
+            if P_or.epsilon:
+                D += (N.first <- N.follow)
+            // follow rule
+            for each P_i,P_j in P_or.and_adj:
+                D += (P_i.N.follow <- P_j.N.first)
+            for each P_node in P_or.and_tails:
+                if P_node.N != N:
+                    D += (P_node.N.follow <- N.follow)
+
+        // compute eval sequence
+        // {N1.follow, N3.follow, N1.first, ...}
+        Seq <- TopoSort(D)
+
+        // do eval
+        for each F in Seq:
+            for each F' in Children(D, F):
+                // N3.follow += N1.follow
+                F' += F
+    }
+
+Algorithm 3: parse
+
+    parse(N, TokenIterator & Tk) -> T
+    {
+        // N to syntax tree node T
+        if N is TERM:
+            T <- transform(N, Tk)
+        else:
+            T <- transform(N)
+
+        if N is TERM:
+            return T
+
+        // expand strutural N.P (including branch selection)
+        VN <- N.P.flatten(Tk)
+
+        // now, it simplifies to "N = N1 & N2 & ..."
+        for each N' in VN:
+            N'' = N'.dup()
+            T.add(parse(N'', Tk))
+
+        return T
+    }
+
+
