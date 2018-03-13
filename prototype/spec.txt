@@ -118,6 +118,9 @@ Algorithm 2: compute FIRST(), FOLLOW():
         // collect eval dependancies
         D <- {}
         for each N in G:
+            if N is TERMINAL:
+                N.first += N.token
+                continue
             P_or = N.P
             // first rule
             for each P_node in P_or.and_heads:
