@@ -108,7 +108,35 @@ type conversion
 
 3. type actions & category (integral, arithmetic, scalar, 传递 2 的属性)
 
-    Expression
+    > Scalar: cast, logical-op, inc/dec
+        pointer: sub, array-subscripting [], func-call (), member-access ->, indirection *, rel-op, eq-op, simple-assign
+        pointer & Integral: add/sub
+        > Arithmetic: sign-op, add/sub, mul, div, rel-op, eq-op, simple-assign
+            > Integral: bitwise-op, mod, repr-pure-binary-number-system
+                char
+                unsigned char
+                signed char
+                (signed) short (int)
+                unsigned short (int)
+                (signed) (int)
+                unsigned (int)
+                (signed) long (int)
+                unsigned long (int)
+                enum
+            > Floating: repr-unspecified
+                float
+                double
+                long double
+
+    array: can only appear at context { &T, sizeof T, T = "..." }
+    function: can only appear at context { &T, sizeof T }
+
+    struct/union: member-access ., simple-assign
+
+    > Object: get-address &
+
+    label: can only appear at context { goto T }
+    typedef
 
     // implementation
         struct TypeProp {

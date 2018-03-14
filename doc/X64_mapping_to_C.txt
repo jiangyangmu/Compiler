@@ -1,0 +1,132 @@
+Outline:
+    1. C Type => ABI Type => x64 Type
+    2. C Expr => x64 assembly
+    3. C Stmt => x64 assembly
+    4. C Function => x64 assembly
+    5. Parameter Passing => x64 assembly
+    6. Function Calling => x64 assembly
+    7. Value Returning => x64 assembly
+
+--------------------------------------------------------------------------------
+1. C Type => ABI Type => x64 Type
+
+Integral            -- Integral -- Numeric (integer)
+Floating            -- Floating -- Numeric (floating)
+Pointer             -- Pointer  -- Pointer (near, far, etc.)
+Struct/Union/Array  -- (code)   -- (code)
+bit-field           -- (code)   -- (code)
+Function            -- (code)   -- Routine
+# lexical literal
+
+--------------------------------------------------------------------------------
+2. C Expr => x64 assembly
+
+binary-assign-op (lhs.type == rhs.type)
+    Integral op Integral -> mov, ld, st, ...
+    Pointer op Pointer -> mov, ld, st, ...
+    Floating op Floating -> mov, fld, fst, ...
+    struct op struct -> memcpy
+    union op union -> memcpy
+
+binary-logical-op (lhs.type == rhs.type == _Bool)
+    Scalar op Scalar -> and, or
+
+binary-bit-op (rhs.size == lhs.size)
+    Integral op Integral -> and, or, xor
+
+binary-eq-op (lhs.type == rhs.type == Arithmetic|Pointer)
+    Integral op Integral -> cmp
+    Pointer op Pointer -> cmp
+    Floating op Floating -> cmp, fcmp (*how about special values?)
+
+binary-rel-op (lhs.type == rhs.type == Arithmetic|Pointer)
+    Integral op Integral -> cmp
+    Pointer op Pointer -> cmp
+    Floating op Floating -> fcmp
+
+binary-shift-op
+    Integral op Integral -> shl, shr,
+                            sal, sar, // signed
+                            shld, shrd // more than 32-bit
+
+binary-additive-op
+    Integral op Integral -> add, sub
+    Pointer op Integral -> add, sub
+    Pointer sub Pointer -> sub
+    Floating op Floating -> fadd, fsub
+
+binary-multiplicative-op
+    Integral op Integral -> mul, div(both div and mod)
+    Floating mul/div Floating -> fmul, fdiv
+
+unary-cast-op (see type conversion)
+    (Scalar-Type) Scalar
+        (Integral) Integral -> movzx, movsx, mov
+        (Pointer) Integral -> movzx, movsx, mov
+        (Integral) Pointer -> movzx, movsx, mov
+        (Integral) Floating -> fst
+        (Floating) Integral -> fld
+    (void) Any
+
+unary-prefix-op
+    ++/-- Integral/Pointer -> inc, dec
+          Floating -> fld1+fadd*, fld1+fsub*
+    & Function -> lea
+      Lvalue(not bit-field, not register) -> lea
+    * Pointer -> mov
+    +/- Integral -> neg
+        Floating -> fchs
+    ~ Integral -> not
+    ! Integral/Pointer -> test+cmov
+      Floating -> ftst+fcmov
+
+postfix-op
+    Pointer [Integral] ->
+        addr: lea rax, [Pointer.value + Integral.value * Pointer.target_size]
+        value: lea rax, [Pointer.value + Integral.value * Pointer.target_size]
+               mov ..., (rax)
+    Function/Pointer (...) -> see 4. 5. 6. 7.
+    struct . member ->
+        addr: lea rax, [struct.address + struct.member.offset]
+        value: lea rax, [struct.address + struct.member.offset]
+               mov ..., (rax)
+    Pointer -> member ->
+        addr: lea rax, [Pointer.value + struct.member.offset]
+        value: lea rax, [Pointer.value + struct.member.offset]
+               mov ..., (rax)
+    Integral/Pointer ++/-- -> inc, dec
+          Floating -> fld1+fadd*, fld1+fsub*
+
+primary
+    ...
+
+
+--------------------------------------------------------------------------------
+3. C Stmt => x64 assembly
+
+// TODO: ...
+
+--------------------------------------------------------------------------------
+4. C Function => x64 assembly
+ref: Adv. Compiler Design & Impl chp.5
+
+name:
+    <prolog>
+    <body>
+    <postlog>
+
+--------------------------------------------------------------------------------
+5. Parameter Passing => x64 assembly
+
+see: C_Function.txt
+
+--------------------------------------------------------------------------------
+6. Function Calling => x64 assembly
+
+see: C_Function.txt
+
+--------------------------------------------------------------------------------
+7. Value Returning => x64 assembly
+
+see: C_Function.txt
+

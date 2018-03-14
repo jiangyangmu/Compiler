@@ -1,0 +1,416 @@
+
+C Grammar
+
+[attributes]
+
+symbol_table
+{
+    list<symbol, storage>
+}
+
+symbol: symbol builder { new_sym(), sym_add(...), sym_save(), sym_load(), sym_get(), rel_sym() }
+{
+    name,
+    type,
+    linkage,
+}
+
+typ: typ builder { new_typ(...), typ_add(...), typ_get(), del_typ() }
+{
+    properties,
+    size,
+    align,
+    <specific-data>
+}
+
+# type & symbol declaration checklist
+    > deal with S, T, E
+    > decide usage of each BNF node
+        1. bottom-up: provide basic language element (synthesize)
+        2. top-down: guide generation of higher level object (state-machine)
+    > handle tag(S,T) and impl(T) in env, handle impl watch.
+    > handle alloc,delete,ownship of T
+    > handle inner type, outer type in declarator
+    > handle abstract declarator use E's type-only mode.
+
+# type checking checklist
+    > deal with t
+    > handle implicit cast node insertion
+
+    > handle type decay (implicit conversion)
+    > handle qualifiers (implicit conversion)
+    > handle const-ness
+
+    > handle compound assignment
+    > handle alloc,delete,ownership of t.
+    > remove left recursion
+
+================ Translation Unit ===============
+
+translation-unit        := external-declaration
+                        || translation-unit external-declaration
+
+external-declaration    := function-definition
+                        || declaration
+
+function-definition     :=                              { save(); T = new_typ(); }
+                           (declaration-specifiers)?
+                            declarator                  { del_typ(T); }
+                            compound-statment           { load(); }
+
+declaration             :=                              { save(); T = new_typ(); }
+                           declaration-specifiers
+                            (
+                             declarator-initializer
+                             (',' declarator-initializer)*
+                            )?                          { del_typ(T); }
+                            ';'                         { load(); }
+
+declarator-initializer  := declarator ('=' initializer)?
+
+================== Declarator ==================
+
+declarator              :=                              { save(); T = T.dup(); S = new_sym(); }
+                           declarator-recursive         { S.own(T); S0 = S; load(); E.own(S0); }
+
+declarator-recursive    :=                              { save(); T = new_typ(); }
+                           (pointer)?
+                            direct-declarator           { T0 = T; load(); T0.add_own(T); T = T0; }
+
+# symbol(name)
+direct-declarator       := identifier                   { S.add(identifier); }
+                            (direct-declarator-tail)?
+                        || '(' declarator-recursive ')'
+                            (direct-declarator-tail)?
+
+# type(array)
+direct-declarator-tail  := '[' (constant-expr)? ']'     { T.add(ARRAY, const); }
+                            (direct-declarator-tail)?
+                        || '(' (parameter-type-list)? ')'
+                            (direct-declarator-tail)?
+
+abstract-declarator     :=                              { E.type_only(true); save(); T = T.dup(); }
+                           abstract-declarator-recursive{ T0 = T; load(); E.own(T0); }
+
+abstract-declarator-recursive
+                        :=                              { ...see declarator-recursive... }
+                           pointer (direct-abstract-declarator)?
+                                                        { ...see declarator-recursive... }
+                        ||                              { ...see declarator-recursive... }
+                           direct-abstract-declarator   { ...see declarator-recursive... }
+
+direct-abstract-declarator
+                        := ( '(' abstract-declarator-recursive ')' )?
+                            (direct-abstract-declarator-tail)?
+
+direct-abstract-declarator-tail := direct-declarator-tail
+
+# type(func.has_var_list)
+parameter-type-list     :=                              { save(); E = new_env(); }
+                           parameter-declaration-list   { E0 = E; load(); T.add(FUNC, E0); }
+                            (',' '...')?                { T.add(FUNC, has_var_list); }
+
+parameter-declaration-list
+                        := parameter-declaration (',' parameter-declaration-list)?
+
+parameter-declaration   :=                              { T = new_typ(); }
+                           declaration-specifiers
+                            declarator                  { del_typ(T); }
+                        ||                              { T = new_typ(); }
+                           declaration-specifiers
+                            [abstract-declarator]       { del_typ(T); }
+
+type-name               := specifier-qualifier-list [abstract-declarator]
+
+# type
+pointer                 := '*'                          { T.add(pointer); }
+                            (type-qualifier-list)?
+                            (pointer)?
+
+================== Specifiers ==================
+
+declaration-specifiers  := (storage-class-specifier | type-specifier | type-qualifier)+
+
+# storage,linkage
+storage-class-specifier := 'typedef'                    { T.add(is_type); }
+                        || 'extern'                     { T.add($0.token_linkage); }
+                        || 'static'                     { T.add($0.token_storage); }
+                        || 'auto'
+                        || 'register'
+
+# type
+type-qualifier          := 'const'                      { T.add($0.token); }
+                        || 'volatile'                   { T.add($0.token); }
+
+# type
+type-specifier          := 'void' || 'char' || 'short' || 'int' || 'long' || 'float' || 'double' || 'signed' || 'unsigned'
+                                                        { T.add($0.token); }
+                        || struct-or-union-specifier
+                        || enum-specifier
+                        || typedef-name
+
+type-qualifier-list     := type-qualifier
+                        || type-qualifier-list type-qualifier
+
+specifier-qualifier-list
+                        := type-specifier [specifier-qualifier-list]
+                        || type-qualifier [specifier-qualifier-list]
+
+# type(tag), symbol(name)
+struct-or-union-specifier
+                        :=                                  { save(); T = new_typ();  }
+                           struct-or-union
+                            (identifier)?                   { T.add(identifier);
+                                                              S = new_sym(TAG); S.add(identifier); S.own(T);
+                                                              T0 = T; S0 = S;                   // new tag type, tag symbol
+                                                              T1 = T.dup(); T1.watch_impl(T0);  // T0 holds impl, T1 watch T0's impl
+                                                              load(); E.own(S0); T.add_own(T1);
+                                                              save(); T = T0;                   // to fill T0 impl below
+                                                            }
+                            '{' struct-declaration-list '}' { load(); }
+
+                        ||                                  { save(); T = new_typ(); }
+                           struct-or-union
+                            identifier                      { T.add(identifier);
+                                                              S = new_sym(TAG); S.add(identifier); S.own(T);
+                                                              T0 = T; S0 = S; // new tag type, tag symbol
+                                                              load(); E.own(S0);
+                                                              T1 = T0.dup(); T1.watch_impl(E.find(S0).typ()); T.add_own(T1);
+                                                            }
+
+# type
+struct-or-union         := 'struct'                         { T.add(STRUCT); }
+                        || 'union'                          { T.add(UNION); }
+
+struct-declaration-list :=                                  { save(); E = new_env(); }
+                           (struct-declaration)+            { T = new_typ(struct-impl); T.own(E); T0 = T;
+                                                              load(); T.own_impl(T0); // set tag type impl
+                                                            }
+
+struct-declaration      :=                                  { save(); T = new_typ();  }
+                           specifier-qualifier-list
+                            struct-declarator-list          { del_typ(T); load();  }
+                            ';'
+
+struct-declarator-list  := struct-declarator
+                            (',' struct-declarator)*
+
+# type(bitfield)
+struct-declarator       := declarator
+                        || [declarator] ':' constant-expression
+
+# type(tag), symbol(name)
+enum-specifier          := 'enum'                           { save(); T = new_typ(); T.add(ENUM); }
+                            (identifier)?                   { ...see struct...
+                                                              load(); E.own(S0); T.add_own(T1);
+                                                              save(); T = T0;                   // to fill T0 impl below
+                                                            }
+                            '{' enumerator-list '}'         { load(); }
+                        || 'enum'                           { save(); T = new_typ(); T.add(ENUM); }
+                            identifier                      { ...see struct 2...
+                                                              load(); E.own(S0);
+                                                              T1 = T0.dup(); T1.watch_impl(E.find(S0).typ()); T.add_own(T1);
+                                                            }
+
+enumerator-list         :=                                  { save(); E = new_env(); }
+                           enumerator (',' enumerator)*     { T = new_typ(enum-impl); T.own(E); T0 = T;
+                                                              load(); T.own_impl(T0);
+                                                            }
+
+# type(enum-const)
+enumerator              := enumeration-constant             { E.own(new_sym(new_typ(ENUM_CONST, ...))); }
+                        || enumeration-constant '=' constant-expr
+
+# type
+typedef-name            := identifier                       { T.add_own(E.find(identifier).dup()); }
+
+================== Initialize ==================
+
+# code/value
+initializer             := assign-expr
+                        || '{' initializer-list [','] '}'
+
+initializer-list        := initializer
+                        || initializer-list ',' initializer
+
+=================== Expression ===============
+
+expr                    := assign-expr
+                        || expr ',' assign-expr
+
+assign-expr             := cond-expr
+                        || unary-expr assign-op assign-expr
+                        || unary-expr '=' assign-expr
+                                                        { check($0, lvalue()); ...complex check...;
+                                                          cast($1, $0);
+                                                          t = unqualified($0.t); }
+
+cond-expr               := OR-expr
+                        || OR-expr '?' expr ':' cond-expr
+                                                        { check($0, scalar());
+                                                          check(or(
+                                                            and(eq($1, arith()), eq($2, arith())),
+                                                            and(eq($1, struct()), eq($2, $1)),
+                                                            and(eq($1, union()), eq($2, $1)),
+                                                            and(eq($1, void()), eq($2, void())),
+                                                            and(eq($1, pointer()), eq($2, $1)))); // see pointer eq semantics
+                                                          t0 = uac($1, $2); cast($1, t0); cast($2, t0);
+                                                          t = new_typ(t0); // arith
+                                                          t = new_typ($1); // struct,union,void
+                                                          t = new_typ(complex_merge($1,$2)); // pointer
+                                                        }
+
+OR-expr                 := AND-expr
+                        || OR-expr '||' AND-expr        { check(eq($0, scalar()), eq($1, scalar()));
+                                                          t = new_typ(BOOL); }
+
+AND-expr                := bit-OR-expr
+                        || AND-expr '&&' bit-OR-expr    { check(eq($0, scalar()), eq($1, scalar()));
+                                                          t = new_typ(BOOL); }
+
+bit-OR-expr             := bit-XOR-expr
+                        || bit-OR-expr '|' bit-XOR-expr { check(eq($0, integral()), eq($1, integral())); t = new_typ(uac($0, $1)); }
+
+bit-XOR-expr            := bit-AND-expr
+                        || bit-XOR-expr '^' bit-AND-expr{ ...same... }
+
+bit-AND-expr            := eq-expr
+                        || bit-And-expr '&' eq-expr     { ...same... }
+
+# Note: a==b==c is legal, but irreasonable, eval from left to right
+eq-expr                 := rel-expr
+                        || eq-expr '==' rel-expr        { check(eq($0, arith()), eq($1, arith())); t = new_typ(int); }
+                        || eq-expr '!=' rel-expr        { ...same...}
+
+rel-expr                := shift-expr
+                        || rel-expr '<' shift-expr      { ...same...}
+                        || rel-expr '<=' shift-expr     { ...same... }
+                        || rel-expr '>' shift-expr      { ...same... }
+                        || rel-expr '>=' shift-expr     { ...same... }
+
+shift-expr              := add-expr
+                        || shift-expr '<<' add-expr     { check(and(eq($0, integral()), eq($1, integral()))); t = new_typ(promo($0.t)); }
+                        || shift-expr '>>' add-expr     { ...same... }
+
+add-expr                := mul-expr                     { t = $0.t; }
+                        || add-expr '+' mul-expr        { check(or(
+                                                            and(eq($0, arith()), eq($1, arith())),
+                                                            and(eq($0, pointer()), eq($1, integral()))));
+                                                          t = new_typ(promo($0.t, $1.t)); }
+                        || add-expr '-' mul-expr        { check(or(
+                                                            and(eq($0, arith()), eq($1, arith())),
+                                                            and(eq($0, pointer()), or(eq($1, integral()), eq($1, pointer())))));
+                                                          t = new_typ(promo($0.t, $1.t)); }
+
+mul-expr                := cast-expr                    { t = $0.t; }
+                        || mul-expr '*' cast-expr       { check($0, arith()); check($1, arith()); t = new_typ(promo($0.t, $1.t));  }
+                        || mul-expr '/' cast-expr       { check($0, arith()); check($1, arith()); t = new_typ(promo($0.t, $1.t));  }
+                        || mul-expr '%' cast-expr       { check($0, integral()); check($1, integral()); t = new_typ(promo($0.t, $1.t));  }
+
+cast-expr               := unary-expr                   { t = $0.t; }
+                        || '(' type-name ')' cast-expr  { check(or(
+                                                            eq($0, void()),
+                                                            and(eq($0, scalar()), eq($1, scalar()))));
+                                                          t = $0.t; }
+
+unary-expr              := postfix-expr                 { t = $0.t; }
+                        || '++' unary-expr              { check($0, scalar()); t = $0.t; }
+                        || '--' unary-expr              { check($0, scalar()); t = $0.t; }
+                        || '&' cast-expr                { check($0, or(function(), lvalue(NOT_BITFIELD_OR_REG))); t = new_typ(POINTER, $0.t); }
+                        || '*' cast-expr                { check($0, pointer(or(function(), lvalue()))); t = $0.t; }
+                        || '+' cast-expr                { check($0, arith()); t = $0.t; }
+                        || '-' cast-expr                { check($0, arith()); t = $0.t; }
+                        || '~' cast-expr                { check($0, integral()); t = $0.t; }
+                        || '!' cast-expr                { check($0, scalar()); t = $0.t; }
+                        || 'sizeof' unary-expr          { t = new_typ(size_t); }
+                        || 'sizeof' '(' type-name ')'   { t = new_typ(size_t); }
+
+postfix-expr            := primary-expr                 { t = $0.t; }
+                        || postfix-expr '[' expr ']'    { check($0, pointer(object())); check($1, integral()); t = $0.t.target_type; }
+                        || postfix-expr '(' [argument-expr-list] ')'
+                                                        { check($0, decay(pointer(function()))); ...refer t from arguments... }
+                        || postfix-expr '.' identifier  { check($0, struct(), has(identifier));
+                                                          t = $0.t.find(identifier).typ(); }
+                        || postfix-expr '->' identifier { check($0, target(struct(), has(identifier)));
+                                                          t = $0.t.target_type.find(identifier).typ(); }
+                        || postfix-expr '++'            { check($0, scalar()); t = $0.t; }
+                        || postfix-expr '--'            { check($0, scalar()); t = $0.t; }
+
+primary-expr            := identifier                   { t = E.find(identifier).typ(); }
+                        || constant                     { t = const.typ(); }
+                        || string-literal               { t = string.typ(); }
+                        || '(' expr ')'                 { t = $0.typ(); }
+
+argument-expr-list      := assign-expr
+                        || argument-expr-list ',' assign-expr
+
+# constant folding
+constant-expr           := cond-expr
+
+=============== Statement ===============
+
+stmt                    := labeled-stmt
+                        || compound-stmt
+                        || expression-stmt
+                        || selection-stmt
+                        || iteration-stmt
+                        || jump-stmt
+
+stmt-list               := stmt
+                        || stmt-list stmt
+
+                           # 注意这里，Label 是一个 identifier，不仅仅词法上符合，
+                           # 语法行为也符合，比如有 function-wise scope。
+                           # 而且，由于 Label: stmt 是一条语句，
+                           # 所以 Label 无法在全局域出现，只能在某个函数体内。
+labeled-stmt            := identifier ':' stmt
+                        || 'case' constant-expr ':' stmt
+                        || 'default' ':' stmt
+
+compound-stmt           := '{'
+                            (declaration)*
+                            [stmt-list]
+                            '}'
+
+expression-stmt         := [expr] ';'
+
+selection-stmt          := 'if' '(' expr ')' stmt
+                        || 'if' '(' expr ')' stmt 'else' stmt           ＃ dangling 'else'
+                        || 'switch' '(' expr ')' stmt
+
+iteration-stmt          := 'while' '(' expr ')' stmt
+                        || 'do' stmt 'while' '(' expr ')' ';'
+                        || 'for' '(' [expr] ';' [expr] ';' [expr] ')' stmt
+
+jump-stmt               := 'goto' identifier ';'
+                        || 'continue' ';'
+                        || 'break' ';'
+                        || 'return' [expr] ';'
+
+=============== Lexical ===============
+
+identifer, constant, string-literal, ...
+
+see C_Lexer.txt
+
+------------------------------------------------------------------------
+C 的 specifiers 有效组合
+
+TC_VOID: void
+TC_CHAR: char
+TC_UCHAR: unsigned char
+TC_SCHAR: signed char
+TC_SHORT: (signed) short (int)
+TC_USHORT: unsigned short (int)
+TC_INT: (signed) (int)
+TC_UINT: unsigned (int)
+TC_LONG: (signed) long (int)
+TC_ULONG: unsigned long (int)
+TC_FLOAT: float
+TC_DOUBLE: double
+TC_LDOUBLE: long double
+TC_STRUCT: struct {}
+TC_UNION: union {}
+TC_ENUM: enum {}
+TC_TYPENAME: typedef
+

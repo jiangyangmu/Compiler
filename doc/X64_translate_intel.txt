@@ -1,0 +1,411 @@
+C_x64.txt
+
+---------- 全局设计 ----------
+
+Label 管理 [OK]
+Storage 管理
+
+---- entry-point ----
+    .global _main
+
+    .text
+_main:
+    ...
+
+    .data
+    ...
+
+---------- 寄存器分配 ----------
+
+特殊用途勿动：
+    堆栈：rbp, rsp
+    调用：r11 (caller saved：你可以随便用，我需要的话会自己保存)
+    返回：rax
+
+params: rdi, rsi, rdx, rcx, r8, r9
+callee: rbx, r12, r13, r14, r15 (你用可以，但要负责复原)
+caller: r10
+
+使用优先级：r10 > rdi, rsi, rdx, rcx, r8, r9 > stack > rbx, r12, r13, r14, r15
+
+---------- 堆栈图 ----------
+
+8k+16(%rbp) memory argument eight-byte k
+...         ...
+16(%rbp)    memory argument eight-byte 0
+------ 16-byte aligned ------
+8(%rbp)     return address
+0(%rbp)     prev %rbp value
+-8(%rbp)    [...
+                function's private memory
+0(%rsp)     ...]
+-128(%rsp)  red zone (128 bytes)
+
+---------- 数据图 ----------
+
+    .data
+    .bss
+    .align 1
+uninit_char   .space 1
+    .align 2
+uninit_short  .space 2
+    .align 4
+uninit_int    .space 4
+    .align 8
+uninit_long   .space 8
+    .align <element-align>
+uninit_arr    .space <array-size>
+
+    .data
+a_char      .byte   1, ...
+a_short     .word   2, ...              # 16-bit integer
+a_int       .long   4, ...              # 32-bit integer, also .long
+a_long      .long   <low>,<high>, ...   # 64-bit integer (small-endian)
+a_region    .zero   <size>
+            .space  <size>, <value>
+a_array     .fill <repeat>, <size>, <value>
+
+a_float     .float  4.0, ...            # 32-bit floating, also .single
+a_double    .double 8.0, ...            # 64-bit floating
+a_xdouble   .tfloat 10.0, ...           # 80-bit floating
+a_string    .asciz  "StringLiteral"     # string
+
+            .global a_global_symbol     # make symbol(s) global, visible to other files
+            .local  a_local_symbol      # make symbol(s) local, visible only to this file
+            .weak   a_weak_symbol       # make symbol(s) weak
+            .comm   a_shared_symbol, <size> # will put in BSS section
+
+
+???
+data binding: local, .global, weak
+visibility: .hidden, .internal, .protected
+.comm VS .lcomm ?
+
+
+
+---------- 代码图/指令选择 ----------
+
+prologue
+    pushq %rbp
+    movq %rsp, %rbp
+    subq R, %rsp
+        R：当前函数体所需的最大栈空间（临时变量，被调用函数的参数，需要保存的寄存器）
+            必须按 16 字节 (128 bit) 对齐。
+body
+关注点：会弄脏哪些寄存器？返回 地址 还是 值？ ［TODO]
+
+    表达式（需要几个变量？结果存放在？）
+
+        #[1] A = B
+            ... B code ...(value)
+            movq %rax, %r1
+            ... A code ...(addr)
+            movq %r1, (%rax)
+
+            (value?) movq %r1, %rax
+            (addr?)  done
+
+        #[0] E ? A : B ()
+            ... E code ...(value)
+            cmp %rax, 0
+            jz LB
+            ... A code ...(value)
+            jmp Lend
+        LB:
+            ... B code ...(value)
+        Lend:
+            (value!)  done
+
+        #[2] A op B, op = { || && == != < <= > >= }
+            ... A code ...
+            movq %rax, $r1
+            ... B code ...
+            movq %rax, $r2
+            movq $r1, %rax
+
+            ## A || B
+            or %r2, %rax
+            cmp %rax, 0
+            je LFalse
+
+            ## A && B
+            cmp %rax, 0
+            je LFalse
+            cmp %r2, 0
+            movq $0, %rax
+            je LFalse
+
+            ## A ==/!=/</<=/>/>= B
+            cmp %rax, %r2
+            jne/je/jge/jg/jle/jl LFalse     # signed number
+            jne/je/jae/ja/jbe/jb LFalse     # unsigned number
+
+        LTrue:
+            movq $1, %rax
+        LFalse:
+            (value!)  done
+
+        #[2,cl,rdx] A op B, op = { | ^ & << >> + - * / % }
+            ... A code ...
+            movq %rax, $r1
+            ... B code ...
+            movq %rax, $r2
+            movq $r1, %rax
+
+            ## | ^ &
+            or/xor/and %r2, %rax
+
+            ## << >>
+            movb %r2, %cl
+            rol/ror %cl, %rax
+
+            ## + -
+            addq/subq %r2, %rax
+            ## * / (mul: RDX:RAX div: RAX(quo) RDX(rem) imul/idiv is much more powerful!)
+            mul/div/imul/idiv %r2
+            ## %
+            mul/div/imul/idiv %r2
+            movq %rdx, %rax
+
+            (value!)  done
+
+        # cast
+            TODO: ??????????
+
+        #[0] & P
+            ... P code ...(addr)
+            (value!)  done
+        #[0] * P
+            ... P code ...(value)
+            (value?)  mov (%rax), %rax
+            (addr?)   done
+
+        #[1] ++A, --A
+            ... A code ...(addr)
+            movq (%rax), %r1
+            inc/dec %r1
+            movq %r1, (%rax)
+
+            (value!) movq %r1, %rax
+
+        #[1] A++, A--
+            ... A code ...(addr)
+            movq (%rax), %r1
+            inc/dec %r1
+            movq %r1, (%rax)
+
+            (value!) dec/inc %r1
+                     movq %r1, %rax
+
+        #[0] + - ~ A
+            ... A code ...(value)
+            ignore      ## +
+            neg %rax    ## -
+            not %rax    ## ~
+            (value!) done
+
+        #[0] ! A
+            ... A code ...(value)
+            cmp %rax, 0
+            je L1
+            movq $0, %rax
+            jmp L2
+        L1:
+            movq $1, %rax
+        L2:
+            (value!) done
+
+        #[1] A[I]
+            ... A code ...(addr)
+            movq %rax, %r1
+            ... I code ...(value)
+            imulq sizeof(A)
+            addq %r1, %rax
+
+            (value?) movq (%rax), %rax
+            (addr?)  done
+
+        #[....] F(A1, A2, ...)
+            ... F code ...(addr)
+            movq %rax, %r11
+            ... A1 code ...(value)
+            movq %rax, %rdi
+            ... A2 code ...(value)
+            movq %rax, %rsi
+            ...
+            call *r11
+
+        #[0] A.offset
+            ... A code ...(addr)
+            addq $offset, %rax
+            (value?) mov (%rax), %rax/%eax/%ax/%al
+            (addr?)  done
+        #[0] A->offset
+            ... A code ...(value)
+            addq $offset, %rax
+            (value?) mov (%rax), %rax/%eax/%ax/%al
+            (addr?)  done
+
+    控制流（代码块之间的跳转？）
+        ---------- compound ----------
+        # { B C ... }
+            ... B code ...
+            ... C code ...
+            ...
+
+        ---------- expression ----------
+        # E
+            ... E code ...
+            movq $result, %rax
+
+        ---------- selection ----------
+        # if (E) B
+            ... E code ...
+            cmp %rax, 0
+            je Lend
+            ... B code ...
+        Lend:
+
+        # if (E) B else C
+            ... E code ...
+            cmp %rax, 0
+            je Lc
+            ... B code ...
+            jmp Lend
+        Lc:
+            ... C code ...
+        Lend:
+
+        # switch (E) { B C Default }
+            ... E code ...
+            cmp %rax, $B.LabelValue
+            jne LB
+            cmp %rax, $C.LabelValue
+            jne LC
+            ... Default code ...
+            jmp Lend
+        LB:
+            ... B code ...
+            jmp Lend
+        LC:
+            ... C code ...
+        Lend:
+
+        ---------- iteration ----------
+        # while (E) B
+        Lstart:
+            ... E code ...
+            cmp %rax, 0
+            je Lend
+            ... B code ...
+            jmp Lstart
+        Lend:
+
+        # do B while (E)
+        Lstart:
+            ... B code ...
+            ... E code ...
+            cmp %rax, 0
+            jne Lstart
+        Lend:
+
+        # for (Pre E Post) B
+            ... Pre code ...
+        Lhead:
+            ... E code ...
+            cmp %rax, 0
+            je Lend
+            ... B code ...
+        Lstart:
+            ... Post code ...
+            jmp Lhead
+        Lend:
+
+        ---------- jump ----------
+        # goto 'Here'
+            ... handle environment stuff ...
+            jmp LUser.Here
+        # break
+            jmp $Nearest.Lend
+        # continue
+            jmp $Nearest.Lstart
+        # return E
+            ... E code ...
+            leave
+            retq
+
+        ---------- labeled ----------
+        # 'Label': A
+        LUser.Label:
+            ... A code ...
+        # case & default
+            [see switch]
+
+    地址计算（数组，结构体？
+        Intel Vol1 3.7.5
+        语法：displacement(base, index, scale)
+        值：base + index * scale + displacement
+
+        100             => ds[100], 直接地址
+        (%eax)          => ds[eax], 间接基址
+        (,%ebx,2)       => ds[ebx*2], 间接元素偏移
+        -16(%eax)       => ds[eax-16], 间接基址＋直接偏移
+        (%eax,%ebx)     => ds[eax+ebx], 间接基址＋间接偏移
+        (%eax,%ebx,2)   => ds[eax+ebx*2], 间接基址＋间接元素偏移
+        -8(%eax,%ebx,2) => ds[eax+ebx*2-8], 间接基址＋直接偏移＋间接元素偏移
+
+        变量读写：
+            global => <addr> = $GlobalVar
+            local  => <addr> = -8(%rbp)
+            movq <addr>, %rax
+            addq $1, %rax
+            movq %rax, <addr>
+
+        结构体成员：
+            global => <addr> = $GlobalStruct
+            local  => <addr> = -8(%rbp)
+            leaq <addr>, %rax
+            movq $1, %rbx
+            movq %rbx, (%rax)
+            movq $2, %rbx
+            movq %rbx, -8(%rax)
+
+        一维数组：
+            leaq <addr>, %rax
+            movq $0, %rbx
+        Loop:
+            movq %rbx, (%rax, %rbx, 8)
+            inc %rbx
+            cmp %rbx, $100
+            jl Loop
+
+        二维数组：[5 registers]
+            leaq <addr>, %rA        # long long a[10][100]
+            movq $0, %rB
+            movq $0, %rC
+        Outer:
+        Inner:
+            leaq (%rC, %rB, 100), %rD
+            leaq (%rA, %rD, 8), %rE
+            movq $0, (%rE)
+            inc %rC
+            cmp %rC, $100
+            jl Inner
+        InnerEnd:
+            inc %rB
+            cmp %rB, $10
+            jl Outer
+        OuterEnd:
+
+    函数调用
+        直接：
+            movabsq $FuncLabel, %r11
+            call *%r11
+        间接：
+            movabsq $FuncLabelPointer, %r11
+            call *(%r11)
+
+epilogue
+    TODO: 返回值传递。。。
+    leave
+    retq

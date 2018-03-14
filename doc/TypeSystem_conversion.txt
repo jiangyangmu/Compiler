@@ -218,7 +218,7 @@ C 对 "自动类型转换" 的支持？
         any lvalue expression T of array type, when used in any context other than:
             &(T)
             sizeof(T)
-            T = "hello"
+            int T[?] = "hello"
         undergoes a conversion to the non-lvalue pointer to its first element.
 
       Rules for Function to Pointer:

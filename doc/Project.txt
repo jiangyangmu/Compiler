@@ -36,7 +36,6 @@ Compiler Core
     [ ] annotate AST
 
 + full code generation support [C_x64.txt]
-    [ ] IR code generation
     [ ] assembly code generation
 
 + more
@@ -341,3 +340,38 @@ ensure semantics correctness
             tag
             struct/union members
             id (object, enum-constant, typedef-name)
+
+
+-------------------------------------------------------------------------------
+assembly code generation
+
+AST + SymbolTable ---IR---> Assembly ---> Object File (COFF, PE, ELF)
+
+是否需要 IR ?
+    - CODE: Instruction (add, sub, ...) & Address (reg, imm, mem, label)
+    - DATA: Global Variables (integer, float, string, array)
+
+IR as in-memory-ABI-model:
+IR as in-memory-x64-model:
+    C Type System <=> ABI Type System <=> Intel CPU Type System
+                       Type Category
+                     for param passing
+        * C has a customizable type system, while IR & asm don't!
+    C Var Decl => x64 Global Data
+    C Statement => x64 Instruction
+    C Expression => x64 Instruction
+
+    [ACTION: doc for type system mapping]
+    [ACTION: x64 data model, x64 instruction model]
+
+
+Problems solved by AST:
+    * Priority, Evaluation Order
+    * Type Info(decl) & Type Checking(stmt,expr)
+    * Name Info
+    * [output] syntax tree with type info and name info on node.
+
+Problems solved by SymbolTable:
+    * Symbol Info & Symbol Definition Checking
+    * [output] symbol tables connected as a tree
+

@@ -1,0 +1,60 @@
+
+支持 function call
+
+
+1. 语法语义检查
+
+    * Feature
+        > implicit function definition
+        > recursive call, directly and indirectly
+    * Evaluation Order
+        > function-designator, arguments => <sequence-point> => function-call
+    * All Implicit Conversions
+        > DefaultArgumentPromotion(prototype-definition)
+        > ConvertAsIfByAssignment(argument-passing)
+    * UB
+        > Number of Argument != Number of Parameter
+        > No Prototype + calling Arguments not compatible (after DefaultArgumentPromotion)
+        > With Prototype + calling Arguments not compatible (after DefaultArgumentPromotion)
+            e.g. call using an incompatible function pointer
+        > With Prototype + Prototype ends with an ellipsis ( ", ..." )
+
+        [???]
+        The ellipsis notation in a function prototype declarator causes argument type conversion to stop after the last declared parameter. The default argument promotions are performed on trailing arguments. If the function is defined with a type that is not compatible with the type (of the expression) pointed to by the expression that denotes the called function, the behavior is undefined.
+
+
+2. 代码生成
+
+    * stack frame
+    * argument passing
+        > Argument Classification (type int/sse/x87/non/mem)
+        > Argument Passing (alloc reg/mem/sse/...)
+    * value returning
+        > Return Value Classification
+
+Impl:
+    int stack_align(int before)
+    IRParamCategory classify(Type *)
+        INTEGER
+        SSE
+        SSEUP
+        X87, X87UP
+        COMPLEX_X87
+        NO_CLASS (This class is used as initializer in the algorithms. It will be used for padding and empty structures and unions.)
+        MEMORY
+    IRAddress allocNext(IRParamCategory category)
+        MEMORY => stack
+        INTEGER => rdi, rsi, rdx, rcx, r8, r9
+        SSE => xmm0 - xmm7
+        SSEUP => next(SSE)
+        X87, X87UP, COMPLEX_X87 => stack
+    IRAddress allocNextForReturnValue(IRParamCategory category)
+        MEMORY => caller stack, caller assign address to rdi, rdi as hidden first argument, rax equals to rdi when return
+        INTEGER -> rax, rdx
+        SSE => xmm0 - xmm7
+        SSEUP => next(SSE)
+        X87 => X87 stack in st0, as 80-bit x87 number
+        X87UP => the value is returned together with the previous X87 value in st0.
+        COMPLEX_X87 => real part in st0, imaginary part in st1.
+
+

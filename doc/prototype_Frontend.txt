@@ -1,0 +1,68 @@
+
+On tokens: Syntax Tree
+    * an unified Ast struct for all syntax node.
+        > identification: AstType
+
+    * a process to construct AST tree.
+        Ast* parse(Lexer)
+
+    * a process to do symbol binding.
+        void symbol_binding(Ast*); // attach SymbolTable* on Ast
+            1. keep evolving symbol table, maintain symbol definitions.
+            2. when a symbol occurs
+                a. if it's definition, check no entry in symbol table with same name and namespace. add it.
+                b. if it's reference, find entry in symbol table with same name and namespace. link def & use.
+
+        > symbol definition, symbol binding, symbol scope & namespace
+            symbol use -> symbol def -> type & object
+            symbol properties: scope(effective area), linkage(link def & use), namespace(resolve name confict)
+            object properties: storage
+            type properties: NA
+
+        * evolve type system in symbol system.
+            > type system can have a DAG dependency path, new type depends on old type.
+            > type system rely on symbol system to map symbol from/to type.
+            > symbol system focus on "type-related" symbol
+        * evolve object system in symbol system.
+            > object system can have a tree dependency path, "use" depends on "def".
+            > object system rely on symbol system to map symbol from/to object.
+            > symbol system focus on "object-related" symbol
+
+    * a process to do type checking.
+        void type_checking(Ast*)
+
+        > type creation & assignment(declaration), type synthesizing(expression)
+        > implicit type conversion(insert cast node)
+
+    * a process to generate code for data
+        void emit_data(SymbolTable*)
+        void generate_object(Symbol*) [name, type, linkage, etc.]
+        > traverse symbol table tree, collect all static object symbols, generate code
+
+    * a process to generate code for function
+        void emit_code(SymbolTable*)
+        void generate_code(Symbol*) [name, symbol-table, code-ast]
+        > traverse top-level symbol table, collect all function symbols, generate code
+
+On ast tree: Symbol Table
+    * a struct to bind symbol and things beneath it.
+
+    * a way to organize Symbol Tables.
+    * a process to construct Symbol Tables on AST tree.
+
+On ast tree: Type System
+    * a way to describe all types
+
+    * a process to construct Type
+        > primitive type, aggregate type(assign, concatenate, synthesize)
+        > type system can have a DAG dependency path, new type depends on old type.
+
+
+[think] make type-conversion-node into node-property? so insert cast node won't change Ast tree.
+[module] Context system: where am I? what I know? (like advanced edition Symbol Table)
+    > only tracking changes of symbol meaning.
+[think] function prototype is not function type, it is function protocal.
+[think] object is nothing but a name-type entry in symbol table.
+[think] In C, type system is extensible with struct/union/enum/array etc.
+              namespace system is fixed with id/tag/label.
+

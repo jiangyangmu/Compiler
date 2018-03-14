@@ -1,0 +1,309 @@
+Prerequisite: Finish ast parsing, type checking.
+
+# Goal: Minimize knowledge of C.
+#
+# 1. Kept side effect for eval type NONE: flag-setting.
+#   All compute instruction affects flag.
+#
+# 1.1 Because of side effect, maybe implement NONE by just adding a "pop" to VALU?
+#
+# 2. Lvalue semantics: EVAL(xxx, ADDR)
+#
+# 3. Instructions are macros.
+#   "0" slot knows C type of its data.
+#   "alloc T" allocate an aligned memory block for C type T.
+#   "add 0, 1, 2" knows integral math, floating math, and pointer math.
+#   "inc 0" will operate on different size of memory based on C type of "0"
+#   "cvt 0, 1" do a type-aware convert copy.
+#
+# 4. Complex cases
+#   Consider "++a",
+#       which in effect, is equivalent to "(a+=1)",
+#       which in effect, is equivalent to "(a=a+1)", only that "a" is evaluated once;
+#       which has semantics like
+#       "additive operation",
+#       "assignment",
+#       "usual arithmetic conversion" on "(T)a+(T)1",
+#       "by assignment conversion" on "a=(T)(a+1)";
+#
+# 5. Where to put "implicit conversion" logic ? "qualifier inheritence" ? "lvalue inheritence" ?
+#   Type checking,
+#   "implicit conversion" => insert cast node in Ast,
+#       ("usual arithmetic", "type decay", "by assignment", ...)
+#   "qualifier inheritence" => 'const/volatile' ??
+#   "lvalue inheritence" =>
+#       address(&,                      // test lvalue (get address of this object)
+#               assign(simple-assign,   // address semantics and value semantics
+#                      compound-assign,
+#                      inc/dec)),
+#       indirect(*,                     // create lvalue (refer to the object)
+#                subscript,
+#                member-access(ref,ptr)),
+#       id.                             // object itself.
+#
+# Current Instruction Set
+#   <op>
+#       <addr> = { slot_index, symtab_index }
+#       <imm> = { lexical_const }
+#
+#   :stack:
+#       :value: = { C_type_and_value }
+#       :addr: = { <addr> }
+#
+#   cp <addr/imm>,<addr>    - naive copy.
+#   cvt <addr>,<addr>       - type aware copy.
+#   popN                    - pop stack. (no flag change)
+#   alloc <imm>
+#   cmp-eq <addr>,<addr>    - bool test family.
+#   cmp-eq-set <addr>,<addr>,<addr>
+#   cmp-eq-zero <addr>
+#   cmp-eq-zero-set <addr>,<addr>
+#   add <addr>,<addr>,<addr>- type aware add.
+#   inc <addr>              - type aware increment.
+#   neg <addr>              - type aware negation.
+#   not <addr>              - type aware bitwise-not.
+#   call <addr>             - type aware function calling.
+
+[comma]
+a, b, c     => type:NONE,VALU
+  type == NONE
+    EVAL(a, NONE)           |
+    EVAL(b, NONE)           |
+    EVAL(c, NONE)           |
+  type == VALU
+    EVAL(a, NONE)           |
+    EVAL(b, NONE)           |
+    EVAL(c, VALU)           |c|
+
+[assign]
+a = b       => type:NONE,VALU. precond: (a.type == b.type IN {arith,struct,pointer})
+  type == VALU
+    EVAL(b, VALU)           |b|
+    EVAL(a, ADDR)           |b|&a|
+    cp 1, [0]               |b|&a|
+    pop                     |b|
+
+[cond]
+a ? b : c   => type:NONE, VALU. precond: (a.type IN {scalar}) && (b.type == c.type IN {void,arith,struct,pointer})
+  type == VALU
+    ASSERT(b.type != void)  |
+    EVAL(a, VALU)           |a|
+    cmp-eq-zero 0           |a|
+    pop                     |
+    jmp-true @1             |
+    EVAL(b, VALU)           |b|
+    jmp @2                  |b|
+  1:EVAL(c, VALU)           |c|
+  2:                        |b,c|
+
+[and, or]
+a && b      => type:NONE,VALU. precond: (a.type IN {scalar}) && (b.type IN {scalar})
+  type == VALU
+    alloc bool              | |
+    EVAL(a, VALU)           | |a|
+    cmp-eq-zero-set 0, 1    |?|a|
+    pop                     |?|
+    jmp-false ---           |?|
+    EVAL(b, VALU)           |?|b|
+    cmp-eq-zero-set 0, 1    |?|b|
+    pop                     |?|
+    ---
+
+[bitwise-or, bitwise-xor, bitwise-and]
+a | b       => type:NONE,VALU. precond: (a.type == b.type IN {integral})
+  type == VALU
+    alloc a.type            | |
+    EVAL(a, VALU)           | |a|
+    EVAL(b, VALU)           | |a|b|
+    or 0, 1, 2              |?|a|b|
+    pop2                    |?|
+
+[eq, rel]
+a == b      => type:NONE,VALU. precond: (a.type == b.type IN {arith})
+  type == NONE
+    EVAL(a, VALU)           |a|
+    EVAL(b, VALU)           |a|b|
+    cmp-eq 0, 1             |a|b|
+    pop2                    |
+  type == VALU
+    alloc bool              | |
+    EVAL(a, VALU)           | |a|
+    EVAL(b, VALU)           | |a|b|
+    cmp-eq-set 0, 1, 2      |?|a|b|
+    pop2                    |?|
+
+[shift]
+a << b      => type:NONE,VALU. precond: (a.type IN {integral}) && (b.type IN {integral})
+  type == VALU
+    EVAL(a, VALU)           |a|
+    EVAL(b, VALU)           |a|b|
+    shl 1, 0                |a|b|
+    pop                     |a|
+
+[add]
+a - b       => type:NONE,VALU. precond: (a.type == b.type IN {arith}) || (a.type IN {pointer} && b.type IN {pointer,integral})
+a + b       => type:NONE,VALU. precond: (a.type == b.type IN {arith}) || (a.type IN {pointer} && b.type IN {integral})
+  type == VALU
+    alloc a.type            | |
+    EVAL(a, VALU)           | |a|
+    EVAL(b, VALU)           | |a|b|
+    add 0, 1, 2             |?|a|b|
+    pop2                    |?|
+
+[mul]
+a % b       => type:NONE,VALU. precond: (a.type == b.type IN {integral})
+a * b       => type:NONE,VALU. precond: (a.type == b.type IN {arith})
+  type == VALU
+    alloc a.type            | |
+    EVAL(a, VALU)           | |a|
+    EVAL(b, VALU)           | |a|b|
+    mul 0, 1, 2             |?|a|b|
+    pop2                    |?|
+
+[cast]
+(T)a        => type:NONE,VALU. precond: (T IN {void}) || (T IN {scalar} && a.type IN {scalar})
+  type == VALU
+    ASSERT(T != void)       |
+    alloc T                 | |
+    EVAL(a, VALU)           | |a|
+    cvt 0, 1                |?|a|
+    pop                     |?|
+
+[unary]
+++a         => type:NONE,VALU. precond: (a.type IN {scalar})
+  type == VALU
+    alloc a.type            | |
+    EVAL(a, ADDR)           | |&a|
+    alloc a.promo_type      | |&a| |
+    cvt [1], 0              | |&a|?|
+    inc 0                   | |&a|?|
+    cvt 0, [1]              | |&a|?|
+    cp [1], 2               |?|&a|?|
+    pop2                    |?|
+&a          => type:NONE,VALU. precond: (a.type IN {func,lvalue-not-bitfield-or-reg})
+  type == NONE
+    HINT(a must in memory)
+  type == VALU
+    EVAL(a, ADDR)           |&a|
+*a          => type:NONE,VALU,ADDR. precond: (a.type IN {pointer}). return: lvalue,function
+  type == VALU && (a.target_type == lvalue)
+    alloc a.target_type.dcy | |         // array-to-pointer decay
+    EVAL(a, VALU)           | |a|
+    cp [0], 1               |?|a|
+    pop                     |?|
+  type == VALU && (a.target_type == function)
+    EVAL(a, VALU)           |a|
+  type == ADDR
+    ASSERT(a.target_type != function)
+    EVAL(a, VALU)           |a|
+  type == NONE
+    EVAL(a, NONE)
+
++a          => type:NONE,VALU. precond: (a.type IN {arith})
+  type == VALU
+    alloc a.promo_type      | |
+    EVAL(a, VALU)           | |a|
+    cvt 0, 1                |?|a|
+    pop                     |?|
+-a          => type:NONE,VALU. precond: (a.type IN {arith})
+  type == VALU
+    alloc a.promo_type      | |
+    EVAL(a, VALU)           | |a|
+    cvt 0, 1                |?|a|
+    neg 1                   |?|a|
+    pop                     |?|
+~a          => type:NONE,VALU. precond: (a.type IN {integral})
+  type == VALU
+    alloc a.promo_type      | |
+    EVAL(a, VALU)           | |a|
+    cvt 0, 1                |?|a|
+    not 1                   |?|a|
+    pop                     |?|
+!a          => type:NONE,VALU. precond: (a.type IN {scalar})
+  type == VALU
+    alloc bool              | |
+    EVAL(a, VALU)           | |a|
+    cmp-eq-zero-set 0, 1    |?|a|
+    pop                     |?|
+
+[postfix]
+a[b]        => type:NONE,VALU,ADDR. precond: (a.type IN {pointer-to-not-void}) && (b.type IN {integral})
+  type == VALU
+    alloc a.target_type     | |
+    EVAL(a[b], ADDR)        | |?|
+    cp [0], 1               |?|?|
+    pop                     |?|
+  type == ADDR
+    alloc pointer           | |
+    EVAL(a, VALU)           | |a|
+    EVAL(b, VALU)           | |a|b|
+    add 0, 1, 2             |?|a|b|
+    pop2                    |?|
+
+f(a,b,c)    => type:NONE,VALU. precond: (f.type IN {pointer-to-function})
+  type == VALU
+    alloc (*f).target_type  | |
+    EVAL(c, VALU)           | |c|
+    EVAL(b, VALU)           | |c|b|
+    EVAL(a, VALU)           | |c|b|a|
+    EVAL(f, VALU)           | |c|b|a|f|
+    call [0]                |?|c|b|a|f|
+    pop4                    |?|
+
+a.id        => type:NONE,VALU,ADDR. precond: (a.type IN {struct})
+  type == VALU
+    alloc a.id.type         | |
+    EVAL(a.id, ADDR)        | |?|
+    cp [0], 1               |?|?|
+    pop                     |?|
+  type == ADDR
+    alloc pointer           | |
+    EVAL(a, ADDR)           | |&a|
+    push a.id.offset        | |&a|i|
+    add 0, 1, 2             |?|&a|i|
+    pop2                    |?|
+
+a->id       => type:NONE,VALU,ADDR. precond: (a.type IN {pointer-to-struct})
+  type == VALU
+    alloc (*a).id.type      | |
+    EVAL(a->id, ADDR)       | |?|
+    cp [0], 1               |?|?|
+    pop                     |?|
+  type == ADDR
+    alloc pointer           | |
+    EVAL(a, VALU)           | |a|
+    push (*a).id.offset     | |a|i|
+    add 0, 1, 2             |?|a|i|
+    pop2                    |?|
+
+a++         => type:NONE,VALU. precond: (a.type IN {scalar})
+  type == VALU
+    alloc a.type            | |
+    EVAL(a, ADDR)           | |&a|
+    cp [0], 1               |a|&a|
+    alloc a.promo_type      |a|&a| |
+    cvt [1], 0              |a|&a|?|
+    inc 0                   |a|&a|?|
+    cvt 0, [1]              |a|&a|?|
+    pop2                    |a|
+
+[primary]
+id          => type:NONE,VALU,ADDR. precond: (id is in symtab)
+  type == VALU
+    alloc id.type           | |
+    cp [symtab[id]], 0      |?|
+  type == ADDR
+    alloc pointer           | |
+    cp symbol[id], 0        |?|
+const       => type:NONE,VALU
+  type == VALU
+    alloc const.type        | |
+    cp const.value, 0       |?|
+string      => type:NONE,VALU,ADDR.
+  type == VALU
+    alloc string.type.dcy   | |         // array-to-pointer decay
+    cp string.addr, 0       |?|
+  type == ADDR
+    alloc pointer           | |         // return: pointer to array of char
+    cp string.addr, 0       |?|
+
