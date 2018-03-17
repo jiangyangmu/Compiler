@@ -10,6 +10,7 @@
 #include <vector>
 
 typedef char Token;
+typedef int C_Type;
 typedef std::set<char> TokenSet;
 
 struct N;
@@ -204,6 +205,36 @@ struct N
     N &operator=(PAND pa);
     N &operator=(POR po);
 };
+
+struct A
+{
+    enum Type
+    {
+        A_TERMINAL,
+        A_NON_TERMINAL
+    } type;
+
+    // struct Prop
+    // {
+    //     C_Type *ctype;
+    //     Token tk;
+    // } prop;
+
+    // non-terminal
+    struct {
+        A *right_neigh;
+        A *first_child;
+        A *last_child;
+    } tree;
+
+    // TODO
+    void add_child(A *);
+
+    // TODO
+    static A * Create(Type type);
+};
+
+// TODO: parse()
 
 static PAND operator&(N &n1, N &n2)
 {

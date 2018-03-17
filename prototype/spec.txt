@@ -1,4 +1,4 @@
-Node:
+BNF Node:
 
     terminal:
         'a', "hello", ival
@@ -7,7 +7,7 @@ Node:
     code:
         { ... code ... }
 
-Production:
+BNF Production:
 
     and, or:
         N = N1
@@ -20,6 +20,13 @@ Production:
         N = N1 | ε
 
     *ε is a production concept
+
+AST Node:
+
+    terminal:
+        { property(value, type) }
+    non-terminal:
+        { AST Node+, property(...) }
 
 Algorithm 1: construct N and P from grammer
 
@@ -147,26 +154,32 @@ Algorithm 2: compute FIRST(), FOLLOW():
 
 Algorithm 3: parse
 
-    parse(N, TokenIterator & Tk) -> T
+    // N-Tree(term & non-term & code) + Tokens => A-Tree
+    parse(N, TokenIterator & T) -> A
     {
-        // N to syntax tree node T
-        if N is TERM:
-            T <- transform(N, Tk)
+        if N is CODE:
+            N.exec()
+            return NULL
+        elif N is TERMINAL:
+            A <- Create(TERMINAL)
+
+            A.property.token <- T.next()
+            A.property.type  <- Type(A.property.token)
+
+            return A
         else:
-            T <- transform(N)
+            A <- Create(NON_TERMINAL)
 
-        if N is TERM:
-            return T
+            // expand structural N.P (including branch selection)
+            VN <- N.P.flatten(T)
 
-        // expand strutural N.P (including branch selection)
-        VN <- N.P.flatten(Tk)
+            // now, it simplifies to "N = N1 & N2 & ..."
+            for each N' in VN:
+                A' <- parse(N', T)
+                if A' != NULL
+                    A.add_child(A')
 
-        // now, it simplifies to "N = N1 & N2 & ..."
-        for each N' in VN:
-            N'' = N'.dup()
-            T.add(parse(N'', Tk))
-
-        return T
+            return A
     }
 
 
