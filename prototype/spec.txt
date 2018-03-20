@@ -1,3 +1,7 @@
+Usage:
+
+// TODO
+
 BNF Node:
 
     terminal:
@@ -110,7 +114,7 @@ Algorithm 2: compute FIRST(), FOLLOW():
 
         first rule:
             // N1,N3,N5 must not be N
-            FIRST(N) = FIRST(N1,N3,N5) + FOLLOW(N)
+            FIRST(N) = FIRST(N1,N3,N5) + (FOLLOW(N) if epsilon)
 
         follow rule 1:
             FOLLOW(N1) += FIRST(N2)

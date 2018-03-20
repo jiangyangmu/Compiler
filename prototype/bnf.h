@@ -251,13 +251,88 @@ class BNFDebugger
     std::string get_name(N *n);
     std::string guess_first_follow(void *addr);
     void print_grammer() const;
+    void clear();
 
    private:
     std::map<N *, std::string> m;
 };
 
 #define BNF_REGISTER(n) BNFDebugger::instance.register_node((n), (#n))
+#define BNF_REGISTER_1(n1)                                \
+    do                                                    \
+    {                                                     \
+        BNFDebugger::instance.register_node((n1), (#n1)); \
+        Grammer g = {&n1};                                \
+        compute_first_follow(g);                          \
+    } while (false)
+#define BNF_REGISTER_2(n1, n2)                            \
+    do                                                    \
+    {                                                     \
+        BNFDebugger::instance.register_node((n1), (#n1)); \
+        BNFDebugger::instance.register_node((n2), (#n2)); \
+        Grammer g = {&n1, &n2};                           \
+        compute_first_follow(g);                          \
+    } while (false)
+#define BNF_REGISTER_3(n1, n2, n3)                        \
+    do                                                    \
+    {                                                     \
+        BNFDebugger::instance.register_node((n1), (#n1)); \
+        BNFDebugger::instance.register_node((n2), (#n2)); \
+        BNFDebugger::instance.register_node((n3), (#n3)); \
+        Grammer g = {&n1, &n2, &n3};                      \
+        compute_first_follow(g);                          \
+    } while (false)
+#define BNF_REGISTER_4(n1, n2, n3, n4)                    \
+    do                                                    \
+    {                                                     \
+        BNFDebugger::instance.register_node((n1), (#n1)); \
+        BNFDebugger::instance.register_node((n2), (#n2)); \
+        BNFDebugger::instance.register_node((n3), (#n3)); \
+        BNFDebugger::instance.register_node((n4), (#n4)); \
+        Grammer g = {&n1, &n2, &n3, &n4};                 \
+        compute_first_follow(g);                          \
+    } while (false)
+#define BNF_REGISTER_5(n1, n2, n3, n4, n5)                \
+    do                                                    \
+    {                                                     \
+        BNFDebugger::instance.register_node((n1), (#n1)); \
+        BNFDebugger::instance.register_node((n2), (#n2)); \
+        BNFDebugger::instance.register_node((n3), (#n3)); \
+        BNFDebugger::instance.register_node((n4), (#n4)); \
+        BNFDebugger::instance.register_node((n5), (#n5)); \
+        Grammer g = {&n1, &n2, &n3, &n4, &n5};            \
+        compute_first_follow(g);                          \
+    } while (false)
+#define BNF_REGISTER_6(n1, n2, n3, n4, n5, n6)            \
+    do                                                    \
+    {                                                     \
+        BNFDebugger::instance.register_node((n1), (#n1)); \
+        BNFDebugger::instance.register_node((n2), (#n2)); \
+        BNFDebugger::instance.register_node((n3), (#n3)); \
+        BNFDebugger::instance.register_node((n4), (#n4)); \
+        BNFDebugger::instance.register_node((n5), (#n5)); \
+        BNFDebugger::instance.register_node((n6), (#n6)); \
+        Grammer g = {&n1, &n2, &n3, &n4, &n5, &n6};       \
+        compute_first_follow(g);                          \
+    } while (false)
+#define BNF_REGISTER_8(n1, n2, n3, n4, n5, n6, n7, n8)        \
+    do                                                        \
+    {                                                         \
+        BNFDebugger::instance.register_node((n1), (#n1));     \
+        BNFDebugger::instance.register_node((n2), (#n2));     \
+        BNFDebugger::instance.register_node((n3), (#n3));     \
+        BNFDebugger::instance.register_node((n4), (#n4));     \
+        BNFDebugger::instance.register_node((n5), (#n5));     \
+        BNFDebugger::instance.register_node((n6), (#n6));     \
+        BNFDebugger::instance.register_node((n7), (#n7));     \
+        BNFDebugger::instance.register_node((n8), (#n8));     \
+        Grammer g = {&n1, &n2, &n3, &n4, &n5, &n6, &n7, &n8}; \
+        compute_first_follow(g);                              \
+    } while (false)
+#define BNF_RESET() BNFDebugger::instance.clear()
 #define BNF_PRINT_GRAMMER() BNFDebugger::instance.print_grammer()
+#define BNF_GUESS(first_follow) \
+    BNFDebugger::instance.guess_first_follow(first_follow)
 std::ostream &operator<<(std::ostream &o, P::MD &m);
 std::ostream &operator<<(std::ostream &o, POR &po);
 std::ostream &operator<<(std::ostream &o, N &n);

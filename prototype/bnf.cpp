@@ -253,7 +253,7 @@ std::vector<T *> topo_sort(std::map<T *, std::set<T *>> &map,
         // std::cout << "Ind: ";
         // for (auto kv : ind1)
         // {
-        //     std::cout << '\t' << BNF_FIRST_FOLLOW(kv.first) << ": " <<
+        //     std::cout << '\t' << BNF_GUESS(kv.first) << ": " <<
         //     kv.second
         //               << std::endl;
         // }
@@ -268,7 +268,7 @@ std::vector<T *> topo_sort(std::map<T *, std::set<T *>> &map,
 
             seq.push_back(node);
 
-            // std::cout << "Add seq: " << BNF_FIRST_FOLLOW(node) << std::endl;
+            // std::cout << "Add seq: " << BNF_GUESS(node) << std::endl;
 
             for (T *node2 : map[node])
             {
@@ -319,8 +319,8 @@ void compute_first_follow(Grammer &G)
         {                                                                    \
             M[from].insert(to);                                              \
             D[to]++;                                                         \
-            /* std::cout << "Add " << (name) << ": " << BNF_FIRST_FOLLOW(to) \
-             * << " <- " << BNF_FIRST_FOLLOW(from) << std::endl;  */         \
+            std::cout << "Add " << (name) << ": " << BNF_GUESS(to) << " <- " \
+                      << BNF_GUESS(from) << std::endl;                       \
         }                                                                    \
     } while (false)
 
@@ -384,7 +384,7 @@ void compute_first_follow(Grammer &G)
 
     // std::cout << "Eval seq: ";
     // for (auto ts : Seq)
-    //     std::cout << '\t' << BNF_FIRST_FOLLOW(ts) << std::endl;
+    //     std::cout << '\t' << BNF_GUESS(ts) << std::endl;
 
     if (!M.empty() && Seq.empty())
     {
@@ -505,6 +505,10 @@ void BNFDebugger::print_grammer() const
                       << "\tFOLLOW: " << n->follow << std::endl;
         }
     }
+}
+void BNFDebugger::clear()
+{
+    m.clear();
 }
 std::ostream &operator<<(std::ostream &o, P::MD &m)
 {
