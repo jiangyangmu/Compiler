@@ -1,14 +1,15 @@
 JCC TODO list
 ===
 
-Smart Parser
+EBNF Parser
 
-+ Add BNF node.
-+ Add BNF and,or production.
-+ Add BNF epsilon production.
-+ Add first,follow computation.
-+ Add AST node.
-+ Add BNF embedded code node.
+<!-- + Add BNF node. -->
+<!-- + Add BNF and,or production. -->
+<!-- + Add BNF epsilon production. -->
+<!-- + Add first,follow computation. -->
+<!-- + Add AST node. -->
+<!-- + Add BNF embedded code node. -->
++ ADD unit-testing.
 + Add parse support.
     * what context should be provided in CODE node { ... } ?
         current node properties: SET_PROP(value), GET_PROP()
@@ -16,6 +17,8 @@ Smart Parser
 
 Debugging
 
-+ Add `operator <<` support for std containers.
-+ Develop Format lib.
++ logging library.
 
+Code Formatting
+
++ A universal clang-format config file.

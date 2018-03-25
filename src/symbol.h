@@ -2,11 +2,9 @@
 
 #include "lexer.h"
 #include "type.h"
-// #include "object.h"
 
-class Object
-{
-};
+// Symbol of SymbolTable
+
 
 enum ESymbolNamespace
 {
@@ -48,12 +46,11 @@ struct Symbol : public Stringable
 {
     friend SymbolBuilder;
 
-    ESymbolNamespace space;
-    ESymbolLinkage linkage;
-    // ESymbolScope scope;
+    ESymbolNamespace space; // from syntax-tree context
+    ESymbolLinkage linkage; // from SymbolBuilder
+    // ESymbolScope scope; // from syntax-tree context
     StringRef name;
     Type *type;
-    Object *obj;  // if type is incomplete, obj == nullptr
 
    private:
     Symbol() {}
@@ -170,7 +167,6 @@ class SymbolBuilder
         s->name = _name;
         s->linkage = __compute_linkage();
         s->type = _type;
-        s->obj = nullptr;
         s->space = _namespace;
         return s;
     }

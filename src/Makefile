@@ -1,19 +1,23 @@
 PROJECT_DIR = $(PWD)
 BUILD_DIR = build
 TEST_DIR = test
+SRC_DIR = src
 
 CC = c++
 CC_FLAGS = -std=c++11 -Wall -pedantic -Wextra -Wno-unused-parameter -g -c
 LD = c++
 
 JCC = jcc
-JCC_HDR = $(wildcard *.h)
-JCC_LIB = parser.cpp type.cpp env.cpp
-JCC_SRC = ${JCC_LIB} main.cpp
-JCC_OBJ = $(patsubst %.cpp, ${BUILD_DIR}/%.o, ${JCC_SRC})
+JCC_HDR = $(wildcard ${SRC_DIR}/*.h)
+JCC_LIB = ${SRC_DIR}/parser.cpp \
+		  ${SRC_DIR}/type.cpp \
+		  ${SRC_DIR}/env.cpp \
+		  ${SRC_DIR}/ir.cpp
+JCC_SRC = ${JCC_LIB} ${SRC_DIR}/main.cpp
+JCC_OBJ = $(patsubst ${SRC_DIR}/%.cpp, ${BUILD_DIR}/%.o, ${JCC_SRC})
 
 JCC_TEST = jcc_test
-JCC_TEST_HDR = ${HDR} $(wildcard test/*.h)
+JCC_TEST_HDR = ${HDR} $(wildcard ${TEST_DIR}/*.h)
 # make sure we link tester.cpp first
 JCC_TEST_SRC = ${TEST_DIR}/tester.cpp \
 			   $(filter-out ${TEST_DIR}/tester.cpp, $(wildcard ${TEST_DIR}/*.cpp)) \

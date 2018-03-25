@@ -2,29 +2,15 @@
 
 #include "common.h"
 
+// C Type System Model
+
+
 // TODO: type compatibility for function
 // TODO: type equal-ness
 // TODO: type incomplete-ness
 // TODO: type lvalue
 
 // enum ETypeOperations
-/*
-{
-    TOp_ADD = 1,
-    TOp_SUB = (1 << 1),
-    TOp_INC = (1 << 2),
-    TOp_DEC = (1 << 3),
-    TOp_MUL = (1 << 4),
-    TOp_DIV = (1 << 5),
-    TOp_MOD = (1 << 6),
-    TOp_EVAL = (1 << 7),
-    TOp_ADDR = (1 << 8),
-    TOp_ASSIGN = (1 << 9),
-    TOp_INDEX = (1 << 10),
-    TOp_OFFSET = (1 << 11),
-    TOp_CALL = (1 << 12)
-};
-*/
 
 enum ETypeProperty
 {
@@ -367,6 +353,7 @@ class ArrayType : public DerivedType
     // from Stringable
     virtual std::string toString() const;
 };
+// I really want to name it calling-protocol!
 class FuncType : public DerivedType
 {
     friend TypeUtil;
@@ -397,7 +384,12 @@ class TagType : public Type
 
     StringRef _name;
     ETypeClass _impl_type;  // expected impl type
-    const Type *_impl;
+
+    // const Type *_impl;
+    union {
+        const Type *_holder;
+        const Type **_viewer;
+    } _impl;
 
    public:
     TagType(ETypeClass impl_type, StringRef name)
@@ -450,6 +442,7 @@ class EnumConstType : public IntegralType
     // from Stringable
     virtual std::string toString() const;
 };
+// Only exists in env.tag_symbol.tag_type.impl_type
 class EnumTypeImpl : public IntegralType
 {
     friend TypeUtil;
@@ -472,6 +465,7 @@ class EnumTypeImpl : public IntegralType
     // from Stringable
     virtual std::string toString() const;
 };
+// Only exists in env.tag_symbol.tag_type.impl_type
 class StructTypeImpl : public Type
 {
     friend TypeUtil;
@@ -494,6 +488,7 @@ class StructTypeImpl : public Type
     // from Stringable
     virtual std::string toString() const;
 };
+// Only exists in env.tag_symbol.tag_type.impl_type
 class TypedefTypeImpl : public Type
 {
     friend TypeUtil;

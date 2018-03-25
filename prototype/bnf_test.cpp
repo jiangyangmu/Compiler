@@ -1,4 +1,4 @@
-#include "../test/tester.h"
+#include "../testing/tester.h"
 
 #include "bnf.h"
 

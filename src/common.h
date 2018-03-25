@@ -106,7 +106,7 @@ class StringRef
         begin = data;
         end = data + n;
     }
-    StringRef & operator=(const char *data)
+    StringRef &operator=(const char *data)
     {
         return (*this = StringRef(data));
     }
@@ -238,6 +238,40 @@ class TreeLike
     {
         return parent_;
     }
+    T *leftSibling() const
+    {
+        if (isRoot())
+            return nullptr;
+        size_t me = 0;
+        for (auto child : children)
+        {
+            if (child == this)
+                break;
+            else
+                ++me;
+        }
+        if (me > 0 && me < children.size() && children[me] == this)
+            return children[me - 1];
+        else
+            return nullptr;
+    }
+    T *rightSibling() const
+    {
+        if (isRoot())
+            return nullptr;
+        size_t me = 0;
+        for (auto child : children)
+        {
+            if (child == this)
+                break;
+            else
+                ++me;
+        }
+        if (me + 1 < children.size() && children[me] == this)
+            return children[me + 1];
+        else
+            return nullptr;
+    }
     std::vector<T *> const &getChildren() const
     {
         return children;
@@ -257,6 +291,30 @@ class TreeLike
         return children.back();
     }
     T *getChild(size_t i) const
+    {
+        assert(i < children.size());
+        return children[i];
+    }
+
+    std::vector<T *> const &all() const
+    {
+        return children;
+    }
+    size_t count() const
+    {
+        return children.size();
+    }
+    T *first() const
+    {
+        assert(!children.empty());
+        return children.front();
+    }
+    T *last() const
+    {
+        assert(!children.empty());
+        return children.back();
+    }
+    T *at(size_t i) const
     {
         assert(i < children.size());
         return children[i];
@@ -329,7 +387,6 @@ class Stringable
         return "Stringable::null";
     }
 };
-
 
 // Min, Max
 // AlignUp(align, value), AlignDown(align, value)
@@ -468,12 +525,12 @@ using namespace std;
         assert(false);                                      \
     } while (0)
 
-#define IRError(msg)                                        \
-    do                                                      \
-    {                                                       \
-        cerr << "IR: " << msg << " at " << __FILE__ << ':'  \
-             << to_string(__LINE__) << endl;                \
-        assert(false);                                      \
+#define IRError(msg)                                       \
+    do                                                     \
+    {                                                      \
+        cerr << "IR: " << msg << " at " << __FILE__ << ':' \
+             << to_string(__LINE__) << endl;               \
+        assert(false);                                     \
     } while (0)
 
 #endif

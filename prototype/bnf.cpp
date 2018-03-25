@@ -56,14 +56,38 @@ void A::add_child(A *child)
     }
 }
 
-A *A::Create(Type type)
+A *A::Create(Type type, const char *name)
 {
     A *a = new A;
     a->type = type;
     a->prop.ctype = nullptr;
     a->prop.tk = '\0';
+    assert(name);
+    a->prop.name = name;
     a->tree.right_neigh = a->tree.first_child = a->tree.last_child = nullptr;
     return a;
+}
+std::string A::DebugString()
+{
+    std::string s;
+
+    s += "(";
+    s += prop.name;
+    s += " ";
+    if (type == A_TERMINAL)
+    {
+        s += prop.tk;
+    }
+    else
+    {
+        for (A *child = tree.first_child; child;
+             child = child->tree.right_neigh)
+        {
+            s += child->DebugString();
+        }
+    }
+    s += ")";
+    return s;
 }
 
 void P::MD::add_child(P::MD *child)
@@ -445,7 +469,7 @@ A *generate_ast(N *n, TokenIterator &T)
     }
     else if (n->type == N::TERMINAL)
     {
-        A *a = A::Create(A::A_TERMINAL);
+        A *a = A::Create(A::A_TERMINAL, BNF_NAME(n).data());
 
         a->prop.tk = T.next();
 
@@ -453,7 +477,10 @@ A *generate_ast(N *n, TokenIterator &T)
     }
     else
     {
-        A *a = A::Create(A::A_NON_TERMINAL);
+        if (n->po.eps && !T.has())
+            return nullptr;
+
+        A *a = A::Create(A::A_NON_TERMINAL, BNF_NAME(n).data());
 
         std::vector<N *> vn = n->po.flatten(T.peek());
 
@@ -473,7 +500,7 @@ void BNFDebugger::register_node(N &n, std::string name)
 {
     m[&n] = std::move(name);
 }
-std::string BNFDebugger::get_name(N *n)
+const std::string &BNFDebugger::get_name(N *n)
 {
     return m[n];
 }

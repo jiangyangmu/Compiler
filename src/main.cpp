@@ -10,7 +10,6 @@ using namespace std;
 
 #include "lexer.h"
 #include "parser.h"
-#include "codegen.h"
 
 static bool lflag = false; // show Lexer output
 static bool sflag = false; // show Syntax output

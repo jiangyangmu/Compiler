@@ -1,17 +1,5 @@
 #pragma once
 
-// #include "codegen.h"
-// #include "env.h"
-#include "common.h"
-#include "env.h"
-#include "lexer.h"
-#include "symbol.h"
-#include "type.h"
-
-#include <iostream>
-
-// TODO: support sn_const_expression
-
 enum ESyntaxNodeType
 {
     SN_NONE = 0UL,
@@ -83,14 +71,28 @@ enum ESyntaxNodeType
 
 struct ParserParams
 {
-    Environment *env;
-    int pass;
-    StringRef *begin, *end;
+    SymbolTable *symtab;
+    enum
+    {
+        GOAL_symbol_binding,
+        GOAL_type_checking
+    } goal;
+};
+
+struct NodeMD {
+    TokenType storage;
+    Type *type;
+    StringRef *name;
+    Symbol *symbol;
+    SymbolTable *symtab;
 };
 
 class SyntaxNode : public TreeLike<SyntaxNode>, public Stringable
 {
     ESyntaxNodeType node_type_;
+
+   public:
+    NodeMD info;
 
    public:
     // Identification
@@ -137,32 +139,19 @@ class sn_external_declaration : public SyntaxNode
 };
 class sn_function_definition : public SyntaxNode
 {
-    Environment *body_env_;
-
-    // Annotation
-   public:
-    Type *type_info_;
-    StringRef name_info_;
-    IRCode code_info_;
-
    public:
     sn_function_definition() : SyntaxNode(SN_FUNCTION_DEFINITION) {}
     static sn_function_definition *parse(Lexer &lex,
                                          sn_declaration_specifiers *s,
                                          sn_declarator *d);
 
-    // Visitor
     virtual void visit(ParserParams &params);
     virtual void afterChildren(ParserParams &params);
-    // special impl
     void beforeParamList(ParserParams &params);
     void afterParamList(ParserParams &params);
 };
 class sn_declaration : public SyntaxNode
 {
-   public:
-    std::vector<Type *> type_infos_;
-
    public:
     sn_declaration() : SyntaxNode(SN_DECLARATION) {}
     static sn_declaration *parse(Lexer &lex);
@@ -186,11 +175,6 @@ class sn_declaration_list : public SyntaxNode
 class sn_init_declarator : public SyntaxNode
 {
    public:
-    Type *type_info_;
-    StringRef name_info_;
-    // IRCode code_info_;
-
-   public:
     sn_init_declarator() : SyntaxNode(SN_INIT_DECLARATOR) {}
     static sn_init_declarator *parse(Lexer &lex);
 
@@ -211,11 +195,6 @@ class sn_init_declarator_list : public SyntaxNode
 class sn_declarator : public SyntaxNode
 {
    public:
-    // Annotation
-    Type *type_info_;
-    StringRef name_info_;
-
-   public:
     sn_declarator() : SyntaxNode(SN_DECLARATOR) {}
     static sn_declarator *parse(Lexer &lex);
 
@@ -224,11 +203,6 @@ class sn_declarator : public SyntaxNode
 };
 class sn_direct_declarator : public SyntaxNode
 {
-   public:
-    // Annotation
-    Type *type_info_;
-    StringRef name_info_;
-
    public:
     sn_direct_declarator() : SyntaxNode(SN_DIRECT_DECLARATOR) {}
     static sn_direct_declarator *parse(Lexer &lex);
@@ -239,9 +213,6 @@ class sn_direct_declarator : public SyntaxNode
 class sn_abstract_declarator : public SyntaxNode
 {
    public:
-    Type *type_info_;
-
-   public:
     sn_abstract_declarator() : SyntaxNode(SN_ABSTRACT_DECLARATOR) {}
     static sn_abstract_declarator *parse(Lexer &lex);
 
@@ -250,9 +221,6 @@ class sn_abstract_declarator : public SyntaxNode
 };
 class sn_direct_abstract_declarator : public SyntaxNode
 {
-   public:
-    Type *type_info_;
-
    public:
     sn_direct_abstract_declarator() : SyntaxNode(SN_DIRECT_ABSTRACT_DECLARATOR)
     {
@@ -287,9 +255,6 @@ class sn_parameter_type_list : public SyntaxNode
     bool varlist;
 
    public:
-    Type *type_info_;
-
-   public:
     sn_parameter_type_list() : SyntaxNode(SN_PARAMETER_TYPE_LIST) {}
     static sn_parameter_type_list *parse(Lexer &lex);
 
@@ -298,9 +263,6 @@ class sn_parameter_type_list : public SyntaxNode
 };
 class sn_parameter_list : public SyntaxNode
 {
-   public:
-    Type *type_info_;
-
    public:
     sn_parameter_list() : SyntaxNode(SN_PARAMETER_LIST) {}
     static sn_parameter_list *parse(Lexer &lex);
@@ -311,10 +273,6 @@ class sn_parameter_list : public SyntaxNode
 class sn_parameter_declaration : public SyntaxNode
 {
    public:
-    Type *type_info_;
-    StringRef name_info_;
-
-   public:
     sn_parameter_declaration() : SyntaxNode(SN_PARAMETER_DECLARATION) {}
     static sn_parameter_declaration *parse(Lexer &lex);
 
@@ -324,11 +282,6 @@ class sn_parameter_declaration : public SyntaxNode
 // specifier
 class sn_declaration_specifiers : public SyntaxNode
 {
-    // Annotation
-   public:
-    Type *type_info_;
-    TokenType storage_info_;
-
    public:
     sn_declaration_specifiers() : SyntaxNode(SN_DECLARATION_SPECIFIERS) {}
     static sn_declaration_specifiers *parse(Lexer &lex);
@@ -338,10 +291,6 @@ class sn_declaration_specifiers : public SyntaxNode
 };
 class sn_specifier_qualifier_list : public SyntaxNode
 {
-    // Annotation
-   public:
-    Type *type_info_;
-
    public:
     sn_specifier_qualifier_list() : SyntaxNode(SN_SPECIFIER_QUALIFIER_LIST) {}
     static sn_specifier_qualifier_list *parse(Lexer &lex);
@@ -352,9 +301,6 @@ class sn_specifier_qualifier_list : public SyntaxNode
 class sn_storage_specifier : public SyntaxNode
 {
    public:
-    TokenType t;
-
-   public:
     sn_storage_specifier() : SyntaxNode(SN_STORAGE_SPECIFIER) {}
     static sn_storage_specifier *parse(Lexer &lex);
 
@@ -363,9 +309,6 @@ class sn_storage_specifier : public SyntaxNode
 };
 class sn_type_qualifier : public SyntaxNode
 {
-   public:
-    TokenType t;
-
    public:
     sn_type_qualifier() : SyntaxNode(SN_TYPE_QUALIFIER) {}
     static sn_type_qualifier *parse(Lexer &lex);
@@ -385,13 +328,6 @@ class sn_type_qualifier_list : public SyntaxNode
 class sn_type_specifier : public SyntaxNode
 {
    public:
-    TokenType t;
-
-    // Annotation
-   public:
-    Type *type_info_;
-
-   public:
     sn_type_specifier() : SyntaxNode(SN_TYPE_SPECIFIER) {}
     static sn_type_specifier *parse(Lexer &lex);
 
@@ -400,14 +336,6 @@ class sn_type_specifier : public SyntaxNode
 };
 class sn_struct_union_specifier : public SyntaxNode
 {
-    TokenType t;  // struct or union
-                  // sn_identifier *tag; [optional]
-                  // sn_struct_declaration_list *sdl; [optional]
-
-    // Annotation
-   public:
-    Type *type_info_;
-
    public:
     sn_struct_union_specifier() : SyntaxNode(SN_STRUCT_UNION_SPECIFIER) {}
     static sn_struct_union_specifier *parse(Lexer &lex);
@@ -421,25 +349,18 @@ class sn_struct_union_specifier : public SyntaxNode
 };
 class sn_enum_specifier : public SyntaxNode
 {
-    // Annotation
-   public:
-    Type *type_info_;
-
    public:
     sn_enum_specifier() : SyntaxNode(SN_ENUM_SPECIFIER) {}
     static sn_enum_specifier *parse(Lexer &lex);
 
     // Visitor
     virtual void visit(ParserParams &params);
-    virtual void beforeDefinition(ParserParams &params);
+    virtual void afterTag(ParserParams &params);
     virtual void afterChildren(ParserParams &params);
 };
 // struct/union/enum definition
 class sn_struct_declaration : public SyntaxNode
 {
-   public:
-    vector<Symbol *> symbols_info_;
-
    public:
     sn_struct_declaration() : SyntaxNode(SN_STRUCT_DECLARATION) {}
     static sn_struct_declaration *parse(Lexer &lex);
@@ -458,10 +379,6 @@ class sn_struct_declaration_list : public SyntaxNode
 };
 class sn_struct_declarator : public SyntaxNode
 {
-   public:
-    Type *type_info_;
-    StringRef name_info_;
-
    public:
     sn_struct_declarator() : SyntaxNode(SN_STRUCT_DECLARATOR) {}
     static sn_struct_declarator *parse(Lexer &lex);
@@ -509,9 +426,6 @@ class sn_enumeration_constant : public SyntaxNode
 class sn_type_name : public SyntaxNode
 {
    public:
-    Type *type_info_;
-
-   public:
     sn_type_name() : SyntaxNode(SN_TYPE_NAME) {}
     static sn_type_name *parse(Lexer &lex);
 
@@ -520,9 +434,6 @@ class sn_type_name : public SyntaxNode
 };
 class sn_pointer : public SyntaxNode
 {
-   public:
-    Type *type_info_;
-
    public:
     sn_pointer() : SyntaxNode(SN_POINTER) {}
     static sn_pointer *parse(Lexer &lex);
@@ -534,10 +445,6 @@ class sn_identifier : public SyntaxNode
 {
     Token id;
 
-    // Annotation
-   public:
-    StringRef name_info_;
-
    public:
     sn_identifier() : SyntaxNode(SN_IDENTIFIER) {}
     static sn_identifier *parse(Lexer &lex);
@@ -547,10 +454,6 @@ class sn_identifier : public SyntaxNode
 };
 class sn_identifier_list : public SyntaxNode
 {
-    // Annotation
-   public:
-    Type *type_info_;
-
    public:
     sn_identifier_list() : SyntaxNode(SN_IDENTIFIER_LIST) {}
     static sn_identifier_list *parse(Lexer &lex);
@@ -560,10 +463,6 @@ class sn_identifier_list : public SyntaxNode
 };
 class sn_typedef_name : public SyntaxNode
 {
-    // Annotation
-   public:
-    Type *type_info_;
-
    public:
     sn_typedef_name() : SyntaxNode(SN_TYPEDEF_NAME) {}
     static sn_typedef_name *parse(Lexer &lex);
@@ -600,7 +499,7 @@ class sn_label_statement : public sn_statement
     // };
     // sn_statement *stat;
    public:
-    StringRef label; // used by case, default
+    StringRef label;  // used by case, default
 
    public:
     sn_label_statement() : sn_statement(SN_LABEL_STATEMENT) {}
@@ -611,10 +510,6 @@ class sn_label_statement : public sn_statement
 };
 class sn_compound_statement : public sn_statement
 {
-    // sn_declaration_list *dl;
-    // sn_statement_list *sl;
-    Environment *body_env_;
-
    public:
     sn_compound_statement() : sn_statement(SN_COMPOUND_STATEMENT) {}
     static sn_compound_statement *parse(Lexer &lex);
@@ -627,8 +522,6 @@ class sn_compound_statement : public sn_statement
 };
 class sn_expression_statement : public sn_statement
 {
-    // sn_expression *expr;
-
    public:
     sn_expression_statement() : sn_statement(SN_EXPRESSION_STATEMENT) {}
     static sn_statement *parse(Lexer &lex);
@@ -647,7 +540,7 @@ class sn_selection_statement : public sn_statement
 
    public:
     // TODO: fully support switch expr type (e.g. long)
-    std::vector< std::pair<int, StringRef> > value_to_label;
+    std::vector<std::pair<int, StringRef> > value_to_label;
     StringRef default_label;
 
    public:
@@ -660,12 +553,12 @@ class sn_selection_statement : public sn_statement
 };
 class sn_iteration_statement : public sn_statement
 {
-    TokenType t;  // while, do, for
-                  // sn_expression *expr;
-                  // sn_expression *expr2;
-                  // sn_expression *expr3;
-                  // sn_statement *stmt;
-    bool pre, mid, post; // used by for
+    TokenType t;          // while, do, for
+                          // sn_expression *expr;
+                          // sn_expression *expr2;
+                          // sn_expression *expr3;
+                          // sn_statement *stmt;
+    bool pre, mid, post;  // used by for
     StringRef *begin, *end;
 
    public:
@@ -957,35 +850,4 @@ class sn_const_expression : public sn_expression
 
     // Visitor
     virtual void afterChildren(ParserParams &params);
-};
-
-void __debugPrint(string &&s);
-
-// Pass 0: type declaration & object definition
-// Pass 1: type derivation
-// Pass 2: code generation
-class Parser
-{
-    Lexer &lex;
-    sn_translation_unit *tu;
-    ParserParams params;
-
-   public:
-    Parser(Lexer &l) : lex(l) {}
-    void parse();
-    void emit()
-    {
-        IR_to_x64 t;
-        params.env->traverse(t);
-        std::cout << t.emit() << std::endl;
-    }
-
-    void DebugPrintEnvironment()
-    {
-        params.env->debugPrint();
-    }
-    void DebugPrintSyntaxTree()
-    {
-        __debugPrint(tu->toString());
-    }
 };

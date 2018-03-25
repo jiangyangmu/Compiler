@@ -66,3 +66,45 @@ class Tester
             _has_error = true;                          \
         }                                               \
     } while (false)
+
+#define EXPECT_EQ_SET(actual, expect)                                 \
+    do                                                                \
+    {                                                                 \
+        auto __e = (expect);                                          \
+        auto __a = (actual);                                          \
+        bool _local_has_error = false;                                \
+        for (auto ei : __e)                                           \
+        {                                                             \
+            if (__a.find(ei) == __a.end())                            \
+            {                                                         \
+                std::cerr << "removing: " << (ei) << std::endl;       \
+                _has_error = true;                                    \
+                _local_has_error = true;                              \
+            }                                                         \
+        }                                                             \
+        for (auto ai : __a)                                           \
+        {                                                             \
+            if (__e.find(ai) == __e.end())                            \
+            {                                                         \
+                std::cerr << "adding: " << (ai) << std::endl;         \
+                _has_error = true;                                    \
+                _local_has_error = true;                              \
+            }                                                         \
+        }                                                             \
+        if (_local_has_error)                                         \
+        {                                                             \
+            std::cerr << "Expect: {";                                 \
+            for (auto ei : __e)                                       \
+            {                                                         \
+                std::cerr << ei << ',';                               \
+            }                                                         \
+            std::cerr << '}' << std::endl;                            \
+            std::cerr << "Actual: {";                                 \
+            for (auto ai : __a)                                       \
+            {                                                         \
+                std::cerr << ai << ',';                               \
+            }                                                         \
+            std::cerr << '}' << " at " << __FILE__ << ":" << __LINE__ \
+                      << std::endl;                                   \
+        }                                                             \
+    } while (false)

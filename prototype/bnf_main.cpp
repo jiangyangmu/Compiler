@@ -21,12 +21,12 @@ int main(void)
     add = '+';
     mul = '*';
     term = fact & term_tail;
-    term_tail = EPSILON | add & term_tail;
+    term_tail = EPSILON | add & fact & term_tail;
 
     expr = term & expr_tail;
-    expr_tail = EPSILON | mul & expr_tail;
+    expr_tail = EPSILON | mul & term & expr_tail;
 
-    start = expr | EPSILON;
+    start = expr;
 
     compute_first_follow(g);
 
@@ -34,6 +34,8 @@ int main(void)
 
     TokenIterator t("1+1*1+1");
     A *a = generate_ast(&start, t);
+
+    std::cout << a->DebugString() << std::endl;
 
     return 0;
 }

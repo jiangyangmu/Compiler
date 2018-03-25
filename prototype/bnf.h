@@ -16,7 +16,6 @@ typedef std::set<char> TokenSet;
 struct N;
 typedef std::vector<N *> Grammer;
 
-// TODO: better iteration
 struct P
 {
     struct MD
@@ -183,6 +182,7 @@ struct A
     {
         C_Type *ctype;
         Token tk;
+        const char *name;
     } prop;
 
     // non-terminal
@@ -195,7 +195,9 @@ struct A
 
     void add_child(A *child);
 
-    static A *Create(Type type);
+    static A *Create(Type type, const char *name);
+
+    std::string DebugString();
 };
 
 PAND operator&(N &n1, N &n2);
@@ -248,7 +250,7 @@ class BNFDebugger
     static BNFDebugger instance;
 
     void register_node(N &n, std::string name);
-    std::string get_name(N *n);
+    const std::string &get_name(N *n);
     std::string guess_first_follow(void *addr);
     void print_grammer() const;
     void clear();
@@ -331,6 +333,7 @@ class BNFDebugger
     } while (false)
 #define BNF_RESET() BNFDebugger::instance.clear()
 #define BNF_PRINT_GRAMMER() BNFDebugger::instance.print_grammer()
+#define BNF_NAME(n) BNFDebugger::instance.get_name(n)
 #define BNF_GUESS(first_follow) \
     BNFDebugger::instance.guess_first_follow(first_follow)
 std::ostream &operator<<(std::ostream &o, P::MD &m);

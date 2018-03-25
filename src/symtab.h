@@ -3,20 +3,12 @@
 #include "common.h"
 // #include "lexer.h"
 // #include "type.h"
-#include "symbol.h"
-// #include "codegen.h"
 #include "ir.h"
+#include "symbol.h"
 
-// Environment do:
-//
-// 0. manage symbols
-//
-// 1. manage objects and their locations
-// 2. manage temporaries and their locations
-//    (temporary count is computed by sn_expression)
-// 3. manage constants and their locations
-//
-class Environment : public TreeLike<Environment>
+// s/Environment/SymbolTable/
+
+class SymbolTable : public TreeLike<SymbolTable>
 {
     friend class TypeTester;
 
@@ -26,7 +18,7 @@ class Environment : public TreeLike<Environment>
     IRStorage *storage;
 
    public:
-    Environment(IRStorage *s) : id(idgen++), storage(s) {}
+    SymbolTable(IRStorage *s) : id(idgen++), storage(s) {}
     void debugPrint() const;
     std::string DebugString() const;
 
@@ -38,7 +30,7 @@ class Environment : public TreeLike<Environment>
     // Symbol *recursiveFindTypename(StringRef name) const;
     void addSymbol(Symbol *s);
 
-    static const Symbol *SameNameSymbolInFileScope(const Environment *env,
+    static const Symbol *SameNameSymbolInFileScope(const SymbolTable *env,
                                                    const Type *type,
                                                    const StringRef name);
 
