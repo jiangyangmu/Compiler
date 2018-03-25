@@ -39,3 +39,6 @@ tags
 compiler
 *.sublime-project
 *.sublime-workspace
+tmp/
+build/
+old/
