@@ -1,7 +1,7 @@
 EBNF parser
 
 TODO:
-    1. support match-only and run-only
+    1. Finish API & core algorithms
 
 + terms
 
@@ -29,7 +29,7 @@ TODO:
 
     meta grammer: how we want to describe grammer. grammer of the grammer.
 
-+ grammer syntax
++ the elements of grammer
 
     terminal symbol:
       <symb> -> "..."
@@ -41,7 +41,7 @@ TODO:
     NOTE: <code> should be removable (all children of AND,OR,OPT,REP should be
     solid, that is, contains <symb> in self or child)
 
-+ code syntax
++ preview
 
     internal:
       P -> (AND P' ...)   P' = {not CODE-only}
@@ -51,7 +51,7 @@ TODO:
     leaf:
       P -> (SYM "...")
       P -> (CODE {...})
-      P -> (PROD P')      P' = {not CODE}
+      P -> P'             P' = {PROD}
 
     output ast:
       (P1
@@ -61,28 +61,67 @@ TODO:
         (P4 (CODE {...})
             (SYM "...")))
 
-+ code interface
++ API
 
-    // grammer definition macros
-    API gm_begin(PL, name...) \
-        Production name...; \
-        ProductionList PL = {name...}
-    API gm_end(PL) \
-        sanity_check(PL); \
-        compute_FIRST_FOLLOW(PL)
+    Production
+      <fields>
+        type : {
+            SYM, CODE, PROD,                // syntax node
+            AND, OR, OPT, REP               // structure node
+        }
+        data : [
+            symbol      : Token             // for SYM
+            code        : Function          // for CODE
+            production  : Production        // for PROD
+            children    : Production[]      // for AND,OR,OPT,REP
+        ]
+        FIRST : TokenSet
+        FOLLOW : TokenSet
+      <methods>
+        member access
 
-    // grammer matching
-    API match(ProductionList PL, TokenList TL) -> Ast
-    API run(ProductionList PL, TokenList TL)
-    API match_run(ProductionList PL, TokenList TL) -> Ast
-    {
-        return match_run_impl(PL[0], TL, null);
-    }
+    ProductionTreeView - wrapper of Production, easy do tree operation (iterate, print...)
+      <methods>
+        iterate postfix order
+        print/str
 
+    ProductionListView - wrapper of Production[], easy do list operation (adj-iterate, filter, count,...)
+      <methods>
+        iterate adjacent productions i,j
+        iterate
+        filter
+        count
+        print/str
+
+    ProductionFactory - manage all production objects, the only class that can create production.
+
+    PRODUCTION - holder of production object, easy do dynamic creation and referencing.
+      <fields>
+        object : Production
+
+    ProductionBuilder
+      <methods>
+        ASSIGN(PRODUCTION left, PRODUCTION right) <z------- TODO --------->
+        SYM(Token symbol) -> PRODUCTION
+        CODE(...code) -> PRODUCTION
+        AND(...children) -> PRODUCTION
+        OR(...children) -> PRODUCTION
+        OPT(...children) -> PRODUCTION
+        REP(...children) -> PRODUCTION
+
+    Grammer
+      <fields>
+        start : Production&
+        prods : Production[]
+      <methods>
+        // add production
+        // compile (sanity_check, compute_FIRST_FOLLOW)
+        // match (gen_Ast, run_CODE)
+
+    <z------- TODO --------->
     // customize Ast node (e.g. add property)
-    API class AstFactory;
 
-+ code interface: impl
++ core algorithms
 
     // 1. before match
     sanity_check(ProductionList PL)
@@ -112,6 +151,12 @@ TODO:
     {
         D <- {}
         for P in PL:
+
+          // first rule
+          D += (P.FIRST <- P.production.FIRST)
+          // follow rule
+          D += (P.FOLLOW <- P.production.FOLLOW)
+
           for P' in P.production_tree():
             if P' is SYM:
 
@@ -124,10 +169,7 @@ TODO:
 
             elif P' is PROD:
 
-                // first rule
-                D += (P'.FIRST <- P'.production.FIRST)
-                // follow rule
-                D += (P'.FOLLOW <- P'.production.FOLLOW)
+                continue
 
             elif P' is AND:
 
@@ -223,7 +265,7 @@ TODO:
         elif P is OPT:
 
             if match_FIRST(P.child, TL.peek()):
-                match_run_impl(P.child, TL, &A')
+                match_run_impl(P.child, TL, A')
             return null
 
         elif P is REP:
@@ -266,7 +308,7 @@ TODO:
                       (SYM "+")
                       (PROD fact)
                       (CODE { emit("+"); })))
-        fact  ->  (OR
+        fact  ->  (AND
                     (SYM "1-9")
                     (CODE { emit($0.symbol); }))
 

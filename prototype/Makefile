@@ -1,16 +1,19 @@
 .PHONY: run debug
 
-run : bnf
-	./bnf
+run : parser
+	./parser
 
-debug : bnfd
-	lldb bnfd
+test : parser_test
+	./parser_test
 
-bnf : bnf.cpp bnf_main.cpp
-	clang++ -std=c++11 bnf.cpp bnf_main.cpp -o bnf
+debug : parser_debug
+	lldb parser_debug
 
-bnfd : bnf.cpp bnf_main.cpp
-	clang++ -std=c++11 -g bnf.cpp bnf_main.cpp -o bnfd
+parser : parser.cpp parser_main.cpp
+	clang++ -std=c++11 parser.cpp parser_main.cpp -o parser
 
-bnf_test : ../test/tester.cpp bnf.cpp bnf_test.cpp
-	clang++ -std=c++11 ../test/tester.cpp bnf.cpp bnf_test.cpp -o bnf_test
+parser_debug : parser.cpp parser_main.cpp
+	clang++ -std=c++11 -g parser.cpp parser_main.cpp -o parser_debug
+
+parser_test : ../testing/tester.cpp parser.cpp parser_test.cpp
+	clang++ -std=c++11 ../testing/tester.cpp parser.cpp parser_test.cpp -o parser_test
