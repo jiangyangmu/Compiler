@@ -10,7 +10,15 @@ typedef std::set<Token> TokenSet;
 class TokenIterator
 {
 public:
-    TokenIterator(std::string tokens) : tokens_(tokens), i_(0) {}
+    TokenIterator(std::string tokens)
+        : tokens_(tokens)
+        , i_(0)
+    {
+    }
+    bool has() const
+    {
+        return i_ < tokens_.size();
+    }
     Token peek() const
     {
         assert(i_ < tokens_.size());
@@ -21,6 +29,7 @@ public:
         assert(i_ < tokens_.size());
         return tokens_[i_++];
     }
+
 private:
     std::string tokens_;
     size_t i_;

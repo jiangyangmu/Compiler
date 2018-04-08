@@ -155,7 +155,7 @@ TODO:
           // first rule
           D += (P.FIRST <- P.production.FIRST)
           // follow rule
-          D += (P.FOLLOW <- P.production.FOLLOW)
+          D += (P.production.FOLLOW <- P.FOLLOW)
 
           for P' in P.production_tree():
             if P' is SYM:
@@ -177,6 +177,7 @@ TODO:
                 // first rule
                 D += (P'.FIRST <- solid_children[0].FIRST)
                 // follow rule
+                D += (solid_children[n].FOLLOW <- P'.FOLLOW)
                 for P1, P2 in solid_children.adjacent_iterator:
                     D += (P1.FOLLOW <- P2.FIRST)
 

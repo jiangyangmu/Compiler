@@ -8,8 +8,7 @@
 
 #include <iostream>
 template <class T>
-void DebugPrintValue(T & container)
-{
+void DebugPrintValue(T & container) {
     std::cout << '[';
     for (auto & i : container)
     {
@@ -19,8 +18,7 @@ void DebugPrintValue(T & container)
 }
 
 template <class T>
-void DebugPrint(T & container)
-{
+void DebugPrint(T & container) {
     std::cout << '[';
     for (auto & i : container)
     {
@@ -29,7 +27,6 @@ void DebugPrint(T & container)
     std::cout << ']' << std::endl;
 }
 
-
 #define CHECK(x) assert(x)
 #define CHECK_GT(a, b) assert((a) > (b))
 #define CHECK_EQ(a, b) assert((a) == (b))
@@ -37,28 +34,18 @@ void DebugPrint(T & container)
 template <class T>
 class TopoMap {
 public:
-    void add(T t)
-    {
-        if (dependents_.find(t) == dependents_.end())
-            dependents_[t] = {};
-        if (indegree_.find(t) == indegree_.end())
-            indegree_[t] = 0;
-    }
-    void add_dependency(T t, T dependent)
-    {
+    void add_dependency(T t, T dependent) {
         assert(t != dependent);
         dependents_[t].insert(dependent);
+        dependents_.try_emplace(dependent, std::set<T>());
+        indegree_.try_emplace(t, 0);
         indegree_[dependent]++;
-        if (indegree_.find(t) == indegree_.end())
-            indegree_[t] = 0;
     }
-    std::set<T> & dependents(T t)
-    {
+    std::set<T> & dependents(T t) {
         return dependents_[t];
     }
     // dependent last
-    std::vector<T> sort()
-    {
+    std::vector<T> sort() {
         std::vector<T> result;
         std::map<T, int> d1 = indegree_;
         std::map<T, int> d2 = indegree_;
@@ -94,6 +81,7 @@ public:
 
         return result;
     }
+
 private:
     std::map<T, std::set<T>> dependents_;
     std::map<T, int> indegree_;
