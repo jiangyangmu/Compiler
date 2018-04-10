@@ -7,25 +7,23 @@
 typedef char Token;
 typedef std::set<Token> TokenSet;
 
-class TokenIterator
-{
+class TokenIterator {
 public:
     TokenIterator(std::string tokens)
         : tokens_(tokens)
-        , i_(0)
-    {
+        , i_(0) {
     }
-    bool has() const
-    {
+    void reset() {
+        i_ = 0;
+    }
+    bool has() const {
         return i_ < tokens_.size();
     }
-    Token peek() const
-    {
+    Token peek() const {
         assert(i_ < tokens_.size());
         return tokens_[i_];
     }
-    Token next()
-    {
+    Token next() {
         assert(i_ < tokens_.size());
         return tokens_[i_++];
     }

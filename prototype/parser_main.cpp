@@ -4,9 +4,11 @@
 
 typedef ProductionBuilder PB;
 
-void emit(char c)
-{
-    std::cout << c << ' ';
+void emit(char c) {
+    if (c == '\n')
+        std::cout << c;
+    else
+        std::cout << c << ' ';
 }
 
 int main(int argc, char * argv[])
@@ -21,7 +23,11 @@ int main(int argc, char * argv[])
         ProductionFactory::CreateWithName(Production::PROD, "fact");
 
     start =
-        PB::AND(expr, PB::CODE([] { emit('\n'); }));
+        PB::AND(expr,
+                PB::CODE([](CodeContext *c) {
+                    emit('\n');
+                    if (c)
+                        std::cout << c->DebugString() << std::endl; }));
     expr =
         PB::AND(
             term,
@@ -29,7 +35,10 @@ int main(int argc, char * argv[])
                 PB::AND(
                     PB::SYM('*'),
                     term,
-                    PB::CODE([]{ emit('*'); }))));
+                    PB::CODE([](CodeContext *c) {
+                        emit('*');
+                        if (c)
+                            std::cout << c->DebugString() << std::endl; }))));
     term =
         PB::AND(
             fact,
@@ -37,11 +46,17 @@ int main(int argc, char * argv[])
                 PB::AND(
                     PB::SYM('+'),
                     fact,
-                    PB::CODE([]{ emit('+'); }))));
+                    PB::CODE([](CodeContext *c) {
+                        emit('+');
+                        if (c)
+                            std::cout << c->DebugString() << std::endl; }))));
     fact =
         PB::AND(
             PB::SYM('1'),
-            PB::CODE([] { emit('1'); }));
+            PB::CODE([](CodeContext *c) {
+                emit('1');
+                if (c)
+                    std::cout << c->DebugString() << std::endl; }));
 
     Grammer g;
     g.add(start);
@@ -52,5 +67,10 @@ int main(int argc, char * argv[])
 
     TokenIterator tokens("1+1*1+1");
     g.run(tokens);
+
+    tokens.reset();
+    Ast *ast = g.match(tokens);
+
+    std::cout << "Ast: " << ast->DebugString() << std::endl;
     return 0;
 }

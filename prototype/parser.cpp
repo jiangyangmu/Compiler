@@ -14,7 +14,7 @@ const Token & Production::symbol() const {
     assert(type_ == SYM);
     return symbol_;
 }
-std::function<void()> & Production::code() {
+std::function<CodeFunc> & Production::code() {
     assert(type_ == CODE);
     return code_;
 }
@@ -376,7 +376,7 @@ void __run_impl(Production & p, TokenIterator & ti) {
             __run_impl(p.production(), ti);
             break;
         case Production::CODE:
-            p.code()();
+            p.code()(nullptr);
             break;
         case Production::AND:
             for (Production & child : ProductionListView(p))
@@ -398,7 +398,8 @@ void __run_impl(Production & p, TokenIterator & ti) {
             assert(matched);
             break;
         case Production::OPT:
-            if (ti.has() && __match_FIRST(ProductionListView(p).first(), ti.peek()))
+            if (ti.has() &&
+                __match_FIRST(ProductionListView(p).first(), ti.peek()))
             {
                 for (Production & child : ProductionListView(p))
                 {
@@ -407,7 +408,8 @@ void __run_impl(Production & p, TokenIterator & ti) {
             }
             break;
         case Production::REP:
-            while (ti.has() && __match_FIRST(ProductionListView(p).first(), ti.peek()))
+            while (ti.has() &&
+                   __match_FIRST(ProductionListView(p).first(), ti.peek()))
             {
                 for (Production & child : ProductionListView(p))
                 {
@@ -418,8 +420,86 @@ void __run_impl(Production & p, TokenIterator & ti) {
     }
 }
 
-void Grammer::compile()
-{
+void __build_impl(Production & p,
+                  TokenIterator & ti,
+                  Ast * parent_ast,
+                  CodeContext * parent_context) {
+    assert(parent_ast);
+    assert(parent_context);
+
+    Ast * ast;
+    CodeContext context;
+    bool matched;
+    size_t count;
+    switch (p.type())
+    {
+        case Production::SYM:
+            CHECK_EQ(p.symbol(), ti.next());
+            ast = new Ast(p.name());
+            // PROP token
+            parent_ast->add_child(ast);
+            parent_context->push_child(ast);
+            break;
+        case Production::PROD:
+            ast = new Ast(p.name());
+            context.set_current(ast);
+            __build_impl(p.production(), ti, ast, &context);
+            parent_ast->add_child(ast);
+            parent_context->push_child(ast);
+            break;
+        case Production::CODE:
+            // Code can only access production root node and existing children.
+            p.code()(parent_context);
+            break;
+        case Production::AND:
+            for (Production & child : ProductionListView(p))
+            {
+                __build_impl(child, ti, parent_ast, parent_context);
+            }
+            break;
+        case Production::OR:
+            matched = false;
+            for (Production & child : ProductionListView(p))
+            {
+                if (ti.has() && __match_FIRST(child, ti.peek()))
+                {
+                    __build_impl(child, ti, parent_ast, parent_context);
+                    matched = true;
+                    break;
+                }
+            }
+            assert(matched);
+            break;
+        case Production::OPT:
+            if (ti.has() &&
+                __match_FIRST(ProductionListView(p).first(), ti.peek()))
+            {
+                for (Production & child : ProductionListView(p))
+                {
+                    __build_impl(child, ti, parent_ast, parent_context);
+                }
+            }
+            break;
+        case Production::REP:
+            while (ti.has() &&
+                   __match_FIRST(ProductionListView(p).first(), ti.peek()))
+            {
+                count = p.children().size();
+                for (Production & child : ProductionListView(p))
+                {
+                    --count;
+                    if (count != 0)
+                        parent_context->save();
+                    __build_impl(child, ti, parent_ast, parent_context);
+                    if (count != 0)
+                        parent_context->load();
+                }
+            }
+            break;
+    }
+}
+
+void Grammer::compile() {
     __compute_FIRST_FOLLOW(rules_);
 }
 void Grammer::run(TokenIterator & tokens) {
@@ -432,71 +512,12 @@ void Grammer::run(TokenIterator & tokens) {
         std::cout << "\tFOLLOW: ";
         DebugPrint(P->FOLLOW());
     }
-    __run_impl(*rules_[0].p(), tokens);
+    __run_impl(*rules_[0], tokens);
 }
-
-// Ast * match_run_impl(Production &P, TokenIterator &TL, Ast *AP, AstFactory
-// &factory)
-// {
-//     Ast * A = nullptr;
-//     Ast * ret = nullptr;
-//     switch (P.type())
-//     {
-//         case Production::SYM:
-//             CHECK_EQ(P.symbol(), TL.next());
-//             A = factory.create(P.name(), Ast::SYM, P.symbol());
-//             if (AP == nullptr)
-//             {
-//                 ret = A;
-//             }
-//             else
-//             {
-//                 AP->add_child(*A);
-//             }
-//             break;
-//         case Production::PROD:
-//             A = factory.create(P.name(), Ast::PROD);
-//             match_run_impl(P.production(), TL, A, factory);
-//             if (AP == nullptr)
-//             {
-//                 ret = A;
-//             }
-//             else
-//             {
-//                 AP->add_child(*A);
-//             }
-//             break;
-//         case Production::CODE:
-//             P.code()();
-//             break;
-//         case Production::AND:
-//             for (Production &child : P.children())
-//             {
-//                 match_run_impl(child, TL, AP, factory);
-//             }
-//             break;
-//         case Production::OR:
-//             for (Production &child : P.children())
-//             {
-//                 if (match_FIRST(child, TL.peek()))
-//                 {
-//                     match_run_impl(child, TL, AP, factory);
-//                     break;
-//                 }
-//             }
-//             break;
-//         case Production::OPT:
-//             if (match_FIRST(P.child(), TL.peek()))
-//             {
-//                 match_run_impl(P.child(), TL, AP, factory);
-//             }
-//             break;
-//         case Production::REP:
-//             while (match_FIRST(P.child(), TL.peek()))
-//             {
-//                 match_run_impl(P.child(), TL, AP, factory);
-//             }
-//             break;
-//     }
-//     return ret;
-// }
+Ast * Grammer::match(TokenIterator & tokens) {
+    Ast * root = new Ast(rules_[0]->name());
+    CodeContext context;
+    context.set_current(root);
+    __build_impl(*rules_[0], tokens, root, &context);
+    return root;
+}
