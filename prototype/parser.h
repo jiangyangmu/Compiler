@@ -14,7 +14,7 @@
 class Production;
 typedef std::deque<Production *> ProductionList;
 class CodeContext;
-typedef void CodeFunc(CodeContext *);
+typedef std::function<void(CodeContext *)> CodeObject;
 
 class Production {
     friend class ProductionFactory;
@@ -32,7 +32,7 @@ public:
     }
     Token & symbol();
     const Token & symbol() const;
-    std::function<CodeFunc> & code();
+    CodeObject & code();
     Production & production();
     const Production & production() const;
     ProductionList & children();
@@ -58,7 +58,7 @@ private:
     // data for all types
     // union {
     Token symbol_; // SYM
-    std::function<CodeFunc> code_; // CODE
+    CodeObject code_; // CODE
     Production * production_; // PROD
     ProductionList children_; // AND, OR, OPT, REP
     // };
@@ -154,6 +154,7 @@ private:
 
 class PRODUCTION {
     friend class ProductionFactory;
+    friend class ProductionBuilder;
     Production * p_;
 
 private:
@@ -164,27 +165,8 @@ private:
     }
 
 public:
-    // for grammer
-    PRODUCTION(const PRODUCTION & p)
-        : p_(p.p_) {
-        assert(p_);
-    }
-    void operator=(const PRODUCTION & prod) {
-        assert(p_ && p_->is(Production::PROD));
-        // assert(p_->production_ == nullptr);
-        p_->production_ = prod.p_;
-    }
-    void operator=(PRODUCTION && prod) {
-        assert(p_ && p_->is(Production::PROD));
-        // assert(p_->production_ == nullptr);
-        p_->production_ = prod.p_;
-    }
     // like POD
     // like Production *
-    Production & operator*() {
-        assert(p_);
-        return *p_;
-    }
     Production * operator->() {
         assert(p_);
         return p_;
@@ -196,6 +178,25 @@ public:
     std::string DebugString() const {
         return ProductionTreeView(*p_).str();
     }
+
+    // for API
+    PRODUCTION(const PRODUCTION & p);
+    PRODUCTION(Token symbol);
+    PRODUCTION(CodeObject code);
+    void operator=(const PRODUCTION & prod) {
+        assert(p_ && p_->is(Production::PROD));
+        // assert(p_->production_ == nullptr);
+        p_->production_ = prod.p_;
+    }
+    void operator=(PRODUCTION && prod) {
+        assert(p_ && p_->is(Production::PROD));
+        // assert(p_->production_ == nullptr);
+        p_->production_ = prod.p_;
+    }
+    PRODUCTION operator*(); // REP
+    PRODUCTION operator~(); // OPT
+    friend PRODUCTION operator&(PRODUCTION p1, PRODUCTION p2); // AND
+    friend PRODUCTION operator|(PRODUCTION p1, PRODUCTION p2); // OR
 };
 
 class ProductionFactory {
@@ -216,7 +217,7 @@ public:
         p->symbol_ = symbol;
         return p;
     }
-    static PRODUCTION CODE(std::function<CodeFunc> code) {
+    static PRODUCTION CODE(CodeObject code) {
         PRODUCTION p =
             ProductionFactory::CreateWithName(Production::CODE, "CODE");
         p->code_ = code;
@@ -314,39 +315,40 @@ public:
     // set/get child prop
     // is child exists?
     CodeContext()
-        : current_(nullptr) {
+        : ast_current_(nullptr) {
     }
 
-    Ast * current() {
-        assert(current_);
-        return current_;
+    Ast * ast_current() {
+        assert(ast_current_);
+        return ast_current_;
     }
-    Ast * child(size_t i) {
-        if (i < children_.size())
-            return children_[i];
+    Ast * ast_child(size_t i) {
+        if (i < ast_children_.size())
+            return ast_children_[i];
         else
             return nullptr;
     }
-    void set_current(Ast * current) {
-        current_ = current;
+    void set_ast_current(Ast * current) {
+        ast_current_ = current;
     }
+
     void save() {
-        saved_.push_back(children_.size());
+        saved_.push_back(ast_children_.size());
     }
     void push_child(Ast * child) {
-        children_.push_back(child);
+        ast_children_.push_back(child);
     }
     void load() {
-        assert(!saved_.empty() && saved_.back() <= children_.size());
-        children_.resize(saved_.back());
+        assert(!saved_.empty() && saved_.back() <= ast_children_.size());
+        ast_children_.resize(saved_.back());
         saved_.pop_back();
     }
 
     std::string DebugString() const {
         std::string s;
-        s += "current: " + current_->name();
+        s += "current: " + ast_current_->name();
         s += "\tchildren: [";
-        for (Ast * child : children_)
+        for (Ast * child : ast_children_)
         {
             assert(child);
             s += child->name();
@@ -357,13 +359,16 @@ public:
     }
 
 private:
-    Ast * current_;
-    std::vector<Ast *> children_;
+    Ast * ast_current_;
+    std::vector<Ast *> ast_children_;
     std::vector<size_t> saved_;
 };
 
 class Grammer {
 public:
+    Grammer()
+        : compiled_(false) {
+    }
     void add(PRODUCTION p) {
         rules_.push_back(p);
     }
@@ -373,11 +378,5 @@ public:
 
 private:
     std::vector<PRODUCTION> rules_;
+    bool compiled_;
 };
-
-#define GM_BEGIN(G) Grammer G
-#define GM_ADD(G, name)                                             \
-    PRODUCTION name =                                               \
-        ProductionFactory::CreateWithName(Production::PROD, #name); \
-    (G).add(name)
-#define GM_END(G) (G).compile()

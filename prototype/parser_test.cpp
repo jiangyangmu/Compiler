@@ -1,6 +1,6 @@
 #include "testing/tester.h"
 
-#include "parser.h"
+#include "parser_api.h"
 typedef ProductionBuilder PB;
 
 class ParserTester : public Tester {

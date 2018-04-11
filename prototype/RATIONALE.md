@@ -61,7 +61,7 @@ TODO:
         (P4 (CODE {...})
             (SYM "...")))
 
-+ API
++ Internals
 
     Production
       <fields>
@@ -101,7 +101,7 @@ TODO:
 
     ProductionBuilder
       <methods>
-        ASSIGN(PRODUCTION left, PRODUCTION right) <z------- TODO --------->
+        ASSIGN(PRODUCTION left, PRODUCTION right)
         SYM(Token symbol) -> PRODUCTION
         CODE(...code) -> PRODUCTION
         AND(...children) -> PRODUCTION
@@ -118,8 +118,52 @@ TODO:
         // compile (sanity_check, compute_FIRST_FOLLOW)
         // match (gen_Ast, run_CODE)
 
-    <z------- TODO --------->
-    // customize Ast node (e.g. add property)
+    Ast
+      <fields>
+        name : string
+        prop: [
+            symbol      : Token
+            children    : Ast[]
+            # extension #
+        ]
+      <methods>
+        // get/set prop
+        // get/add child
+
+    CodeContext
+      <fields>
+        current     : Ast
+        children    : Ast[]   <----- REP node make CodeContext children different from Ast children.
+      <methods>
+        // get/set current prop
+        // is child $i exist ($i must be a parsed child)
+        // get/set child $i prop
+
++ API
+
+    #define GM_BEGIN(name)
+    #define GM_ADD(name, prod)
+    #define GM_END(name)
+    #define GM_RUN(name, tokens)
+    #define GM_MATCH(name, tokens, ast)
+
+    PRODUCTION(Token symbol);
+    PRODUCTION(std::function<void(Context*)> code);
+    void operator=(PRODUCTION prod, PRODUCTION expr);
+    PRODUCTION operator&(PRODUCTION p1, PRODUCTION p2); // AND
+    PRODUCTION operator|(PRODUCTION p1, PRODUCTION p2); // OR
+    PRODUCTION operator*(PRODUCTION p); // REP
+    PRODUCTION operator~(PRODUCTION p); // OPT
+
+    #define AST_PROP_BEGIN
+    #define AST_PROP_END
+
+    #define GM_CODE()
+    // In code
+    #define GM_EXIST(i)
+    #define GM_GET_PROD_PROP(i, prop)
+    #define GM_GET_AST_PROP(i, prop)
+    #define GM_SET_AST_PROP(i, prop, value)
 
 + core algorithms
 

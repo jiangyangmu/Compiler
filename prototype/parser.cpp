@@ -14,7 +14,7 @@ const Token & Production::symbol() const {
     assert(type_ == SYM);
     return symbol_;
 }
-std::function<CodeFunc> & Production::code() {
+CodeObject & Production::code() {
     assert(type_ == CODE);
     return code_;
 }
@@ -282,6 +282,47 @@ size_t ProductionListView::count(Production::Type type) const {
     return cnt;
 }
 
+PRODUCTION::PRODUCTION(const PRODUCTION & p)
+    : p_(p.p_) {
+    assert(p_);
+}
+PRODUCTION::PRODUCTION(Token symbol) {
+    p_ = ProductionFactory::CreateWithName(Production::SYM, "SYM").p();
+    p_->symbol_ = symbol;
+}
+PRODUCTION::PRODUCTION(CodeObject code) {
+    p_ = ProductionFactory::CreateWithName(Production::SYM, "SYM").p();
+    p_->code_ = std::move(code);
+}
+PRODUCTION PRODUCTION::operator*() {
+    return ProductionBuilder::REP(*this);
+}
+PRODUCTION PRODUCTION::operator~() {
+    return ProductionBuilder::OPT(*this);
+}
+PRODUCTION operator&(PRODUCTION p1, PRODUCTION p2) {
+    if (p1->is(Production::AND))
+    {
+        p1->children().push_back(p2.p());
+        return p1;
+    }
+    else
+    {
+        return ProductionBuilder::AND(p1, p2);
+    }
+}
+PRODUCTION operator|(PRODUCTION p1, PRODUCTION p2) {
+    if (p1->is(Production::OR))
+    {
+        p1->children().push_back(p2.p());
+        return p1;
+    }
+    else
+    {
+        return ProductionBuilder::AND(p1, p2);
+    }
+}
+
 void __compute_FIRST_FOLLOW(std::vector<PRODUCTION> & rules) {
     TopoMap<TokenSet *> D;
     for (PRODUCTION & root : rules)
@@ -294,7 +335,7 @@ void __compute_FIRST_FOLLOW(std::vector<PRODUCTION> & rules) {
                    << ".FOLLOW" << std::endl;
         D.add_dependency(&root->FOLLOW(), &root->production().FOLLOW());
 
-        for (Production & p : ProductionTreeView(*root))
+        for (Production & p : ProductionTreeView(*root.p()))
         {
             ProductionListView solid_children;
             switch (p.type())
@@ -442,7 +483,7 @@ void __build_impl(Production & p,
             break;
         case Production::PROD:
             ast = new Ast(p.name());
-            context.set_current(ast);
+            context.set_ast_current(ast);
             __build_impl(p.production(), ti, ast, &context);
             parent_ast->add_child(ast);
             parent_context->push_child(ast);
@@ -501,23 +542,26 @@ void __build_impl(Production & p,
 
 void Grammer::compile() {
     __compute_FIRST_FOLLOW(rules_);
+    compiled_ = true;
 }
 void Grammer::run(TokenIterator & tokens) {
+    assert(compiled_);
     for (PRODUCTION & P : rules_)
     {
-        std::cout << P->name() << " = " << ProductionTreeView(*P).str()
+        std::cout << P->name() << " = " << ProductionTreeView(*P.p()).str()
                   << std::endl
                   << "\tFIRST: ";
         DebugPrint(P->FIRST());
         std::cout << "\tFOLLOW: ";
         DebugPrint(P->FOLLOW());
     }
-    __run_impl(*rules_[0], tokens);
+    __run_impl(*rules_[0].p(), tokens);
 }
 Ast * Grammer::match(TokenIterator & tokens) {
+    assert(compiled_);
     Ast * root = new Ast(rules_[0]->name());
     CodeContext context;
-    context.set_current(root);
-    __build_impl(*rules_[0], tokens, root, &context);
+    context.set_ast_current(root);
+    __build_impl(*rules_[0].p(), tokens, root, &context);
     return root;
 }

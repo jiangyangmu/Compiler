@@ -1,8 +1,6 @@
-#include "parser.h"
+#include "parser_api.h"
 
 #include <iostream>
-
-typedef ProductionBuilder PB;
 
 void emit(char c) {
     if (c == '\n')
@@ -11,66 +9,47 @@ void emit(char c) {
         std::cout << c << ' ';
 }
 
+// clang-format off
 int main(int argc, char * argv[])
 {
-    PRODUCTION start =
-        ProductionFactory::CreateWithName(Production::PROD, "start");
-    PRODUCTION expr =
-        ProductionFactory::CreateWithName(Production::PROD, "expr");
-    PRODUCTION term =
-        ProductionFactory::CreateWithName(Production::PROD, "term");
-    PRODUCTION fact =
-        ProductionFactory::CreateWithName(Production::PROD, "fact");
+    GM_BEGIN(G);
+    GM_ADD(G, start);
+    GM_ADD(G, expr);
+    GM_ADD(G, term);
+    GM_ADD(G, fact);
 
     start =
-        PB::AND(expr,
-                PB::CODE([](CodeContext *c) {
-                    emit('\n');
-                    if (c)
-                        std::cout << c->DebugString() << std::endl; }));
+        expr &
+        GM_CODE({ emit('\n'); });
     expr =
-        PB::AND(
-            term,
-            PB::REP(
-                PB::AND(
-                    PB::SYM('*'),
-                    term,
-                    PB::CODE([](CodeContext *c) {
-                        emit('*');
-                        if (c)
-                            std::cout << c->DebugString() << std::endl; }))));
+        term &
+        *(
+            '+' &
+            term &
+            GM_CODE({ emit('+'); })
+            );
     term =
-        PB::AND(
-            fact,
-            PB::REP(
-                PB::AND(
-                    PB::SYM('+'),
-                    fact,
-                    PB::CODE([](CodeContext *c) {
-                        emit('+');
-                        if (c)
-                            std::cout << c->DebugString() << std::endl; }))));
+        fact &
+        *(
+            '*' &
+            fact &
+            GM_CODE({ emit('*'); })
+            );
     fact =
-        PB::AND(
-            PB::SYM('1'),
-            PB::CODE([](CodeContext *c) {
-                emit('1');
-                if (c)
-                    std::cout << c->DebugString() << std::endl; }));
+        '1' &
+        GM_CODE({ emit('1'); });
 
-    Grammer g;
-    g.add(start);
-    g.add(expr);
-    g.add(term);
-    g.add(fact);
-    g.compile();
+    GM_END(G);
 
-    TokenIterator tokens("1+1*1+1");
-    g.run(tokens);
+
+    TokenIterator tokens("1+1*1*1+1*1+1");
+    GM_RUN(G, tokens);
 
     tokens.reset();
-    Ast *ast = g.match(tokens);
-
+    Ast *ast;
+    GM_MATCH(G, tokens, ast);
     std::cout << "Ast: " << ast->DebugString() << std::endl;
+
     return 0;
 }
+// clang-format on
