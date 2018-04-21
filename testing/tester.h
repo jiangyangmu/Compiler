@@ -32,6 +32,22 @@ private:
     bool has_error_;
 };
 
+#define TEST(CaseName)                        \
+    class CaseName : public Tester {          \
+    protected:                                \
+        virtual const char * getName() {      \
+            return #CaseName;                 \
+        }                                     \
+        virtual void run();                   \
+                                              \
+    public:                                   \
+        CaseName() {                          \
+            TestRunner::Get().AddTest(*this); \
+        }                                     \
+    };                                        \
+    static CaseName CaseName##_instance;      \
+    void CaseName::run()
+
 #define TEST_F(TesterClassName, TestCaseName)                    \
     class TesterClassName##TestCaseName : public TesterClassName \
     {                                                            \
@@ -78,6 +94,46 @@ private:
                       << (msg) << std::endl;            \
             TestRunner::Get().SetError(true);           \
         }                                               \
+    } while (false)
+
+#define EXPECT_EQ_LIST(actual, expect)                                \
+    do                                                                \
+    {                                                                 \
+        auto __a = (actual);                                          \
+        decltype(__a) __e = (expect);                                 \
+        bool _local_has_error = false;                                \
+        auto __ei = std::begin(__e);                                  \
+        auto __ed = std::end(__e);                                    \
+        auto __ai = std::begin(__a);                                  \
+        auto __ad = std::end(__a);                                    \
+        while (__ei != __ed && __ai != __ad)                          \
+        {                                                             \
+            if (*__ei != *__ai)                                       \
+            {                                                         \
+                TestRunner::Get().SetError(true);                     \
+                _local_has_error = true;                              \
+                break;                                                \
+            }                                                         \
+            ++__ei, ++__ai;                                           \
+        }                                                             \
+        if (__ei != __ed || __ai != __ad)                             \
+            _local_has_error = true;                                  \
+        if (_local_has_error)                                         \
+        {                                                             \
+            std::cerr << "Expect: {";                                 \
+            for (auto ei : __e)                                       \
+            {                                                         \
+                std::cerr << ei << ',';                               \
+            }                                                         \
+            std::cerr << '}' << std::endl;                            \
+            std::cerr << "Actual: {";                                 \
+            for (auto ai : __a)                                       \
+            {                                                         \
+                std::cerr << ai << ',';                               \
+            }                                                         \
+            std::cerr << '}' << " at " << __FILE__ << ":" << __LINE__ \
+                      << std::endl;                                   \
+        }                                                             \
     } while (false)
 
 #define EXPECT_EQ_SET(actual, expect)                                 \
