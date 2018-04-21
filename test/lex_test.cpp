@@ -1,6 +1,6 @@
-#include "../testing/tester.h"
+#include "testing/tester.h"
 
-#include "../src/lex/tokenizer.h"
+#include "lex/tokenizer.h"
 
 class LexTest : public Tester {
 public:

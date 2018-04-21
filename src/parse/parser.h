@@ -1,7 +1,6 @@
 #pragma once
 
-#include "lexer.h"
-#include "util.h"
+#include "../common.h"
 
 #include <deque>
 #include <functional>
@@ -10,6 +9,62 @@
 #include <string>
 #include <utility>
 #include <vector>
+
+// TODO connect with real lexer
+namespace FakeLex {
+
+typedef char Token;
+typedef std::set<Token> TokenSet;
+class TokenIterator {
+public:
+    TokenIterator(std::string tokens)
+        : tokens_(tokens)
+        , i_(0) {
+    }
+    void reset() {
+        i_ = 0;
+    }
+    bool has() const {
+        return i_ < tokens_.size();
+    }
+    Token peek() const {
+        assert(i_ < tokens_.size());
+        return tokens_[i_];
+    }
+    Token next() {
+        assert(i_ < tokens_.size());
+        return tokens_[i_++];
+    }
+
+private:
+    std::string tokens_;
+    size_t i_;
+};
+
+#include <iostream>
+
+template <class T>
+void DebugPrintValue(T & container) {
+    std::cout << '[';
+    for (auto & i : container)
+    {
+        std::cout << i.second << ',';
+    }
+    std::cout << ']' << std::endl;
+}
+
+template <class T>
+void DebugPrint(T & container) {
+    std::cout << '[';
+    for (auto & i : container)
+    {
+        std::cout << i << ',';
+    }
+    std::cout << ']' << std::endl;
+}
+
+} // namespace FakeLex
+using namespace FakeLex;
 
 class Production;
 typedef std::deque<Production *> ProductionList;
