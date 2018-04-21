@@ -3,7 +3,10 @@
 #include <algorithm>
 #include <cassert>
 #include <cctype>
+#include <cstdlib>
 #include <iterator>
+#include <map>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -89,22 +92,22 @@ class StringRef
    public:
     StringRef()
     {
-        begin = end = nullptr;
+        begin_ = end_ = "";
     }
-    explicit StringRef(const char *data)
+    StringRef(const char *data)
     {
         assert(data != nullptr);
 
-        begin = data;
-        end = data + strlen(begin);
+        begin_ = data;
+        end_ = data + strlen(begin_);
     }
     // fast or safety ? fast
     StringRef(const char *data, size_t n)
     {
         assert(data != nullptr);
 
-        begin = data;
-        end = data + n;
+        begin_ = data;
+        end_ = data + n;
     }
     StringRef &operator=(const char *data)
     {
@@ -113,48 +116,70 @@ class StringRef
 
     void clear()
     {
-        begin = end = nullptr;
+        begin_ = end_ = "";
     }
 
     bool empty() const
     {
-        return begin == end;
+        return begin_ == end_;
     }
 
     size_t size() const
     {
-        return end - begin;
+        return end_ - begin_;
+    }
+
+    char front() const
+    {
+        assert(!empty());
+        return *begin_;
+    }
+
+    char back() const
+    {
+        assert(!empty());
+        return *(end_ - 1);
     }
 
     std::string toString() const
     {
         std::string s;
-        if (end > begin)
-            s.assign(begin, end - begin);
+        if (end_ > begin_)
+            s.assign(begin_, end_ - begin_);
         return s;
     }
 
     const char *data() const
     {
-        return begin;
+        return begin_;
+    }
+
+    const char *begin() const
+    {
+        return begin_;
+    }
+
+    const char *end() const
+    {
+        return end_;
     }
 
     char operator[](size_t offset) const
     {
-        assert((begin + offset) < end);
-        return begin[offset];
+        assert((begin_ + offset) < end_);
+        return begin_[offset];
     }
 
     bool operator==(const StringRef &other) const
     {
-        const char *p1 = begin, *p2 = other.begin;
-        while (p1 != end && p2 != other.end)
+        const char *p1 = begin_, *p2 = other.begin_;
+        while (p1 != end_ && p2 != other.end_)
         {
             if (*p1 != *p2)
                 break;
             ++p1, ++p2;
         }
-        return (p1 == end) && (p2 == other.end);
+        return (p1 == end_) && (p2 == other.end_);
     }
     bool operator!=(const StringRef &other) const
     {
@@ -165,14 +190,14 @@ class StringRef
     {
         assert(s2 != nullptr);
 
-        const char *p1 = s1.begin, *p2 = s2;
-        while (p1 != s1.end && *p2 != '\0')
+        const char *p1 = s1.begin_, *p2 = s2;
+        while (p1 != s1.end_ && *p2 != '\0')
         {
             if (*p1 != *p2)
                 return false;
             ++p1, ++p2;
         }
-        return p1 == s1.end && *p2 == '\0';
+        return p1 == s1.end_ && *p2 == '\0';
     }
     friend bool operator==(const char *s1, const StringRef &s2)
     {
@@ -188,12 +213,12 @@ class StringRef
     }
     friend std::ostream &operator<<(std::ostream &o, const StringRef &s)
     {
-        std::copy(s.begin, s.end, std::ostream_iterator<char>(o));
+        std::copy(s.begin_, s.end_, std::ostream_iterator<char>(o));
         return o;
     }
 
    private:
-    const char *begin, *end;
+    const char *begin_, *end_;
 };
 
 template <typename T>
@@ -387,6 +412,67 @@ class Stringable
         return "Stringable::null";
     }
 };
+
+#define CHECK(x) assert(x)
+#define CHECK_GT(a, b) assert((a) > (b))
+#define CHECK_EQ(a, b) assert((a) == (b))
+
+template <class T>
+class TopoMap {
+public:
+    void add_dependency(T t, T dependent) {
+        assert(t != dependent);
+        dependents_[t].insert(dependent);
+        dependents_.try_emplace(dependent, std::set<T>());
+        indegree_.try_emplace(t, 0);
+        indegree_[dependent]++;
+    }
+    std::set<T> & dependents(T t) {
+        return dependents_[t];
+    }
+    // dependent last
+    std::vector<T> sort() {
+        std::vector<T> result;
+        std::map<T, int> d1 = indegree_;
+        std::map<T, int> d2 = indegree_;
+
+        while (result.size() < dependents_.size())
+        {
+            size_t count = result.size();
+            // DebugPrintValue(d1);
+            for (auto & kv : d1)
+            {
+                T t = kv.first;
+                int in = kv.second;
+                // still has dependency not resolved.
+                if (in != 0)
+                    continue;
+
+                result.emplace_back(t);
+
+                for (T dependent : dependents_[t])
+                {
+                    assert(d2[dependent] > 0);
+                    d2[dependent]--;
+                }
+
+                d2[t] = -1;
+            }
+
+            // circular dependency detected if false.
+            assert(result.size() > count);
+
+            d1 = d2;
+        }
+
+        return result;
+    }
+
+private:
+    std::map<T, std::set<T>> dependents_;
+    std::map<T, int> indegree_;
+};
+
 
 // Min, Max
 // AlignUp(align, value), AlignDown(align, value)
