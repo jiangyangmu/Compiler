@@ -136,7 +136,7 @@ std::string ProductionTreeView::str() const {
                             {
                                 case Production::SYM:
                                     s += '\'';
-                                    s += p.symbol();
+                                    s += p.symbol().text.toString();
                                     s += '\'';
                                     break;
                                 case Production::PROD:
@@ -319,8 +319,12 @@ PRODUCTION operator|(PRODUCTION p1, PRODUCTION p2) {
     }
     else
     {
-        return ProductionBuilder::AND(p1, p2);
+        return ProductionBuilder::OR(p1, p2);
     }
+}
+
+bool operator<(const Token & t1, const Token & t2) {
+    return t1.type < t2.type;
 }
 
 void __compute_FIRST_FOLLOW(std::vector<PRODUCTION> & rules) {
@@ -538,6 +542,15 @@ void __build_impl(Production & p,
             }
             break;
     }
+}
+
+void DebugPrint(TokenSet tokens) {
+    std::cout << '[';
+    for (auto & token : tokens)
+    {
+        std::cout << token.text << ',';
+    }
+    std::cout << ']' << std::endl;
 }
 
 void Grammer::compile() {

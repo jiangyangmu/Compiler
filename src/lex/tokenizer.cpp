@@ -43,12 +43,12 @@ Token TokenIterator::next() {
     return tokens_[i_++];
 }
 
-Token TokenIterator::peak() const {
+Token TokenIterator::peek() const {
     assert(i_ < tokens_.size());
     return tokens_[i_];
 }
 
-Token TokenIterator::peakN(int n) const {
+Token TokenIterator::peekN(int n) const {
     assert(i_ + n < tokens_.size());
     return tokens_[i_ + n];
 }
