@@ -9,10 +9,7 @@
 #include <vector>
 
 #include "../common.h"
-#include "../lex/token.h"
-
-typedef std::set<Token> TokenSet;
-bool operator<(const Token & t1, const Token & t2);
+#include "../lex/tokenizer.h"
 
 class Production;
 typedef std::deque<Production *> ProductionList;
@@ -33,15 +30,15 @@ public:
     Type type() const {
         return type_;
     }
-    Token & symbol();
-    const Token & symbol() const;
+    TokenMatcher & symbol();
+    const TokenMatcher & symbol() const;
     CodeObject & code();
     Production & production();
     const Production & production() const;
     ProductionList & children();
     const ProductionList & children() const;
-    TokenSet & FIRST();
-    TokenSet & FOLLOW();
+    TokenMatcherSet & FIRST();
+    TokenMatcherSet & FOLLOW();
     bool is(Type type) {
         return type_ == type;
     }
@@ -60,14 +57,14 @@ private:
     Type type_;
     // data for all types
     // union {
-    Token symbol_; // SYM
+    TokenMatcher symbol_; // SYM
     CodeObject code_; // CODE
     Production * production_; // PROD
     ProductionList children_; // AND, OR, OPT, REP
     // };
     // FIRST,FOLLOW for all types (except CODE)
-    TokenSet FIRST_;
-    TokenSet FOLLOW_;
+    TokenMatcherSet FIRST_;
+    TokenMatcherSet FOLLOW_;
 };
 
 class ProductionTreeView {
@@ -184,7 +181,7 @@ public:
 
     // for API
     PRODUCTION(const PRODUCTION & p);
-    PRODUCTION(Token symbol);
+    PRODUCTION(TokenMatcher symbol);
     PRODUCTION(CodeObject code);
     void operator=(const PRODUCTION & prod) {
         assert(p_ && p_->is(Production::PROD));
@@ -214,7 +211,7 @@ public:
 
 class ProductionBuilder {
 public:
-    static PRODUCTION SYM(Token symbol) {
+    static PRODUCTION SYM(TokenMatcher symbol) {
         PRODUCTION p =
             ProductionFactory::CreateWithName(Production::SYM, "SYM");
         p->symbol_ = symbol;

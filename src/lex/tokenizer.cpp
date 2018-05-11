@@ -29,30 +29,6 @@ bool SourceSanner::eof() const {
     return i_ == source_.size();
 }
 
-TokenIterator::TokenIterator(std::vector<Token> & tokens)
-    : tokens_(tokens)
-    , i_(0) {
-}
-
-bool TokenIterator::has() const {
-    return i_ < tokens_.size();
-}
-
-Token TokenIterator::next() {
-    assert(i_ < tokens_.size());
-    return tokens_[i_++];
-}
-
-Token TokenIterator::peek() const {
-    assert(i_ < tokens_.size());
-    return tokens_[i_];
-}
-
-Token TokenIterator::peekN(int n) const {
-    assert(i_ + n < tokens_.size());
-    return tokens_[i_ + n];
-}
-
 static inline bool isoctdigit(int c) {
     return c >= '0' && c <= '7';
 }
@@ -517,6 +493,87 @@ static inline Token RecognizeToken(const char * start,
     return token;
 }
 
+TokenIterator::TokenIterator(std::vector<Token> & tokens)
+    : tokens_(tokens)
+    , i_(0) {
+}
+
+bool TokenIterator::has() const {
+    return i_ < tokens_.size();
+}
+
+Token TokenIterator::next() {
+    assert(i_ < tokens_.size());
+    return tokens_[i_++];
+}
+
+Token TokenIterator::peek() const {
+    assert(i_ < tokens_.size());
+    return tokens_[i_];
+}
+
+Token TokenIterator::peekN(int n) const {
+    assert(i_ + n < tokens_.size());
+    return tokens_[i_ + n];
+}
+
+TokenMatcher::TokenMatcher() {
+    token_.type = Token::UNKNOWN;
+}
+
+TokenMatcher::TokenMatcher(Token token)
+    : token_(token) {
+}
+
+bool TokenMatcher::match(const Token & token) const {
+    return token_.type == token.type;
+}
+
+std::string TokenMatcher::toString() const {
+    return token_.text.toString();
+}
+
+bool TokenMatcher::operator==(const TokenMatcher & other) const {
+    return token_.type == other.token_.type;
+}
+
+void TokenMatcherSet::addMatcher(TokenMatcher m) {
+    for (auto & matcher : matchers_)
+    {
+        if (m == matcher)
+            return;
+    }
+    matchers_.emplace_back(m);
+}
+
+void TokenMatcherSet::addMatchers(const TokenMatcherSet & ms) {
+    for (auto & matcher : ms.matchers_)
+    {
+        addMatcher(matcher);
+    }
+}
+
+bool TokenMatcherSet::match(const Token & token) const {
+    for (auto & matcher : matchers_)
+    {
+        if (matcher.match(token))
+            return true;
+    }
+    return false;
+}
+
+size_t TokenMatcherSet::size() const {
+    return matchers_.size();
+}
+
+bool TokenMatcherSet::empty() const {
+    return matchers_.empty();
+}
+
+const std::vector<TokenMatcher> & TokenMatcherSet::matchers() const {
+    return matchers_;
+}
+
 void Tokenizer::compile(SourceSanner & scanner) {
     tokens_.clear();
     while (!scanner.eof())
@@ -546,4 +603,17 @@ void Tokenizer::compile(SourceSanner & scanner) {
 
 TokenIterator Tokenizer::getIterator() {
     return TokenIterator(tokens_);
+}
+
+Token TokenFromString(std::string s) {
+    const char * start;
+    const char * end;
+    TokenRecog::Info info;
+
+    start = TokenStart(s.data());
+    end = TokenEnd(start, &info);
+    assert(end > start); // ERROR: invalid character sequence if fail.
+
+    Token token = RecognizeToken(start, end, info);
+    return token;
 }

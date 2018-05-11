@@ -6,11 +6,11 @@
 #include <algorithm>
 #include <cassert>
 
-Token & Production::symbol() {
+TokenMatcher & Production::symbol() {
     assert(type_ == SYM);
     return symbol_;
 }
-const Token & Production::symbol() const {
+const TokenMatcher & Production::symbol() const {
     assert(type_ == SYM);
     return symbol_;
 }
@@ -34,11 +34,11 @@ const ProductionList & Production::children() const {
     assert(type_ == AND || type_ == OR || type_ == REP || type_ == OPT);
     return children_;
 }
-TokenSet & Production::FIRST() {
+TokenMatcherSet & Production::FIRST() {
     assert(type_ != CODE);
     return FIRST_;
 }
-TokenSet & Production::FOLLOW() {
+TokenMatcherSet & Production::FOLLOW() {
     assert(type_ != CODE);
     return FOLLOW_;
 }
@@ -136,7 +136,7 @@ std::string ProductionTreeView::str() const {
                             {
                                 case Production::SYM:
                                     s += '\'';
-                                    s += p.symbol().text.toString();
+                                    s += p.symbol().toString();
                                     s += '\'';
                                     break;
                                 case Production::PROD:
@@ -286,7 +286,7 @@ PRODUCTION::PRODUCTION(const PRODUCTION & p)
     : p_(p.p_) {
     assert(p_);
 }
-PRODUCTION::PRODUCTION(Token symbol) {
+PRODUCTION::PRODUCTION(TokenMatcher symbol) {
     p_ = ProductionFactory::CreateWithName(Production::SYM, "SYM").p();
     p_->symbol_ = symbol;
 }
@@ -307,9 +307,7 @@ PRODUCTION operator&(PRODUCTION p1, PRODUCTION p2) {
         return p1;
     }
     else
-    {
-        return ProductionBuilder::AND(p1, p2);
-    }
+    { return ProductionBuilder::AND(p1, p2); }
 }
 PRODUCTION operator|(PRODUCTION p1, PRODUCTION p2) {
     if (p1->is(Production::OR))
@@ -318,17 +316,11 @@ PRODUCTION operator|(PRODUCTION p1, PRODUCTION p2) {
         return p1;
     }
     else
-    {
-        return ProductionBuilder::OR(p1, p2);
-    }
-}
-
-bool operator<(const Token & t1, const Token & t2) {
-    return t1.type < t2.type;
+    { return ProductionBuilder::OR(p1, p2); }
 }
 
 void __compute_FIRST_FOLLOW(std::vector<PRODUCTION> & rules) {
-    TopoMap<TokenSet *> D;
+    TopoMap<TokenMatcherSet *> D;
     for (PRODUCTION & root : rules)
     {
         assert(root->is(Production::PROD));
@@ -345,8 +337,9 @@ void __compute_FIRST_FOLLOW(std::vector<PRODUCTION> & rules) {
             switch (p.type())
             {
                 case Production::SYM:
-                    p.FIRST() = {p.symbol()};
-                    p.FOLLOW() = {};
+                    CHECK(p.FIRST().empty());
+                    CHECK(p.FOLLOW().empty());
+                    p.FIRST().addMatcher(p.symbol());
                     break;
                 case Production::CODE:
                     break;
@@ -396,18 +389,18 @@ void __compute_FIRST_FOLLOW(std::vector<PRODUCTION> & rules) {
         }
     }
 
-    std::vector<TokenSet *> FL = D.sort();
-    for (TokenSet * F : FL)
+    std::vector<TokenMatcherSet *> FL = D.sort();
+    for (TokenMatcherSet * F : FL)
     {
-        for (TokenSet * Fd : D.dependents(F))
+        for (TokenMatcherSet * Fd : D.dependents(F))
         {
-            Fd->insert(F->begin(), F->end());
+            Fd->addMatchers(*F);
         }
     }
 }
 
 bool __match_FIRST(Production & p, Token t) {
-    return (p.FIRST().find(t) != p.FIRST().end());
+    return p.FIRST().match(t);
 }
 
 void __run_impl(Production & p, TokenIterator & ti) {
@@ -415,7 +408,7 @@ void __run_impl(Production & p, TokenIterator & ti) {
     switch (p.type())
     {
         case Production::SYM:
-            CHECK_EQ(p.symbol(), ti.next());
+            CHECK(p.symbol().match(ti.next()));
             break;
         case Production::PROD:
             __run_impl(p.production(), ti);
@@ -481,7 +474,7 @@ void __build_impl(Production & p,
         case Production::SYM:
             CHECK_EQ(p.symbol(), ti.next());
             ast = new Ast(p.name());
-            // PROP token
+            // PROP TokenMatcher
             parent_ast->add_child(ast);
             parent_context->push_child(ast);
             break;
@@ -544,11 +537,11 @@ void __build_impl(Production & p,
     }
 }
 
-void DebugPrint(TokenSet tokens) {
+void DebugPrint(const TokenMatcherSet & matcher_set) {
     std::cout << '[';
-    for (auto & token : tokens)
+    for (const auto & matcher : matcher_set.matchers())
     {
-        std::cout << token.text << ',';
+        std::cout << matcher.toString() << ',';
     }
     std::cout << ']' << std::endl;
 }
