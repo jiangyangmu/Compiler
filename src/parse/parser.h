@@ -14,7 +14,8 @@
 class Production;
 typedef std::deque<Production *> ProductionList;
 class CodeContext;
-typedef std::function<void(CodeContext *)> CodeObject;
+typedef std::function<void(CodeContext *, const std::vector<Token> *)>
+    CodeObject;
 
 class Production {
     friend class ProductionFactory;
@@ -378,5 +379,6 @@ public:
 
 private:
     std::vector<PRODUCTION> rules_;
+    std::vector<Token> matched_tokens_;
     bool compiled_;
 };

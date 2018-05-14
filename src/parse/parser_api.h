@@ -38,8 +38,15 @@
 
 // Embedded code definition and context access (TODO)
 
-#define GM_CODE(code) \
-    (ProductionBuilder::CODE([](CodeContext * __code_context__) code))
+#define GM_CODE(code)                                                          \
+    (ProductionBuilder::CODE([](CodeContext * __code_context__,                \
+                                const std::vector<Token> * __matched_tokens__) \
+                                 code))
+#define GM_MATCHED_TOKEN(i)                   \
+    (CHECK(__matched_tokens__ && (i) >= 0 &&  \
+           (i) < __matched_tokens__->size()), \
+     (*__matched_tokens__)[__matched_tokens__->size() - 1 - (i)])
+
 #define GM_EXIST(i)
 #define GM_GET_PROD_PROP(i, prop)
 #define GM_GET_AST_PROP(i, prop)

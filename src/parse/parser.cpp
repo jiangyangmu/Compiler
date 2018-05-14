@@ -403,23 +403,26 @@ bool __match_FIRST(Production & p, Token t) {
     return p.FIRST().match(t);
 }
 
-void __run_impl(Production & p, TokenIterator & ti) {
+void __run_impl(Production & p,
+                TokenIterator & ti,
+                std::vector<Token> & matched_tokens) {
     bool matched;
     switch (p.type())
     {
         case Production::SYM:
-            CHECK(p.symbol().match(ti.next()));
+            CHECK(p.symbol().match(ti.peek()));
+            matched_tokens.push_back(ti.next());
             break;
         case Production::PROD:
-            __run_impl(p.production(), ti);
+            __run_impl(p.production(), ti, matched_tokens);
             break;
         case Production::CODE:
-            p.code()(nullptr);
+            p.code()(nullptr, &matched_tokens);
             break;
         case Production::AND:
             for (Production & child : ProductionListView(p))
             {
-                __run_impl(child, ti);
+                __run_impl(child, ti, matched_tokens);
             }
             break;
         case Production::OR:
@@ -428,7 +431,7 @@ void __run_impl(Production & p, TokenIterator & ti) {
             {
                 if (ti.has() && __match_FIRST(child, ti.peek()))
                 {
-                    __run_impl(child, ti);
+                    __run_impl(child, ti, matched_tokens);
                     matched = true;
                     break;
                 }
@@ -441,7 +444,7 @@ void __run_impl(Production & p, TokenIterator & ti) {
             {
                 for (Production & child : ProductionListView(p))
                 {
-                    __run_impl(child, ti);
+                    __run_impl(child, ti, matched_tokens);
                 }
             }
             break;
@@ -451,7 +454,7 @@ void __run_impl(Production & p, TokenIterator & ti) {
             {
                 for (Production & child : ProductionListView(p))
                 {
-                    __run_impl(child, ti);
+                    __run_impl(child, ti, matched_tokens);
                 }
             }
             break;
@@ -487,7 +490,7 @@ void __build_impl(Production & p,
             break;
         case Production::CODE:
             // Code can only access production root node and existing children.
-            p.code()(parent_context);
+            p.code()(parent_context, nullptr);
             break;
         case Production::AND:
             for (Production & child : ProductionListView(p))
@@ -561,7 +564,8 @@ void Grammer::run(TokenIterator & tokens) {
         std::cout << "\tFOLLOW: ";
         DebugPrint(P->FOLLOW());
     }
-    __run_impl(*rules_[0].p(), tokens);
+    matched_tokens_.clear();
+    __run_impl(*rules_[0].p(), tokens, matched_tokens_);
 }
 Ast * Grammer::match(TokenIterator & tokens) {
     assert(compiled_);
