@@ -442,8 +442,13 @@ static inline double EvalFloat(StringRef text) {
 
 static inline int EvalInt(StringRef text) {
     // TODO implement EvalInt()
-    assert(text == "1");
-    return 1;
+    int i = 0;
+    for (char c : text)
+    {
+        CHECK(isdigit(c));
+        i = i * 10 + (c - '0');
+    }
+    return i;
 }
 
 static inline int EvalChar(StringRef text) {
@@ -605,12 +610,12 @@ TokenIterator Tokenizer::getIterator() {
     return TokenIterator(tokens_);
 }
 
-Token TokenFromString(std::string s) {
+Token TokenFromString(const char *s) {
     const char * start;
     const char * end;
     TokenRecog::Info info;
 
-    start = TokenStart(s.data());
+    start = TokenStart(s);
     end = TokenEnd(start, &info);
     assert(end > start); // ERROR: invalid character sequence if fail.
 

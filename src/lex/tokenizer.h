@@ -134,6 +134,6 @@ private:
     std::vector<Token> tokens_;
 };
 
-Token TokenFromString(std::string s);
+Token TokenFromString(const char *s);
 
 #define EOL ('\n')
