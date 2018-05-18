@@ -360,10 +360,14 @@ class StructType : public Type {
     vector<StringRef> member_names_;
     vector<Type *> member_types_;
     vector<size_t> member_offsets_;
+    StringRef tag_;
 
 public:
     StructType()
         : Type(T_STRUCT, 0, 0, 1) {
+    }
+    void setTag(StringRef tag) {
+        tag_ = tag;
     }
     void addMember(StringRef name, Type * ct) {
         member_names_.push_back(name);
@@ -374,7 +378,7 @@ public:
 
     virtual std::string toString() const {
         std::string s = Type::toString();
-        s += "struct { ";
+        s += "struct " + tag_.toString() + " { ";
         for (size_t i = 0; i < member_types_.size(); ++i)
         {
             s += "\"" + member_names_[i].toString() + "\":(" +

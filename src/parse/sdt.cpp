@@ -1,6 +1,6 @@
 #include <iostream>
 
-#include "../type/type.h"
+#include "../symbol/symbol.h"
 #include "../../logging/logging.h"
 #include "parser_api.h"
 
@@ -104,6 +104,16 @@ public:
         CHECK(st != nullptr);
         st->addMember(name, type);
     }
+    void set_struct_tag(StringRef tag) {
+        StructType * st = dynamic_cast<StructType *>(type_);
+        CHECK(st != nullptr);
+        st->setTag(tag);
+    }
+    StructType * get_struct() {
+        StructType * st = dynamic_cast<StructType *>(type_);
+        CHECK(st != nullptr);
+        return st;
+    }
 
     Type * build() const {
         if (type_specifier_has_ & 0xe00) // struct/union/enum/typedef
@@ -180,6 +190,8 @@ std::deque<TypeQualifiersBuilder> g_QualifierBuilders;
 std::deque<Type *> g_Types;
 std::deque<StringRef> g_Ids;
 // std::deque<SymbolBuilder> g_SymbolBuilders;
+std::deque<Symbol *> g_Symbols;
+std::deque<std::vector<Symbol *>> g_Envs;
 
 void new_typ_specifier() {
     g_SpecifierBuilders.push_back({});
@@ -190,8 +202,15 @@ void typ_specifier_add_token(Token::Type t) {
 }
 void typ_specifier_struct_add_member(StringRef name, Type * type) {
     CHECK(!g_SpecifierBuilders.empty());
-
     g_SpecifierBuilders.back().add_struct_member(name, type);
+}
+void typ_specifier_struct_set_tag(StringRef tag) {
+    CHECK(!g_SpecifierBuilders.empty());
+    g_SpecifierBuilders.back().set_struct_tag(tag);
+}
+Type * typ_specifier_get_struct() {
+    CHECK(!g_SpecifierBuilders.empty());
+    return g_SpecifierBuilders.back().get_struct();
 }
 Type * typ_pop_specifier() {
     CHECK(!g_SpecifierBuilders.empty());
@@ -309,6 +328,20 @@ void typ_func_set_varlist() {
 void new_id(StringRef id) {
     g_Ids.push_back(id);
 }
+void id_merge() {
+    CHECK(g_Ids.size() >= 2);
+    StringRef top1 = g_Ids[g_Ids.size() - 1];
+    StringRef top2 = g_Ids[g_Ids.size() - 2];
+    g_Ids.pop_back();
+    g_Ids.pop_back();
+
+    CHECK(top1.empty() || top2.empty());
+    g_Ids.push_back(top1.empty() ? top2 : top1);
+}
+StringRef id_top() {
+    CHECK(!g_Ids.empty());
+    return g_Ids.back();
+}
 StringRef id_pop() {
     CHECK(!g_Ids.empty());
     StringRef id = g_Ids.back();
@@ -320,21 +353,41 @@ void del_id() {
     g_Ids.pop_back();
 }
 
-// void new_sym() {
-//    g_SymbolBuilders.push_back({});
-//}
+void new_sym(Symbol::Namespace space, StringRef name, Type *type) {
+    g_Symbols.push_back(new Symbol());
+    g_Symbols.back()->space = space;
+    g_Symbols.back()->name = name;
+    g_Symbols.back()->type = type;
+}
+Symbol * sym_pop() {
+    CHECK(!g_Symbols.empty());
+    Symbol *sym = g_Symbols.back();
+    g_Symbols.pop_back();
+    return sym;
+}
+
+void new_env() {
+    g_Envs.push_back({});
+}
+void env_add_sym(Symbol *sym) {
+    CHECK(!g_Envs.empty());
+    g_Envs.back().push_back(sym);
+}
 
 void verify() {
     CHECK(g_SpecifierBuilders.empty());
     CHECK(g_QualifierBuilders.empty());
     CHECK(g_Ids.empty());
-    // CHECK(g_Types.size() == 1);
+    CHECK(g_Types.empty());
 
     int i = 0;
-    for (Type * type : g_Types)
+    for (auto & env : g_Envs)
     {
-        CHECK(type != nullptr);
-        std::cout << "type[" << i++ << "]: " << type->toString() << std::endl;
+        std::cout << "env[" << i++ << "]:" << std::endl;
+        for (Symbol * sym: env) {
+            CHECK(sym != nullptr);
+            std::cout << sym->toString() << std::endl;
+        }
     }
 }
 
@@ -342,7 +395,8 @@ void verify() {
 int main(int argc, char * argv[])
 {
     GM_BEGIN(G);
-    GM_ADD(G, declaration);
+    GM_ADD(G, translation_unit);
+    GM_ADD(G, declaration_or_function_definition);
 
     GM_ADD(G, declaration_specifiers);
     GM_ADD(G, storage_class_specifier);
@@ -363,22 +417,38 @@ int main(int argc, char * argv[])
 
     GM_ADD(G, pointer);
 
-    declaration =
+    translation_unit =
+                                  GM_CODE({ new_env(); }) &
+          declaration_or_function_definition & *(declaration_or_function_definition)
+                                & GM_CODE({ verify(); })
+        ;
+    declaration_or_function_definition =
           declaration_specifiers &
-          ~(
-             declarator         & GM_CODE({ typ_dup2_merge(); del_id(); }) &
-             *(
-                TOKEN(",")      &
-                declarator      & GM_CODE({ typ_dup2_merge(); del_id(); })
-              )
-           )                    & GM_CODE({ del_typ(); }) &
-          TOKEN(";")
+          (
+            declarator          & GM_CODE({ typ_dup2_merge();
+                                            CHECK(!id_top().empty());
+                                            new_sym(Symbol::Namespace::ID, id_pop(), typ_pop2());
+                                            env_add_sym(sym_pop()); }) &
+            (                     GM_CODE({ del_typ(); }) &
+              TOKEN("{")        &
+              TOKEN("}")
+            | *(
+                TOKEN(",") &
+                declarator      & GM_CODE({ typ_dup2_merge();
+                                            CHECK(!id_top().empty());
+                                            new_sym(Symbol::Namespace::ID, id_pop(), typ_pop2());
+                                            env_add_sym(sym_pop()); })
+              ) &
+              TOKEN(";")        & GM_CODE({ del_typ(); })
+            )
+          | TOKEN(";")          & GM_CODE({ del_typ(); })
+          )
         ;
     declaration_specifiers =
-          GM_CODE({ new_typ_specifier(); new_typ_qualifier(); }) &
+                                  GM_CODE({ new_typ_specifier(); new_typ_qualifier(); }) &
           (storage_class_specifier | type_specifier | type_qualifier) &
-          *(storage_class_specifier | type_specifier | type_qualifier) &
-          GM_CODE({ new_typ(typ_pop_specifier(), typ_pop_qualifier()); })
+          *(storage_class_specifier | type_specifier | type_qualifier)
+                                & GM_CODE({ new_typ(typ_pop_specifier(), typ_pop_qualifier()); })
         ;
     storage_class_specifier =
           TOKEN("typedef")      & GM_CODE({ })
@@ -403,51 +473,54 @@ int main(int argc, char * argv[])
           (TOKEN("struct") | TOKEN("union"))
                                 & GM_CODE({ typ_specifier_add_token(GM_MATCHED_TOKEN(0).type); }) &
           ~(
-              TOKEN("id")       & GM_CODE({ std::cout << "new struct " << GM_MATCHED_TOKEN(0).text << std::endl; })
-           ) &
+            TOKEN("id")         & GM_CODE({ typ_specifier_struct_set_tag(GM_MATCHED_TOKEN(0).text);
+                                            new_sym(Symbol::Namespace::TAG, GM_MATCHED_TOKEN(0).text, typ_specifier_get_struct());
+                                            env_add_sym(sym_pop()); })
+          ) &
           TOKEN("{") &
           struct_declaration &
           *(struct_declaration) &
           TOKEN("}")
         ;
     struct_declaration =
-          GM_CODE({ new_typ_specifier(); new_typ_qualifier(); }) &
+                                  GM_CODE({ new_typ_specifier(); new_typ_qualifier(); }) &
           (type_specifier | type_qualifier) &
-          *(type_specifier | type_qualifier) &
-          GM_CODE({ new_typ(typ_pop_specifier(), typ_pop_qualifier()); }) &
+          *(type_specifier | type_qualifier)
+                                & GM_CODE({ new_typ(typ_pop_specifier(), typ_pop_qualifier()); }) &
           struct_declarator     & GM_CODE({ typ_dup2_merge(); typ_specifier_struct_add_member(id_pop(), typ_pop2()); }) &
           *(
-             TOKEN(",") &
-             struct_declarator  & GM_CODE({ typ_dup2_merge(); typ_specifier_struct_add_member(id_pop(), typ_pop2()); })
-           )                    & GM_CODE({ del_typ(); }) &
+            TOKEN(",") &
+            struct_declarator   & GM_CODE({ typ_dup2_merge(); typ_specifier_struct_add_member(id_pop(), typ_pop2()); })
+          )                     & GM_CODE({ del_typ(); }) &
           TOKEN(";")
         ;
     struct_declarator =
-          declarator
+          declarator            & GM_CODE({ CHECK(!id_top().empty()); })
         ;
     declarator =
           declarator_recursive
         ;
     declarator_recursive =
-                                  GM_CODE({ new_typ(); }) &
+          pointer               & GM_CODE({ new_id(""); }) &
           ~(
-             pointer            & GM_CODE({ typ_merge(); })
-           ) &
-          direct_declarator     & GM_CODE({ typ_merge(); })
+            direct_declarator     & GM_CODE({ typ_merge(); id_merge(); })
+          )
+        | direct_declarator
         ;
     direct_declarator =
           TOKEN("id")           & GM_CODE({ new_typ(); new_id(GM_MATCHED_TOKEN(0).text); }) &
           ~(
-             direct_declarator_tail
+            direct_declarator_tail
                                 & GM_CODE({ typ_merge(); })
-           )
+          )
         | TOKEN("(")            &
           declarator_recursive  &
           TOKEN(")")            &
           ~(
-             direct_declarator_tail
+            direct_declarator_tail
                                 & GM_CODE({ typ_swap_merge(); })
-           )
+          )
+        | direct_declarator_tail & GM_CODE({ new_id(""); })
         ;
     direct_declarator_tail =
           (
@@ -478,8 +551,10 @@ int main(int argc, char * argv[])
           )
         ;
     parameter_declaration =
-          declaration_specifiers &
-          declarator            & GM_CODE({ typ_merge(); })
+          declaration_specifiers & GM_CODE({ new_id(""); }) &
+          ~(
+            declarator          & GM_CODE({ typ_merge(); id_merge(); })
+          )
         ;
     pointer =
           TOKEN("*")            & GM_CODE({ new_typ_qualifier(); }) &
@@ -495,14 +570,14 @@ int main(int argc, char * argv[])
     //SourceSanner scanner("extern const signed int * const * volatile i1, * const i2[46];");
     //SourceSanner scanner("struct Fish { int i; struct Body { float size; } body; } fish[12];");
     //SourceSanner scanner("int (*p)[23], *q[23];");
-    //SourceSanner scanner("int func(char a, int (*b)(struct S {int i; } s, ...));");
-    SourceSanner scanner("struct Functor { void (*fp)(); } functor;");
+    //SourceSanner scanner("int func(char , int (*)(struct S {int i; } s, ...));");
+    //SourceSanner scanner("struct Functor { void (*fp)(); } functor;");
+    //SourceSanner scanner("struct A { struct B { int i; } b; int j,k; } a;");
+    SourceSanner scanner("int func() {};");
     Tokenizer tokenizer;
     tokenizer.compile(scanner);
     TokenIterator tokens = tokenizer.getIterator();
     GM_RUN(G, tokens);
-
-    verify();
 
     return 0;
 }
