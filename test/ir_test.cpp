@@ -1,8 +1,8 @@
-#include "tester.h"
+#include "testing/tester.h"
 
-#include "../common.h"
-#include "../ir.h"
-#include "../parser.h"
+#include "common.h"
+#include "ir/ir.h"
+#include "parse/parser.h"
 
 class IRTester : public Tester
 {

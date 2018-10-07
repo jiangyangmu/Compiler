@@ -1,0 +1,317 @@
+C Grammar
+
+================ Translation Unit ===============
+
+translation-unit	:=
+						{ new_env(); }
+		(function-definition || declaration)+
+
+function-definition	:=
+		[declaration-specifiers]
+		declarator
+						{ typ_dup2_merge();
+						  expect(!id_top().empty());
+						  new_sym(id_pop(), typ_pop2());
+						  env_add_sym(sym_pop()); }
+		compound-statment
+						{ del_typ();
+						  env_push(typ_func_get_env());
+						  env_pop();
+						  sym_top().set_func_body(...); }
+
+declaration		:=
+		declaration-specifiers
+		[ declarator-initializer (',' declarator-initializer)* ]
+		';'
+						{ del_typ(); }
+
+declarator-initializer	:=
+		declarator
+						{ typ_dup2_merge();
+						  expect(!id_top().empty());
+						  new_sym(id_pop(), typ_pop2());
+						  env_add_sym(sym_pop()); }
+		('=' initializer)?
+
+================== Declarator ==================
+
+declarator		:=
+		[pointer-list]
+		(
+			identifier			{ new_id(identifier); new_typ(); }
+		||	'(' declarator ')'
+		)				{ typ_merge(); // if pointer-list exists }
+		(
+			'[' [constant-expr] ']'		{ typ_merge(); }
+		||	'(' [parameter-list] ')'		{ typ_merge(); }
+		)*
+
+// todo
+abstract-declarator	:=
+		pointer
+		[direct-abstract-declarator]
+		|| direct-abstract-declarator
+// todo
+direct-abstract-declarator
+		:=
+		'(' abstract-declarator ')'
+		|| [direct-abstract-declarator] '[' [constant-expr] ']'
+		|| [direct-abstract-declarator] '(' [parameter-list] ')'
+
+parameter-varlist	:=
+		parameter-declaration			{ typ_func_merge_param(); }
+		(
+			','
+			parameter-declaration		{ typ_func_merge_param(); }
+		)*
+		',' '...'				{ typ_func_set_varlist(); }
+
+parameter-list	:=
+		parameter-declaration			{ typ_func_merge_param(); }
+		(
+			','
+			parameter-declaration		{ typ_func_merge_param(); }
+		)*
+
+parameter-declaration	:=
+		declaration-specifiers			{ expect_empty(pop_sym_linkage()); expect_empty(pop_obj_storage()); }
+		(
+			declarator			{ typ_merge(); }
+		||	[abstract-declarator]		{// todo}
+		)
+
+// todo
+type-name		:=
+		(
+		type-specifier
+		|| type-qualifier
+		)+
+		[abstract-declarator]
+
+pointer-list		:=
+		pointer
+		(
+			pointer			{ typ_merge(); }
+		)*
+
+pointer		:=
+		'*'				{ new_typ_qualifier(); }
+		(type-qualifier)+
+						{ new_typ(POINTER, typ_pop_qualifier()); }
+
+================== Specifiers ==================
+
+declaration-specifiers  :=
+						{ new_typ_specifier();
+						  new_typ_qualifier();
+						  new_sym_linkage(); // S.linkage
+						  new_obj_storage(); // O.storage }
+		(storage-class-specifier | type-specifier | type-qualifier)+
+						{ new_typ(typ_pop_specifier(), typ_pop_qualifier()); }
+
+storage-class-specifier	:=
+		'typedef'				{ obj_storage_add_token(typedef); }
+		|| 'extern'				{ sym_linkage_add_token(extern); }
+		|| 'static'				{ sym_linkage_add_token(static); obj_storage_add_token(static); }
+		|| 'auto'				{ obj_storage_add_token(auto); }
+		|| 'register'				{ obj_storage_add_token(register); }
+
+type-qualifier	:=
+		'const'				{ typ_qualifier_add_token(const); }
+		|| 'volatile'				{ typ_qualifier_add_token(volatile); }
+
+type-specifier	:=
+		'void' || 'char' || 'short' || 'int' || 'long' || 'float' || 'double' || 'signed' || 'unsigned'
+						{ typ_specifier_add_token(...); }
+		|| struct-or-union-specifier
+		|| enum-specifier
+		|| typedef-name
+
+
+struct-specifier
+		:=
+		'struct'				{ typ_specifier_add_token(struct); }
+		[
+		identifier				{ typ_specifier_set_struct_name(identifier); }
+		]
+		[ '{' (struct-declaration)+ '}' ]
+
+union-specifier
+		:=
+		'union'				{ typ_specifier_add_token(union); }
+		[
+		identifier				{ typ_specifier_set_struct_name(identifier); }
+		]
+		[ '{' (struct-declaration)+ '}' ]
+
+struct-declaration	:=
+						{ new_typ_specifier(); new_typ_qualifier(); }
+		(
+		type-specifier
+		||
+		type-qualifier
+		)+
+						{ new_typ(typ_pop_specifier(), typ_pop_qualifier()); }
+		struct-declarator			{ typ_dup2_merge(); typ_specifier_struct_add_member(id_pop(), typ_pop2()); }
+		(
+		','
+		struct-declarator			{ ...same... }
+		)*
+		';'				{ del_typ(); }
+
+struct-declarator	:=
+		[
+			declarator			{ expect_not_empty(id_top()); }
+		]
+		[
+			':' constant-exprression		{ error("bit-field not support."); }
+		]
+
+enum-specifier	:=
+		'enum'				{ typ_specifier_add_token(enum); }
+		[
+		identifier				{ typ_specifier_set_enum_name(identifier); }
+		]
+		[
+			'{'
+			enumeration-constant		{ typ_specifier_enum_add_member(enum-constant); }
+			[
+			'='
+			constant-expr		{ typ_specifier_enum_set_member_value(...); }
+			]
+			(
+				','
+				enumeration-constant	{ ...same... }
+				[
+				'='
+				constant-expr	{ ...same... }
+				]
+			)*
+			'}'
+		]
+
+typedef-name            := identifier
+
+================== Initialize ==================
+
+initializer             := assign-expr
+				|| '{' initializer-list [','] '}'
+
+initializer-list        := initializer
+				|| initializer-list ',' initializer
+
+=================== Expression ===============
+
+expr                    := assign-expr
+				|| expr ',' assign-expr
+
+assign-expr             := cond-expr
+				|| unary-expr assign-op assign-expr
+
+cond-expr               := OR-expr
+				|| OR-expr '?' expr ':' cond-expr
+
+OR-expr                 := AND-expr
+				|| OR-expr '||' AND-expr
+
+AND-expr                := bit-OR-expr
+				|| AND-expr '&&' bit-OR-expr
+
+bit-OR-expr             := bit-XOR-expr
+				|| bit-OR-expr '|' bit-XOR-expr
+
+bit-XOR-expr            := bit-AND-expr
+				|| bit-XOR-expr '^' bit-AND-expr
+
+bit-AND-expr            := eq-expr
+				|| bit-And-expr '&' eq-expr
+
+eq-expr                 := rel-expr
+				|| eq-expr '==' rel-expr
+				|| eq-expr '!=' rel-expr
+
+rel-expr                := shift-expr
+				|| rel-expr '<' shift-expr
+				|| rel-expr '<=' shift-expr
+				|| rel-expr '>' shift-expr
+				|| rel-expr '>=' shift-expr
+
+shift-expr              := add-expr
+				|| shift-expr '<<' add-expr
+				|| shift-expr '>>' add-expr
+
+add-expr                := mul-expr
+				|| add-expr '+' mul-expr
+				|| add-expr '-' mul-expr
+
+mul-expr                := cast-expr
+				|| mul-expr '*' cast-expr
+				|| mul-expr '/' cast-expr
+				|| mul-expr '%' cast-expr
+
+cast-expr               := unary-expr
+				|| '(' type-name ')' cast-expr
+
+unary-expr              := postfix-expr
+				|| '++' unary-expr
+				|| '--' unary-expr
+				|| unary-op cast-expr
+				|| 'sizeof' unary-expr
+				|| 'sizeof' '(' type-name ')'
+
+postfix-expr            := primary-expr
+				|| postfix-expr '[' expr ']'
+				|| postfix-expr '(' [argument-expr-list] ')'
+				|| postfix-expr '.' identifier
+				|| postfix-expr '->' identifier
+				|| postfix-expr '++'
+				|| postfix-expr '--'
+
+primary-expr            := identifier
+				|| constant
+				|| string-literal
+				|| '(' expr ')'
+
+argument-expr-list      := assign-expr
+				|| argument-expr-list ',' assign-expr
+
+constant-expr           := cond-expr
+
+=============== Statement ===============
+
+stmt                    := labeled-stmt
+				|| compound-stmt
+				|| expression-stmt
+				|| selection-stmt
+				|| iteration-stmt
+				|| jump-stmt
+
+labeled-stmt            := identifier ':' stmt
+				|| 'case' constant-expr ':' stmt
+				|| 'default' ':' stmt
+
+compound-stmt           := '{' (declaration)* (stmt)* '}'
+
+expression-stmt         := [expr] ';'
+
+selection-stmt          := 'if' '(' expr ')' stmt
+				|| 'if' '(' expr ')' stmt 'else' stmt           ＃ dangling 'else'
+				|| 'switch' '(' expr ')' stmt
+
+iteration-stmt          := 'while' '(' expr ')' stmt
+				|| 'do' stmt 'while' '(' expr ')' ';'
+				|| 'for' '(' [expr] ';' [expr] ';' [expr] ')' stmt
+
+jump-stmt               := 'goto' identifier ';'
+				|| 'continue' ';'
+				|| 'break' ';'
+				|| 'return' [expr] ';'
+
+=============== Lexical ===============
+
+unary-op                := & * + - ~ !
+
+identifer, constant, string-literal, ...
+
+see C_Lexer.txt
+

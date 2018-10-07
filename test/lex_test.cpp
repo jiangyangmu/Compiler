@@ -9,7 +9,7 @@ public:
     virtual void shutDown() {
     }
     TokenIterator Tokens(StringRef source) {
-        scanner_ = SourceSanner(source);
+        scanner_ = SourceScanner(source);
         tokenizer_.compile(scanner_);
         return tokenizer_.getIterator();
     }
@@ -81,7 +81,7 @@ public:
     }
 
 private:
-    SourceSanner scanner_;
+    SourceScanner scanner_;
     Tokenizer tokenizer_;
 };
 
