@@ -340,8 +340,20 @@ public:
         , n_(0) {
     }
     ArrayType(size_t n)
-        : DerivedType(T_ARRAY, TP_CONST | TP_INCOMPLETE | TP_IS_OBJECT)
+        : DerivedType(T_ARRAY, TP_CONST | TP_IS_OBJECT)
         , n_(n) {
+    }
+
+    void setSize(size_t n) {
+        assert(n > 0);
+        n_ = n;
+        unsetProp(TP_INCOMPLETE);
+    }
+
+    virtual void setTargetType(Type * t) {
+        DerivedType::setTargetType(t);
+        assert(!t->isIncomplete());
+        size_ = n_ * t->getSize();
     }
 
     virtual std::string toString() const {
@@ -351,13 +363,48 @@ public:
     }
 };
 
-// class EnumType : public IntegralType {
-// public:
-//    EnumType()
-//        : IntegralType(T_ENUM, 0, 4, 4) {
-//        signed_ = true;
-//    }
-//};
+class EnumType : public IntegralType {
+    StringRef tag_;
+    vector<StringRef> econst_name_;
+    vector<int> econst_value_;
+    int next_value_;
+
+public:
+    EnumType()
+        : IntegralType(T_ENUM, TP_INCOMPLETE, 4, 4)
+        , next_value_(0) {
+        signed_ = true;
+    }
+    void setTag(StringRef tag) {
+        tag_ = tag;
+    }
+    StringRef getTag() const {
+        return tag_;
+    }
+    void addEnumConst(StringRef name) {
+        econst_name_.push_back(name);
+        econst_value_.push_back(next_value_++);
+    }
+    void setLastEnumConstValue(int value) {
+        CHECK(!econst_value_.empty());
+        next_value_ = value;
+        econst_value_.back() = next_value_++;
+    }
+
+    virtual std::string toString() const {
+        std::string s = Type::toString();
+        s += "enum " + tag_.toString() + " { ";
+        for (size_t i = 0; i < econst_name_.size(); ++i)
+        {
+            s += econst_name_[i].toString();
+            s += " = ";
+            s += std::to_string(econst_value_[i]);
+            s += ", ";
+        }
+        s += "}";
+        return s;
+    }
+};
 
 class StructType : public Type {
     vector<StringRef> member_names_;
@@ -365,16 +412,36 @@ class StructType : public Type {
     vector<size_t> member_offsets_;
     StringRef tag_;
 
+    size_t next_offset_;
+
+    size_t roundUp(size_t value, size_t unit) {
+        assert(unit > 0);
+        value += unit - 1;
+        value -= value % unit;
+        return value;
+    }
+
 public:
     StructType()
-        : Type(T_STRUCT, 0, 0, 1) {
+        : Type(T_STRUCT, 0, 0, 1), next_offset_(0) {
     }
     void setTag(StringRef tag) {
         tag_ = tag;
     }
+    StringRef getTag() const {
+        return tag_;
+    }
     void addMember(StringRef name, Type * ct) {
         member_names_.push_back(name);
         member_types_.push_back(ct);
+
+        assert(ct->getAlignment() > 0);
+        next_offset_ = roundUp(next_offset_, ct->getAlignment());
+        member_offsets_.push_back(next_offset_);
+        next_offset_ += ct->getSize();
+
+        align_ = std::max(align_, ct->getAlignment());
+        size_ = roundUp(next_offset_, align_);
     }
     // const Type * getMemberType(StringRef name) const;
     // size_t getMemberOffset(StringRef name) const;
@@ -384,8 +451,9 @@ public:
         s += "struct " + tag_.toString() + " { ";
         for (size_t i = 0; i < member_types_.size(); ++i)
         {
-            s += "\"" + member_names_[i].toString() + "\":(" +
-                member_types_[i]->toString() + ") ";
+            s += "\"" + member_names_[i].toString() + "\"" +
+                 ":(" + member_types_[i]->toString() + ")" +
+                 ":"  + std::to_string(member_offsets_[i]) + " ";
         }
         s += "}";
         return s;
@@ -395,18 +463,21 @@ public:
 //// TODO: UnionType
 
 class Environment;
+struct Stmt;
 class FuncType : public DerivedType {
     vector<Type *> param_types_; // can be nullptr for identifier_list
     vector<StringRef> param_names_; // can be "" for parameter_type_list
     bool is_varlist_;
 
     Environment * env_;
+    Stmt * body_;
 
 public:
     FuncType()
         : DerivedType(T_FUNCTION, TP_CONST | TP_INCOMPLETE | TP_IS_FUNCTION)
         , is_varlist_(false)
-        , env_(nullptr) {
+        , env_(nullptr)
+        , body_(nullptr) {
     }
 
     void addParam(StringRef name, Type * ct) {
@@ -416,6 +487,9 @@ public:
     // void fixParamType(size_t i, const Type * t);
     void enableVarList() {
         is_varlist_ = true;
+    }
+    void setBody(Stmt * body) {
+        body_ = body;
     }
 
     void linkEnv(Environment * env) {

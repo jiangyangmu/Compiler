@@ -2,83 +2,177 @@ C Grammar
 
 ================ Translation Unit ===============
 
-translation-unit	:=
-						{ new_env(); }
+translation-unit		:=
+						{ new_env();
+						  scope_begin(IN_FILE); }
 		(function-definition || declaration)+
+						{ scope_end(); }
 
 function-definition	:=
-		[declaration-specifiers]
+						{ specifier_qualifier_begin();
+						  storage_begin(); }
+		declaration-specifiers
 		declarator
-						{ typ_dup2_merge();
-						  expect(!id_top().empty());
-						  new_sym(id_pop(), typ_pop2());
-						  env_add_sym(sym_pop()); }
+						{ // type must be function
+						  type_set_specifier_qualifier(specifier_qualifier_get());
+						  specifier_qualifier_end();
+
+						  new_symbol();
+						  symbol_set_id(id_pop());
+						  symbol_set_symbol_type(
+						  	storage_get() == typedef
+						  	? ALIAS
+						  	: ID
+						  );
+						  symbol_set_storage_type(
+						  	compute_storage_type(
+						  	IN_FILE,
+						  	storage_get(),
+						  	FUNC_DEFINITION,
+						  	env_find_in_file_scope(symbol_get_id(), symbol_get_symbol_type())
+						  	)
+						  );
+						  symbol_set_object_type(type_top());
+						  if (storage_get() != 'static')
+						  	symbol_set_export();
+						  storage_end();
+
+						  env_add_symbol(symbol_pop());
+						  env_push(function_get_env());
+						  type_pop();
+						  scope_begin(IN_COMPOUND_STATEMENT); }
 		compound-statment
-						{ del_typ();
-						  env_push(typ_func_get_env());
+						{ scope_end();
 						  env_pop();
-						  sym_top().set_func_body(...); }
+						  function_set_body(...); }
 
 declaration		:=
+						{ specifier_qualifier_begin();
+						  storage_begin(); }
 		declaration-specifiers
 		[ declarator-initializer (',' declarator-initializer)* ]
 		';'
-						{ del_typ(); }
+						{ specifier_qualifier_end();
+						  storage_end(); }
 
 declarator-initializer	:=
 		declarator
-						{ typ_dup2_merge();
-						  expect(!id_top().empty());
-						  new_sym(id_pop(), typ_pop2());
-						  env_add_sym(sym_pop()); }
+						{ type_set_specifier_qualifier(specifier_qualifier_get());
+
+						  new_symbol();
+						  symbol_set_id(id_pop());
+						  symbol_set_symbol_type(
+						  	storage_get() == typedef
+						  	? ALIAS
+						  	: ID
+						  );
+						  symbol_set_storage_type(
+						  	compute_storage_type(
+						  	scope_get(),
+						  	storage_get(),
+						  	type_top().isFunction()
+						  		? FUNC_DECLARATION
+						  		: OBJECT,
+						  	env_find_in_file_scope(symbol_get_id(), symbol_get_symbol_type())
+						  	)
+						  );
+						  symbol_set_object_type(type_pop());
+						  if (storage_get() != 'static')
+						  	symbol_set_export();
+						  storage_end();
+
+						  env_add_sym(symbol_pop()); }
 		('=' initializer)?
 
 ================== Declarator ==================
 
 declarator		:=
-		[pointer-list]
+						{ new_type(); }
+		[
+			pointer-list			{ type_merge(); }
+		]
 		(
-			identifier			{ new_id(identifier); new_typ(); }
+			identifier			{ new_id(identifier); new_type(); }
 		||	'(' declarator ')'
-		)				{ typ_merge(); // if pointer-list exists }
+		)
 		(
-			'[' [constant-expr] ']'		{ typ_merge(); }
-		||	'(' [parameter-list] ')'		{ typ_merge(); }
+						{ new_array(); }
+			'['
+			[
+				constant-expr		{ array_set_size(int); }
+			]
+			']'
+						{ type_merge(); }
+		||
+						{ new_function(); }
+			'(' [parameter-list] ')'
+						{ type_merge(); }
 		)*
+						{ type_merge(); // merge pointer }
 
-// todo
 abstract-declarator	:=
-		pointer
-		[direct-abstract-declarator]
-		|| direct-abstract-declarator
-// todo
-direct-abstract-declarator
-		:=
-		'(' abstract-declarator ')'
-		|| [direct-abstract-declarator] '[' [constant-expr] ']'
-		|| [direct-abstract-declarator] '(' [parameter-list] ')'
-
-parameter-varlist	:=
-		parameter-declaration			{ typ_func_merge_param(); }
+						{ new_type(); }
+		[
+			pointer-list			{ type_merge(); }
+		]
+						{ new_type(); }
+		[
+			'(' abstract-declarator ')'		{ type_merge(); }
+		]
 		(
-			','
-			parameter-declaration		{ typ_func_merge_param(); }
+						{ new_array(); }
+			'['
+			[
+				constant-expr		{ array_set_size(int); }
+			]
+			']'
+						{ type_merge(); }
+		||
+						{ new_function(); }
+			'(' [parameter-list] ')'
+						{ type_merge(); }
 		)*
-		',' '...'				{ typ_func_set_varlist(); }
+						{ type_merge(); // merge pointer }
 
-parameter-list	:=
-		parameter-declaration			{ typ_func_merge_param(); }
+parameter-list		:=
+						{ scope_begin(IN_PARAMETER_LIST); }
+		parameter-declaration
 		(
-			','
-			parameter-declaration		{ typ_func_merge_param(); }
+			',' parameter-declaration
 		)*
+		(
+			',' '...'			{ function_set_varlist(); }
+		)?
+						{ scope_end(); }
 
 parameter-declaration	:=
-		declaration-specifiers			{ expect_empty(pop_sym_linkage()); expect_empty(pop_obj_storage()); }
+						{ specifier_qualifier_begin();
+						  storage_begin(); }
+		declaration-specifiers
 		(
-			declarator			{ typ_merge(); }
-		||	[abstract-declarator]		{// todo}
+			declarator
+						{ type_set_specifier_qualifier(specifier_qualifier_get());
+						  specifier_qualifier_end();
+						  // expect auto/register storage
+						  storage_end();
+						  function_add_parameter(id_pop(), type_pop()); }
+		||
+			[abstract-declarator]		{// todo}
 		)
+
+pointer-list		:=
+		pointer
+		(
+			pointer			{ type_merge(); }
+		)*
+
+pointer		:=
+		'*'				{ qualifier_begin(); }
+		(type-qualifier)+
+						{ new_pointer();
+						  pointer_set_qualifier(qualifier_get());
+						  qualifier_end();
+						}
 
 // todo
 type-name		:=
@@ -88,96 +182,89 @@ type-name		:=
 		)+
 		[abstract-declarator]
 
-pointer-list		:=
-		pointer
-		(
-			pointer			{ typ_merge(); }
-		)*
-
-pointer		:=
-		'*'				{ new_typ_qualifier(); }
-		(type-qualifier)+
-						{ new_typ(POINTER, typ_pop_qualifier()); }
-
 ================== Specifiers ==================
 
-declaration-specifiers  :=
-						{ new_typ_specifier();
-						  new_typ_qualifier();
-						  new_sym_linkage(); // S.linkage
-						  new_obj_storage(); // O.storage }
+declaration-specifiers  	:=
 		(storage-class-specifier | type-specifier | type-qualifier)+
-						{ new_typ(typ_pop_specifier(), typ_pop_qualifier()); }
 
 storage-class-specifier	:=
-		'typedef'				{ obj_storage_add_token(typedef); }
-		|| 'extern'				{ sym_linkage_add_token(extern); }
-		|| 'static'				{ sym_linkage_add_token(static); obj_storage_add_token(static); }
-		|| 'auto'				{ obj_storage_add_token(auto); }
-		|| 'register'				{ obj_storage_add_token(register); }
+		   'typedef'				{ storage_add(token); }
+		|| 'extern'				{ storage_add(token); }
+		|| 'static'				{ storage_add(token); }
+		|| 'auto'				{ storage_add(token); }
+		|| 'register'				{ storage_add(token); }
 
-type-qualifier	:=
-		'const'				{ typ_qualifier_add_token(const); }
-		|| 'volatile'				{ typ_qualifier_add_token(volatile); }
+type-qualifier		:=
+		   'const'				{ qualifier_add(token); }
+		|| 'volatile'				{ qualifier_add(token); }
 
-type-specifier	:=
-		'void' || 'char' || 'short' || 'int' || 'long' || 'float' || 'double' || 'signed' || 'unsigned'
-						{ typ_specifier_add_token(...); }
-		|| struct-or-union-specifier
-		|| enum-specifier
-		|| typedef-name
+type-specifier		:=
+		   'void' || 'char' || 'short' || 'int' || 'long' || 'float' || 'double' || 'signed' || 'unsigned'
+						{ specifier_add(token); }
+		|| struct-or-union-specifier			{ specifier_add(struct, type); }
+		|| enum-specifier			{ specifier_add(enum, type); }
+		|| typedef-name			{ specifier_add(typedef, type); }
 
 
-struct-specifier
+struct-or-union-specifier
 		:=
-		'struct'				{ typ_specifier_add_token(struct); }
+		('struct' || 'union')			{ new_struct(); }
 		[
-		identifier				{ typ_specifier_set_struct_name(identifier); }
+		identifier				{ struct_set_name(identifier); }
 		]
-		[ '{' (struct-declaration)+ '}' ]
-
-union-specifier
-		:=
-		'union'				{ typ_specifier_add_token(union); }
 		[
-		identifier				{ typ_specifier_set_struct_name(identifier); }
+			'{' (struct-declaration)+ '}'		{ struct_complete(); }
 		]
-		[ '{' (struct-declaration)+ '}' ]
+						{ new_symbol();
+						  symbol_set_id(struct_get_name());
+						  symbol_set_symbol_type(tag);
+						  symbol_set_storage_type(none);
+						  symbol_set_object_type(type_top());
+						  env_add_symbol(symbol_pop());
+						}
 
 struct-declaration	:=
-						{ new_typ_specifier(); new_typ_qualifier(); }
+						{ specifier_qualifier_begin(); }
 		(
 		type-specifier
 		||
 		type-qualifier
 		)+
-						{ new_typ(typ_pop_specifier(), typ_pop_qualifier()); }
-		struct-declarator			{ typ_dup2_merge(); typ_specifier_struct_add_member(id_pop(), typ_pop2()); }
+		struct-declarator
+						{ type_set_specifier_qualifier(specifier_qualifier_get());
+						  struct_add_member(id_pop(), type_pop()); }
 		(
-		','
-		struct-declarator			{ ...same... }
+			','
+			struct-declarator		{ ...same... }
 		)*
-		';'				{ del_typ(); }
+		';'				{ specifier_qualifier_end(); }
 
 struct-declarator	:=
 		[
-			declarator			{ expect_not_empty(id_top()); }
+			declarator
 		]
 		[
-			':' constant-exprression		{ error("bit-field not support."); }
+			':' constant-expression		{ // TODO: bit-field }
 		]
 
-enum-specifier	:=
-		'enum'				{ typ_specifier_add_token(enum); }
+enum-specifier		:=
+		'enum'				{ new_enum(); }
 		[
-		identifier				{ typ_specifier_set_enum_name(identifier); }
+		identifier				{ enum_set_name(identifier); }
 		]
 		[
 			'{'
-			enumeration-constant		{ typ_specifier_enum_add_member(enum-constant); }
+			enumeration-constant		{ enum_add_const(enum-constant);
+						  new_symbol();
+						  symbol_set_id(enum-constant);
+						  symbol_set_symbol_type(id);
+						  symbol_set_storage_type(none);
+						  symbol_set_object_type(type_top());
+						  env_add_symbol(symbol_pop());
+						}
 			[
 			'='
-			constant-expr		{ typ_specifier_enum_set_member_value(...); }
+			constant-expr			{ enum_set_const_value(...); } // TODO: const engine
 			]
 			(
 				','
@@ -187,125 +274,271 @@ enum-specifier	:=
 				constant-expr	{ ...same... }
 				]
 			)*
-			'}'
+			'}'			{ enum_complete(); }
 		]
+						{ new_symbol();
+						  symbol_set_id(enum_get_name());
+						  symbol_set_symbol_type(tag);
+						  symbol_set_storage_type(none);
+						  symbol_set_object_type(type_top());
+						  env_add_symbol(symbol_pop());
+						}
 
-typedef-name            := identifier
+typedef-name		:=
+		identifier				{ type_push(env_find(identifier, type_alias)); }
 
 ================== Initialize ==================
 
-initializer             := assign-expr
-				|| '{' initializer-list [','] '}'
+initializer		:=
+		assign-expr
+		|| '{' initializer-list [','] '}'
 
-initializer-list        := initializer
-				|| initializer-list ',' initializer
+initializer-list		:= initializer
+		|| initializer-list ',' initializer
 
 =================== Expression ===============
 
-expr                    := assign-expr
-				|| expr ',' assign-expr
+expr		:=
+		comma-expr
 
-assign-expr             := cond-expr
-				|| unary-expr assign-op assign-expr
+comma-expr		:=
+		assign-expr
+		(
+			',' assign-expr			{}
+		)*
 
-cond-expr               := OR-expr
-				|| OR-expr '?' expr ':' cond-expr
+assign-expr		:=
+		cond-expr
+		[
+			assign-op
+			assign-expr			{ expr_assign(op_pop(), expr_pop(), expr_pop()); }
+		]
 
-OR-expr                 := AND-expr
-				|| OR-expr '||' AND-expr
+cond-expr		:=
+		OR-expr
+		[
+			'?' expr
+			':' cond-expr
+		]
 
-AND-expr                := bit-OR-expr
-				|| AND-expr '&&' bit-OR-expr
+OR-expr		:=
+		AND-expr
+		(
+			'||' AND-expr
+		)*
 
-bit-OR-expr             := bit-XOR-expr
-				|| bit-OR-expr '|' bit-XOR-expr
+AND-expr		:=
+		bit-OR-expr
+		(
+			'&&' bit-OR-expr
+		)*
 
-bit-XOR-expr            := bit-AND-expr
-				|| bit-XOR-expr '^' bit-AND-expr
+bit-OR-expr		:=
+		bit-XOR-expr
+		(
+			'|' bit-XOR-expr
+		)*
 
-bit-AND-expr            := eq-expr
-				|| bit-And-expr '&' eq-expr
+bit-XOR-expr		:=
+		bit-AND-expr
+		(
+			'^' bit-AND-expr
+		)*
 
-eq-expr                 := rel-expr
-				|| eq-expr '==' rel-expr
-				|| eq-expr '!=' rel-expr
+bit-AND-expr		:=
+		eq-expr
+		(
+			'&' eq-expr
+		)*
 
-rel-expr                := shift-expr
-				|| rel-expr '<' shift-expr
-				|| rel-expr '<=' shift-expr
-				|| rel-expr '>' shift-expr
-				|| rel-expr '>=' shift-expr
+eq-expr		:=
+		rel-expr
+		(
+			('==' || '!=')
+			rel-expr
+		)*
 
-shift-expr              := add-expr
-				|| shift-expr '<<' add-expr
-				|| shift-expr '>>' add-expr
+rel-expr		:=
+		shift-expr
+		(
+			('<' || '<=' || '>' || '>=')
+			shift-expr
+		)*
 
-add-expr                := mul-expr
-				|| add-expr '+' mul-expr
-				|| add-expr '-' mul-expr
+shift-expr		:=
+		add-expr
+		(
+			('<<' || '>>')
+			add-expr
+		)*
 
-mul-expr                := cast-expr
-				|| mul-expr '*' cast-expr
-				|| mul-expr '/' cast-expr
-				|| mul-expr '%' cast-expr
+add-expr		:=
+		mul-expr
+		(
+			('+' || '-')
+			mul-expr
+		)*
 
-cast-expr               := unary-expr
-				|| '(' type-name ')' cast-expr
+mul-expr		:=
+		cast-expr
+		(
+			('*' | '/' | '%')
+			cast-expr
+		)*
 
-unary-expr              := postfix-expr
-				|| '++' unary-expr
-				|| '--' unary-expr
-				|| unary-op cast-expr
-				|| 'sizeof' unary-expr
-				|| 'sizeof' '(' type-name ')'
+cast-expr		:=
+		(
+			'('
+			type-name
+			')'
+		)*
+		unary-expr
 
-postfix-expr            := primary-expr
-				|| postfix-expr '[' expr ']'
-				|| postfix-expr '(' [argument-expr-list] ')'
-				|| postfix-expr '.' identifier
-				|| postfix-expr '->' identifier
-				|| postfix-expr '++'
-				|| postfix-expr '--'
+unary-expr		:=
+			postfix-expr
+		||
+			('++' || '--')
+			unary-expr			// TODO: expand self-loop?
+		||
+			unary-op
+			cast-expr
+		||
+			'sizeof'
+			(
+				unary-expr
+			||
+				'(' type-name ')'
+			)
 
-primary-expr            := identifier
-				|| constant
-				|| string-literal
-				|| '(' expr ')'
+postfix-expr		:=
+		primary-expr
+		(
+			'[' expr ']'
+		||
+			'(' [argument-expr-list] ')'
+		||
+			'.' identifier
+		||
+			'->' identifier
+		||
+			'++'
+		||
+			'--'
+		)*
 
-argument-expr-list      := assign-expr
-				|| argument-expr-list ',' assign-expr
+primary-expr		:=
+			identifier
+		||
+			constant
+		||
+			string-literal
+		||
+			'('
+			expr
+			')'
 
-constant-expr           := cond-expr
+argument-expr-list	:=
+		assign-expr
+		(
+			',' assign-expr
+		)*
+
+constant-expr		:=
+		cond-expr
 
 =============== Statement ===============
 
-stmt                    := labeled-stmt
-				|| compound-stmt
-				|| expression-stmt
-				|| selection-stmt
-				|| iteration-stmt
-				|| jump-stmt
+stmt		:=
+		labeled-stmt
+		|| compound-stmt
+		|| expression-stmt
+		|| selection-stmt
+		|| iteration-stmt
+		|| jump-stmt
 
-labeled-stmt            := identifier ':' stmt
-				|| 'case' constant-expr ':' stmt
-				|| 'default' ':' stmt
+labeled-stmt		:=
+		identifier ':' stmt			{ new_label_stmt(); }
+		|| 'case' constant-expr ':' stmt			{ new_case_stmt(expr_pop(), stmt_pop()); }
+		|| 'default' ':' stmt			{ new_default_stmt(); }
 
-compound-stmt           := '{' (declaration)* (stmt)* '}'
+compound-stmt	:=
+						{ new_compound_stmt();
+						  new_env(); }
+		'{'
+			(declaration)*
+			(
+			stmt			{ compound_stmt_add(stmt_pop()); }
+			)*
+		'}'
+						{ compound_stmt_set_env(env_pop()); }
 
-expression-stmt         := [expr] ';'
+expression-stmt	:=
+						{ new_expr_stmt(); }
+		[
+			expr			{ expr_stmt_set_expr(expr_pop()); }
+		]
+		';'
 
-selection-stmt          := 'if' '(' expr ')' stmt
-				|| 'if' '(' expr ')' stmt 'else' stmt           ＃ dangling 'else'
-				|| 'switch' '(' expr ')' stmt
+selection-stmt		:=
+						{ new_if_stmt(); }
+			'if' '('
+			expr			{ if_stmt_set_expr(expr_pop()); }
+			')'
+			stmt			{ if_stmt_set_if_block(stmt_pop()); }
+			[
+				'else'
+				stmt		{ if_stmt_set_else_block(stmt_pop()); }
+			]
+		||
+						{ new_switch_stmt(); }
+			'switch' '('
+			expr			{ switch_set_expr(expr_pop()); }
+			')'
+			stmt			{ switch_set_stmt(stmt_pop()); }
 
-iteration-stmt          := 'while' '(' expr ')' stmt
-				|| 'do' stmt 'while' '(' expr ')' ';'
-				|| 'for' '(' [expr] ';' [expr] ';' [expr] ')' stmt
+iteration-stmt		:=
+						{ new_while_stmt(); }
+			'while' '('
+				expr		{ while_set_expr(expr_pop()); }
+			')'
+				stmt		{ while_set_stmt(stmt_pop()); }
+		||
+						{ new_do_while_stmt(); }
+			'do'
+				stmt		{ do_while_set_stmt(expr_pop()); }
+			'while' '('
+				expr		{ do_while_set_expr(stmt_pop()); }
+			')' ';'
+		||
+						{ new_for_stmt(); }
+			'for' '('
+			[
+				expr		{ for_stmt_set_init_expr(expr_pop()); }
+			]
+			';'
+			[
+				expr		{ for_stmt_set_cond_expr(expr_pop()); }
+			]
+			';'
+			[
+				expr		{ for_stmt_set_tail_expr(expr_pop()); }
+			]
+			')'
+				stmt		{ for_stmt_set_stmt(stmt_pop()); }
 
-jump-stmt               := 'goto' identifier ';'
-				|| 'continue' ';'
-				|| 'break' ';'
-				|| 'return' [expr] ';'
+jump-stmt		:=
+			'goto' identifier ';'		{ new_goto_stmt();
+						  goto_stmt_set_label(token); }
+		||
+			'continue' ';'			{ new_continue_stmt(); }
+		||
+			'break' ';'			{ new_break_stmt(); }
+		||
+			'return'			{ new_return_stmt(); }
+			[
+				expr		{ return_stmt_set_expr(expr_pop()); }
+			]
+			';'
 
 =============== Lexical ===============
 

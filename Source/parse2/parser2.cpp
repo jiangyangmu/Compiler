@@ -194,6 +194,24 @@ extern Ast * ParseFunctionDefinition(TokenIterator & ti, Ast * declarationSpecif
 extern Ast * ParseStatememt(TokenIterator & ti);
 extern Ast * ParseCompoundStatement(TokenIterator & ti);
 extern Ast * ParseExpression(TokenIterator & ti);
+extern Ast * ParseCommaExpr(TokenIterator & ti, Ast * leftCommaExpr = nullptr);
+extern Ast * ParseAssignExpr(TokenIterator & ti);
+extern Ast * ParseCondExpr(TokenIterator & ti);
+extern Ast * ParseOrExpr(TokenIterator & ti, Ast * leftOrExpr = nullptr);
+extern Ast * ParseAndExpr(TokenIterator & ti, Ast * leftAndExpr = nullptr);
+extern Ast * ParseBitOrExpr(TokenIterator & ti, Ast * leftBitOrExpr = nullptr);
+extern Ast * ParseBitXorExpr(TokenIterator & ti, Ast * leftBitXorExpr = nullptr);
+extern Ast * ParseBitAndExpr(TokenIterator & ti, Ast * leftBitAndExpr = nullptr);
+extern Ast * ParseEqExpr(TokenIterator & ti, Ast * leftEqExpr = nullptr);
+extern Ast * ParseRelExpr(TokenIterator & ti, Ast * leftRelExpr = nullptr);
+extern Ast * ParseShiftExpr(TokenIterator & ti, Ast * leftShiftExpr = nullptr);
+extern Ast * ParseAddExpr(TokenIterator & ti, Ast * leftAddExpr = nullptr);
+extern Ast * ParseMulExpr(TokenIterator & ti, Ast * leftMulExpr = nullptr);
+extern Ast * ParseCastExpr(TokenIterator & ti);
+extern Ast * ParseUnaryExpr(TokenIterator & ti);
+extern Ast * ParsePostfixExpr(TokenIterator & ti, Ast * leftPostfixExpr = nullptr);
+extern Ast * ParsePrimaryExpr(TokenIterator & ti);
+extern Ast * ParseArgumentList(TokenIterator & ti);
 extern Ast * ParseConstantExpr(TokenIterator & ti);
 extern Ast * ParseParameterList(TokenIterator & ti);
 
@@ -204,9 +222,8 @@ Ast * ParseTranslationUnit(TokenIterator & ti)
 
     while (!PEEK_T(Token::FILE_END))
     {
-        Ast * declarationSpecifiers             = First(DECLARATION_SPECIFIERS, PEEK())
-                                                  ? ParseDeclarationSpecifiers(ti)
-                                                  : nullptr;
+        ASSERT(First(DECLARATION_SPECIFIERS, PEEK()));
+        Ast * declarationSpecifiers             = ParseDeclarationSpecifiers(ti);
 
         Ast * declarator                        = First(DECLARATOR, PEEK())
                                                   ? ParseDeclarator(ti)
@@ -227,15 +244,16 @@ Ast * ParseDeclaration(TokenIterator & ti)
     Ast * declaration                           = NewAst(DECLARATION);
     declaration->leftChild                      = ParseDeclarationSpecifiers(ti);
 
-    Ast ** pNextDeclaratorInitializer           = &declaration->leftChild->rightSibling;
-    while (pNextDeclaratorInitializer)
+    if (!PEEK_T(Token::STMT_END))
     {
-        *pNextDeclaratorInitializer             = SKIP_T(Token::OP_COMMA)
-                                                  ? ParseDeclaratorInitializer(ti)
-                                                  : nullptr;
-        pNextDeclaratorInitializer              = pNextDeclaratorInitializer 
-                                                  ? &(*pNextDeclaratorInitializer)->rightSibling
-                                                  : nullptr;
+        Ast ** pNextDeclaratorInitializer       = &declaration->leftChild->rightSibling;
+        *pNextDeclaratorInitializer             = ParseDeclaratorInitializer(ti);
+        pNextDeclaratorInitializer              = &(*pNextDeclaratorInitializer)->rightSibling;
+        while (SKIP_T(Token::OP_COMMA))
+        {
+            *pNextDeclaratorInitializer         = ParseDeclaratorInitializer(ti);
+            pNextDeclaratorInitializer          = &(*pNextDeclaratorInitializer)->rightSibling;
+        }
     }
 
     EXPECT_T(Token::STMT_END);
@@ -248,32 +266,24 @@ Ast * ParseDeclaration(TokenIterator & ti, Ast * declarationSpecifiers, Ast * de
     ASSERT(declarationSpecifiers);
 
     Ast * declaration                           = NewAst(DECLARATION);
-    Ast ** pNextChild                           = &declaration->leftChild;
-
-
-    *pNextChild                                 = declarationSpecifiers;
-    pNextChild                                  = &(*pNextChild)->rightSibling;
+    declaration->leftChild                      = declarationSpecifiers;
 
     if (declarator)
     {
+        Ast ** pNextDeclaratorInitializer = &declaration->leftChild->rightSibling;
+
         Ast * declaratorInitializer             = NewAst(DECLARATOR_INITIALIZER);
         declaratorInitializer->leftChild        = declarator;
         declaratorInitializer->leftChild->rightSibling
                                                 = SKIP_T(Token::ASSIGN)
                                                   ? ParseInitializer(ti)
                                                   : nullptr;
-        *pNextChild                             = declaratorInitializer;
-        pNextChild                              = &(*pNextChild)->rightSibling;
+        *pNextDeclaratorInitializer             = declaratorInitializer;
+        pNextDeclaratorInitializer              = &(*pNextDeclaratorInitializer)->rightSibling;
         while (SKIP_T(Token::OP_COMMA))
         {
-            Ast * declaratorInitializer         = NewAst(DECLARATOR_INITIALIZER);
-            declaratorInitializer->leftChild    = ParseDeclarator(ti);
-            declaratorInitializer->leftChild->rightSibling
-                                                = SKIP_T(Token::ASSIGN)
-                                                  ? ParseInitializer(ti)
-                                                  : nullptr;
-            *pNextChild                         = declaratorInitializer;
-            pNextChild                          = &(*pNextChild)->rightSibling;
+            *pNextDeclaratorInitializer = ParseDeclaratorInitializer(ti);
+            pNextDeclaratorInitializer = &(*pNextDeclaratorInitializer)->rightSibling;
         }
     }
 
@@ -357,29 +367,30 @@ Ast * ParseTypeSpecifier(TokenIterator & ti)
             *pNextChild                     = NewAst(IDENTIFIER, NEXT());
             pNextChild                      = &(*pNextChild)->rightSibling;
         }
-                
+        else
+        {
+            ASSERT(PEEK_T(Token::BLK_BEGIN));
+        }
+
         if (SKIP_T(Token::BLK_BEGIN))
         {
             ASSERT(PEEK_T(Token::ID));
             *pNextChild                     = NewAst(ENUM_CONSTANT, NEXT());
             (*pNextChild)->leftChild        = SKIP_T(Token::ASSIGN)
-                                                ? ParseConstantExpr(ti)
-                                                : nullptr;
+                                              ? ParseConstantExpr(ti)
+                                              : nullptr;
             pNextChild                      = &(*pNextChild)->rightSibling;
             while (SKIP_T(Token::OP_COMMA))
             {
+                ASSERT(PEEK_T(Token::ID));
                 *pNextChild                 = NewAst(ENUM_CONSTANT, NEXT());
                 (*pNextChild)->leftChild    = SKIP_T(Token::ASSIGN)
-                                                ? ParseConstantExpr(ti)
-                                                : nullptr;
+                                              ? ParseConstantExpr(ti)
+                                              : nullptr;
                 pNextChild                  = &(*pNextChild)->rightSibling;
             }
 
             EXPECT_T(Token::BLK_END);
-        }
-        else
-        {
-            ASSERT(enumSpecifier->leftChild);
         }
 
         return enumSpecifier;
@@ -433,24 +444,7 @@ Ast * ParseStructDeclaration(TokenIterator & ti)
 Ast * ParseStructDeclarator(TokenIterator & ti)
 {
     Ast * structDeclarator                          = NewAst(STRUCT_DECLARATOR);
-    Ast ** pNextChild                               = &structDeclarator->leftChild;
-
-    if (First(DECLARATOR, PEEK()))
-    {
-        *pNextChild                                 = ParseDeclarator(ti);
-        pNextChild                                  = &(*pNextChild)->rightSibling;
-    }
-
-    if (SKIP_T(Token::OP_COLON))
-    {
-        *pNextChild                                 = ParseConstantExpr(ti);
-        pNextChild                                  = &(*pNextChild)->rightSibling;
-    }
-    else
-    {
-        ASSERT(structDeclarator->leftChild);
-    }
-
+    structDeclarator->leftChild                     = ParseDeclarator(ti);
     return structDeclarator;
 }
 
@@ -459,7 +453,9 @@ Ast * ParseDeclaratorInitializer(TokenIterator & ti)
     Ast * declaratorInitializer                 = NewAst(DECLARATOR_INITIALIZER);
     declaratorInitializer->leftChild            = ParseDeclarator(ti);
     declaratorInitializer->leftChild->rightSibling
-                                                = ParseInitializer(ti);
+                                                = SKIP_T(Token::ASSIGN)
+                                                  ? ParseInitializer(ti)
+                                                  : nullptr;
     return declaratorInitializer;
 }
 
@@ -541,22 +537,15 @@ Ast * ParseInitializer(TokenIterator & ti)
 
 Ast * ParseFunctionDefinition(TokenIterator & ti, Ast * declarationSpecifiers, Ast * declarator)
 {
+    ASSERT(declarationSpecifiers && declarator);
+
     Ast * functionDefinition                    = NewAst(FUNCTION_DEFINITION);
 
-    if (declarationSpecifiers)
-    {
-        functionDefinition->leftChild           = declarationSpecifiers;
-        functionDefinition->leftChild->rightSibling
+    functionDefinition->leftChild               = declarationSpecifiers;
+    functionDefinition->leftChild->rightSibling
                                                 = declarator;
-        functionDefinition->leftChild->rightSibling->rightSibling
+    functionDefinition->leftChild->rightSibling->rightSibling
                                                 = ParseCompoundStatement(ti);
-    }
-    else
-    {
-        functionDefinition->leftChild           = declarator;
-        functionDefinition->leftChild->rightSibling
-                                                = ParseCompoundStatement(ti);
-    }
 
     return functionDefinition;
 }
@@ -586,29 +575,32 @@ Ast * ParseStatememt(TokenIterator & ti)
     }
     if (First(LABELED_STMT, PEEK()))
     {
-        Ast * labelStatement                    = NewAst(LABELED_STMT);
-
         if (PEEK_T(Token::ID))
         {
+            Ast * labelStatement                = NewAst(LABEL_STMT);
             labelStatement->leftChild           = NewAst(IDENTIFIER, NEXT());
             EXPECT_T(Token::OP_COLON);
             labelStatement->leftChild->rightSibling
                                                 = ParseStatememt(ti);
+            return labelStatement;
         }
         else if (SKIP_T(Token::KW_CASE))
         {
-            labelStatement->leftChild           = ParseConstantExpr(ti);
-            labelStatement->leftChild->rightSibling
+            Ast * caseStatement                 = NewAst(CASE_STMT);
+            caseStatement->leftChild            = ParseConstantExpr(ti);
+            EXPECT_T(Token::OP_COLON);
+            caseStatement->leftChild->rightSibling
                                                 = ParseStatememt(ti);
+            return caseStatement;
         }
         else
         {
+            Ast * defaultStatement              = NewAst(DEFAULT_STMT);
             EXPECT_T(Token::KW_DEFAULT);
             EXPECT_T(Token::OP_COLON);
-            labelStatement->leftChild           = ParseStatememt(ti);
+            defaultStatement->leftChild         = ParseStatememt(ti);
+            return defaultStatement;
         }
-
-        return labelStatement;
     }
     else if (First(EXPRESSION_STMT, PEEK()))
     {
@@ -635,8 +627,8 @@ Ast * ParseStatememt(TokenIterator & ti)
                                                   : nullptr;
 
             Ast * ifStatement                   = NewAst(elseBlock
-                                                         ? IF_ELSE_STMT
-                                                         : IF_STMT);
+                                                  ? IF_ELSE_STMT
+                                                  : IF_STMT);
             ifStatement->leftChild              = expression;
             ifStatement->leftChild->rightSibling= ifBlock;
             ifStatement->leftChild->rightSibling->rightSibling
@@ -719,10 +711,12 @@ Ast * ParseStatememt(TokenIterator & ti)
         }
         else if(SKIP_T(Token::KW_CONTINUE))
         {
+            EXPECT_T(Token::STMT_END);
             return NewAst(CONTINUE_STMT);
         }
         else if (SKIP_T(Token::KW_BREAK))
         {
+            EXPECT_T(Token::STMT_END);
             return NewAst(BREAK_STMT);
         }
         else
@@ -732,6 +726,7 @@ Ast * ParseStatememt(TokenIterator & ti)
             returnStatement->leftChild          = !PEEK_T(Token::STMT_END)
                                                   ? ParseExpression(ti)
                                                   : nullptr;
+            EXPECT_T(Token::STMT_END);
             return returnStatement;
         }
     }
@@ -743,10 +738,352 @@ Ast * ParseCompoundStatement(TokenIterator & ti)
     return ParseStatememt(ti);
 }
 
+// TODO
 Ast * ParseExpression(TokenIterator & ti)
 {
-    // TODO
-    return NewAst(EXPR);
+    return ParseCommaExpr(ti);
+}
+Ast * ParseCommaExpr(TokenIterator & ti, Ast * leftCommaExpr /* = nullptr */)
+{
+    Ast * left                                  = leftCommaExpr
+                                                  ? leftCommaExpr
+                                                  : ParseAssignExpr(ti);
+    if (SKIP_T(Token::OP_COMMA))
+    {
+        Ast * commaExpr                         = NewAst(COMMA_EXPR);
+        commaExpr->leftChild                    = left;
+        commaExpr->leftChild->rightSibling      = ParseAssignExpr(ti);
+        return ParseCommaExpr(ti, commaExpr);
+    }
+    else
+        return left;
+}
+bool IsAssignOp(Token::Type t)
+{
+    return t >= Token::ASSIGN && t <= Token::XOR_ASSIGN;
+}
+Ast * ParseAssignExpr(TokenIterator & ti)
+{
+    Ast * condExpr                              = ParseCondExpr(ti);
+    if (IsAssignOp(PEEK().type))
+    {
+        Ast * assignExpr                        = NewAst(ASSIGN_EXPR);
+        assignExpr->token                       = NEXT();
+        assignExpr->leftChild                   = condExpr;
+        assignExpr->leftChild->rightSibling     = ParseAssignExpr(ti);
+        return assignExpr;
+    }
+    else
+        return condExpr;
+}
+Ast * ParseCondExpr(TokenIterator & ti)
+{
+    Ast * orExpr                                = ParseOrExpr(ti);
+    if (SKIP_T(Token::OP_QMARK))
+    {
+        Ast * condExpr                          = NewAst(COND_EXPR);
+        condExpr->leftChild                     = ParseExpression(ti);
+        EXPECT_T(Token::OP_COLON);
+        condExpr->leftChild->rightSibling       = ParseCondExpr(ti);
+        return condExpr;
+    }
+    else
+        return orExpr;
+}
+Ast * ParseOrExpr(TokenIterator & ti, Ast * leftOrExpr /* = nullptr */)
+{
+    Ast * left                                  = leftOrExpr
+                                                  ? leftOrExpr
+                                                  : ParseAndExpr(ti);
+    if (SKIP_T(Token::BOOL_OR))
+    {
+        Ast * orExpr                            = NewAst(OR_EXPR);
+        orExpr->leftChild                       = left;
+        orExpr->leftChild->rightSibling         = ParseAndExpr(ti);
+        return ParseOrExpr(ti, orExpr);
+    }
+    else
+        return left;
+}
+Ast * ParseAndExpr(TokenIterator & ti, Ast * leftAndExpr /* = nullptr */)
+{
+    Ast * left                                  = leftAndExpr
+                                                  ? leftAndExpr
+                                                  : ParseBitOrExpr(ti);
+    if (SKIP_T(Token::BOOL_AND))
+    {
+        Ast * andExpr                           = NewAst(AND_EXPR);
+        andExpr->leftChild                      = left;
+        andExpr->leftChild->rightSibling        = ParseBitOrExpr(ti);
+        return ParseAndExpr(ti, andExpr);
+    }
+    else
+        return left;
+}
+Ast * ParseBitOrExpr(TokenIterator & ti, Ast * leftBitOrExpr /* = nullptr */)
+{
+    Ast * left                                  = leftBitOrExpr
+                                                  ? leftBitOrExpr
+                                                  : ParseBitXorExpr(ti);
+    if (SKIP_T(Token::BIT_OR))
+    {
+        Ast * bitOrExpr                         = NewAst(BIT_OR_EXPR);
+        bitOrExpr->leftChild                    = left;
+        bitOrExpr->leftChild->rightSibling      = ParseBitXorExpr(ti);
+        return ParseBitOrExpr(ti, bitOrExpr);
+    }
+    else
+        return left;
+}
+Ast * ParseBitXorExpr(TokenIterator & ti, Ast * leftBitXorExpr /* = nullptr */)
+{
+    Ast * left                                  = leftBitXorExpr
+                                                  ? leftBitXorExpr
+                                                  : ParseBitAndExpr(ti);
+    if (SKIP_T(Token::BIT_XOR))
+    {
+        Ast * bitXorExpr                        = NewAst(BIT_XOR_EXPR);
+        bitXorExpr->leftChild                   = left;
+        bitXorExpr->leftChild->rightSibling     = ParseBitAndExpr(ti);
+        return ParseBitXorExpr(ti, bitXorExpr);
+    }
+    else
+        return left;
+}
+Ast * ParseBitAndExpr(TokenIterator & ti, Ast * leftBitAndExpr /* = nullptr */)
+{
+    Ast * left                                  = leftBitAndExpr
+                                                  ? leftBitAndExpr
+                                                  : ParseEqExpr(ti);
+    if (SKIP_T(Token::BIT_AND))
+    {
+        Ast * bitAndExpr                        = NewAst(BIT_AND_EXPR);
+        bitAndExpr->leftChild                   = left;
+        bitAndExpr->leftChild->rightSibling     = ParseEqExpr(ti);
+        return ParseBitAndExpr(ti, bitAndExpr);
+    }
+    else
+        return left;
+}
+bool IsEqOp(Token::Type t)
+{
+    return t == Token::REL_EQ || t == Token::REL_NE;
+}
+Ast * ParseEqExpr(TokenIterator & ti, Ast * leftEqExpr/* = nullptr */)
+{
+    Ast * left                                  = leftEqExpr
+                                                  ? leftEqExpr
+                                                  : ParseRelExpr(ti);
+    if (IsEqOp(PEEK().type))
+    {
+        Ast * eqExpr                            = NewAst(EQ_EXPR);
+        eqExpr->leftChild                       = left;
+        eqExpr->token                           = NEXT();
+        eqExpr->leftChild->rightSibling         = ParseRelExpr(ti);
+        return ParseEqExpr(ti, eqExpr);
+    }
+    else
+        return left;
+}
+bool IsRelOp(Token::Type t)
+{
+    return t >= Token::REL_GT && t <= Token::REL_LE;
+}
+Ast * ParseRelExpr(TokenIterator & ti, Ast * leftRelExpr /* = nullptr */)
+{
+    Ast * left                                  = leftRelExpr
+                                                  ? leftRelExpr
+                                                  : ParseShiftExpr(ti);
+    if (IsRelOp(PEEK().type))
+    {
+        Ast * relExpr                           = NewAst(REL_EXPR);
+        relExpr->leftChild                      = left;
+        relExpr->token                          = NEXT();
+        relExpr->leftChild->rightSibling        = ParseShiftExpr(ti);
+        return ParseRelExpr(ti, relExpr);
+    }
+    else
+        return left;
+}
+bool IsShiftOp(Token::Type t)
+{
+    return t == Token::BIT_SHL || t == Token::BIT_SHR;
+}
+Ast * ParseShiftExpr(TokenIterator & ti, Ast * leftShiftExpr /* = nullptr */)
+{
+    Ast * left                                  = leftShiftExpr
+                                                  ? leftShiftExpr
+                                                  : ParseAddExpr(ti);
+    if (IsShiftOp(PEEK().type))
+    {
+        Ast * shiftExpr                         = NewAst(SHIFT_EXPR);
+        shiftExpr->leftChild                    = left;
+        shiftExpr->token                        = NEXT();
+        shiftExpr->leftChild->rightSibling      = ParseAddExpr(ti);
+        return ParseShiftExpr(ti, shiftExpr);
+    }
+    else
+        return left;
+}
+bool IsAddOp(Token::Type t)
+{
+    return t == Token::OP_ADD || t == Token::OP_SUB;
+}
+Ast * ParseAddExpr(TokenIterator & ti, Ast * leftAddExpr /* = nullptr */)
+{
+    Ast * left                                  = leftAddExpr
+                                                  ? leftAddExpr
+                                                  : ParseMulExpr(ti);
+    if (IsAddOp(PEEK().type))
+    {
+        Ast * addExpr                           = NewAst(ADD_EXPR);
+        addExpr->leftChild                      = left;
+        addExpr->token                          = NEXT();
+        addExpr->leftChild->rightSibling        = ParseMulExpr(ti);
+        return ParseAddExpr(ti, addExpr);
+    }
+    else
+        return left;
+}
+bool IsMulOp(Token::Type t)
+{
+    return t == Token::OP_MUL || t == Token::OP_DIV || t == Token::OP_MOD;
+}
+Ast * ParseMulExpr(TokenIterator & ti, Ast * leftMulExpr /* = nullptr */)
+{
+    Ast * left                                  = leftMulExpr
+                                                  ? leftMulExpr
+                                                  : ParseCastExpr(ti);
+    if (IsMulOp(PEEK().type))
+    {
+        Ast * mulExpr                           = NewAst(MUL_EXPR);
+        mulExpr->leftChild                      = left;
+        mulExpr->token                          = NEXT();
+        mulExpr->leftChild->rightSibling        = ParseCastExpr(ti);
+        return ParseMulExpr(ti, mulExpr);
+    }
+    else
+        return left;
+}
+Ast * ParseCastExpr(TokenIterator & ti)
+{
+    // TODO: parse type-name
+    return ParseUnaryExpr(ti);
+}
+bool IsUnaryOp(Token::Type t)
+{
+    return t == Token::BIT_AND ||
+           t == Token::OP_MUL  ||
+           t == Token::OP_ADD  ||
+           t == Token::OP_SUB  ||
+           t == Token::BIT_NOT ||
+           t == Token::BOOL_NOT;
+}
+Ast * ParseUnaryExpr(TokenIterator & ti)
+{
+    if (PEEK_T(Token::OP_INC) || PEEK_T(Token::OP_DEC))
+    {
+        Ast * unaryExpr                         = NewAst(UNARY_EXPR);
+        unaryExpr->token                        = NEXT();
+        unaryExpr->leftChild                    = ParseUnaryExpr(ti);
+        return unaryExpr;
+    }
+    else if (IsUnaryOp(PEEK().type))
+    {
+        Ast * unaryExpr                         = NewAst(UNARY_EXPR);
+        unaryExpr->token                        = NEXT();
+        unaryExpr->leftChild                    = ParseCastExpr(ti);
+        return unaryExpr;
+    }
+    else if (PEEK_T(Token::KW_SIZEOF))
+    {
+        Ast * unaryExpr                         = NewAst(UNARY_EXPR);
+        unaryExpr->token                        = NEXT();
+        unaryExpr->leftChild                    = ParseUnaryExpr(ti);
+        // TODO: '(' type-name ')'
+        return unaryExpr;
+    }
+    else
+    {
+        return ParsePostfixExpr(ti);
+    }
+}
+Ast * ParsePostfixExpr(TokenIterator & ti, Ast * leftPostfixExpr /* = nullptr*/)
+{
+    Ast * left                                  = leftPostfixExpr
+                                                  ? leftPostfixExpr
+                                                  : ParsePrimaryExpr(ti);
+    if (SKIP_T(Token::LSB))
+    {
+        Ast * postfixExpr                       = NewAst(POSTFIX_EXPR);
+        postfixExpr->leftChild                  = left;
+        postfixExpr->leftChild->rightSibling    = ParseExpression(ti);
+        EXPECT_T(Token::RSB);
+        return postfixExpr;
+    }
+    else if (SKIP_T(Token::LP))
+    {
+        Ast * postfixExpr                       = NewAst(POSTFIX_EXPR);
+        postfixExpr->leftChild                  = left;
+        postfixExpr->leftChild->rightSibling    = !PEEK_T(Token::RP)
+                                                  ? ParseArgumentList(ti)
+                                                  : NewAst(ARGUMENT_EXPR_LIST);
+        EXPECT_T(Token::RP);
+        return postfixExpr;
+    }
+    else if (PEEK_T(Token::OP_DOT)|| PEEK_T(Token::OP_POINTTO))
+    {
+        Ast * postfixExpr                       = NewAst(POSTFIX_EXPR);
+        postfixExpr->leftChild                  = left;
+        postfixExpr->token                      = NEXT();
+        ASSERT(PEEK_T(Token::ID));
+        postfixExpr->leftChild->rightSibling    = NewAst(IDENTIFIER, NEXT());
+        return postfixExpr;
+    }
+    else if (PEEK_T(Token::OP_INC) || PEEK_T(Token::OP_DEC))
+    {
+        Ast * postfixExpr                       = NewAst(POSTFIX_EXPR);
+        postfixExpr->leftChild                  = left;
+        postfixExpr->token                      = NEXT();
+        return postfixExpr;
+    }
+    else
+    {
+        return left;
+    }
+}
+Ast * ParsePrimaryExpr(TokenIterator & ti)
+{
+    if (PEEK_T(Token::ID) ||
+        PEEK_T(Token::CONST_INT) ||
+        PEEK_T(Token::CONST_CHAR) ||
+        PEEK_T(Token::CONST_FLOAT) ||
+        PEEK_T(Token::STRING))
+    {
+        return NewAst(PRIMARY_EXPR, NEXT());
+    }
+    else
+    {
+        EXPECT_T(Token::LP);
+        Ast * expr                              = ParseExpression(ti);
+        EXPECT_T(Token::RP);
+        return expr;
+    }
+}
+Ast * ParseArgumentList(TokenIterator & ti)
+{
+    Ast * argumentList                          = NewAst(ARGUMENT_EXPR_LIST);
+    Ast ** pNextArgument                        = &argumentList->leftChild;
+
+    *pNextArgument                              = ParseAssignExpr(ti);
+    pNextArgument                               = &(*pNextArgument)->rightSibling;
+    while (SKIP_T(Token::OP_COMMA))
+    {
+        *pNextArgument                          = ParseAssignExpr(ti);
+        pNextArgument                           = &(*pNextArgument)->rightSibling;
+    }
+
+    return argumentList;
 }
 
 Ast * ParseConstantExpr(TokenIterator & ti)
@@ -758,18 +1095,20 @@ Ast * ParseConstantExpr(TokenIterator & ti)
 
 Ast * ParseParameterList(TokenIterator & ti)
 {
-    Ast * firstParameterDeclaration             = NewAst(PARAMETER_DECLARATION);
-    firstParameterDeclaration->leftChild        = ParseDeclarationSpecifiers(ti);
-    firstParameterDeclaration->leftChild->rightSibling
-                                                = ParseDeclarator(ti); // TODO: AbstractDeclarator
-    bool isVarParamaterList                     = false;
+    Ast * parameterList                         = NewAst(PARAMETER_LIST);
 
-    Ast * pNextParameterDeclaration             = firstParameterDeclaration;
+    Ast * pNextParameterDeclaration             = NewAst(PARAMETER_DECLARATION);
+    pNextParameterDeclaration->leftChild        = ParseDeclarationSpecifiers(ti);
+    pNextParameterDeclaration->leftChild->rightSibling
+                                                = ParseDeclarator(ti); // TODO: AbstractDeclarator
+
+    parameterList->leftChild                    = pNextParameterDeclaration;
+
     while (SKIP_T(Token::OP_COMMA))
     {
-        if (PEEK_T(Token::VAR_PARAM))
+        if (SKIP_T(Token::VAR_PARAM))
         {
-            isVarParamaterList                          = true;
+            pNextParameterDeclaration->rightSibling     = NewAst(PARAMETER_VAR_LIST);
             break;
         }
         else
@@ -783,10 +1122,7 @@ Ast * ParseParameterList(TokenIterator & ti)
         }
     }
 
-    Ast * parameterList                         = NewAst(isVarParamaterList
-                                                         ? PARAMETER_LIST_VARLIST
-                                                         : PARAMETER_LIST);
-    parameterList->leftChild                    = firstParameterDeclaration;
+
     return parameterList;
 }
 
@@ -803,8 +1139,8 @@ void DebugPrintAstImpl(Ast * ast, size_t indent)
                                     "direct declarator",
                                     "abstract declarator",
                                     "direct abstract declarator",
-                                    "parameter list (variant)",
                                     "parameter list",
+                                    "var list",
                                     "parameter",
                                     "identifier",
                                     "identifier list",
@@ -830,6 +1166,7 @@ void DebugPrintAstImpl(Ast * ast, size_t indent)
                                     "initializer",
                                     "initializer list",
                                     "expr",
+                                    "comma expr",
                                     "assign expr",
                                     "cond expr",
                                     "or expr",
@@ -851,6 +1188,9 @@ void DebugPrintAstImpl(Ast * ast, size_t indent)
                                     "stmt",
                                     "stmt list",
                                     "labeled stmt",
+                                    "label",
+                                    "case",
+                                    "default",
                                     "compound stmt",
                                     "expression stmt",
                                     "selection stmt",
@@ -871,6 +1211,7 @@ void DebugPrintAstImpl(Ast * ast, size_t indent)
     {
         for (size_t i = 0; i < indent; ++i)
             std::cout << ' ';
+        assert((unsigned)ast->type < sizeof(astTypeString) / sizeof(void *));
         std::cout << astTypeString[(unsigned)ast->type];
         if (ast->type == IDENTIFIER)
         {

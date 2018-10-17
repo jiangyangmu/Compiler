@@ -80,7 +80,7 @@ CastNode * new_cast_node(Type * type, Type * source_type, ExprNode * arg) {
 
 PrimaryNode * new_primary_node(Symbol * symbol) {
     PrimaryNode * pn = new PrimaryNode;
-    pn->type = symbol->type;
+    pn->type = symbol->objectType;
     pn->symbol = symbol;
     return pn;
 }
@@ -90,7 +90,7 @@ PrimaryNode * new_primary_node(Symbol * symbol) {
 class ExprTreeBuilder {
 public:
     static PrimaryNode * NODE(Symbol * symbol) {
-        CHECK(symbol && symbol->type);
+        CHECK(symbol && symbol->objectType);
         return new_primary_node(symbol);
     }
     static BinaryNode * ADD(ExprNode * n2, ExprNode * n1) {

@@ -12,32 +12,45 @@ public:
     Environment()
         : parent_(nullptr) {
     }
-    void addSymbol(Symbol * sym) {
-        symbols_.push_back(sym);
+    void addSymbol(Symbol * symbol) {
+        //Symbol * same_symbol = nullptr;
+        //for (Symbol * sym : symbols_)
+        //{
+        //    if (sym->name == symbol->name &&
+        //        sym->symbolType == symbol->symbolType)
+        //    {
+        //        same_symbol = sym;
+        //        break;
+        //    }
+        //}
+        //CHECK(same_symbol == nullptr);
+        symbols_.push_back(symbol);
     }
-    Symbol * findSymbol(StringRef id) const {
+    Symbol * findSymbol(StringRef id, Symbol::SymbolType type) const {
         Symbol * s = nullptr;
         for (Symbol * symbol : symbols_)
         {
-            if (id == symbol->name)
+            if (id == symbol->name && type == symbol->symbolType)
             {
                 s = symbol;
                 break;
             }
         }
         if (s == nullptr && parent_ != nullptr)
-            s = parent_->findSymbol(id);
+            s = parent_->findSymbol(id, type);
         return s;
     }
     std::vector<Symbol *> allSymbols() const {
         return symbols_;
     }
 
-    // Symbol * findSymbolByName(StringRef name);
     void setParent(Environment * parent) {
         CHECK(parent != nullptr);
         parent->children_.push_back(this);
         parent_ = parent;
+    }
+    Environment * getParent() {
+        return parent_;
     }
     std::string toString() const {
         return toString(this, "");

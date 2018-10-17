@@ -39,7 +39,7 @@ Symbol and Environment
         rules
             # here [scope] can't be function
             ---------------------------------------------------------
-            [object type]  [storage]  [scope]               linkage
+             [object type]  [storage]  [scope]               linkage
             1   func/obj    'static'    file                 internal
             2   func/obj    'extern'     *              dup-file or external
             3    func          --       file                    2
