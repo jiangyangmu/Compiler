@@ -176,7 +176,9 @@ bool First(AstType at, const Token & token)
 
 #define NEXT() (ti.next())
 #define PEEK() (ti.peek())
+#define PEEK2() (ti.peekN(1))
 #define PEEK_T(n) (ti.peek().type == (n))
+#define PEEK2_T(n) (ti.peekN(1).type == (n))
 #define SKIP_T(n) (PEEK_T(n) ? (void)ti.next(), true : false)
 #define EXPECT_T(n) (ASSERT(PEEK_T(n)), (void)ti.next())
 
@@ -573,7 +575,9 @@ Ast * ParseStatememt(TokenIterator & ti)
 
         return compoundStatement;
     }
-    if (First(LABELED_STMT, PEEK()))
+    if (PEEK_T(Token::KW_CASE) ||
+        PEEK_T(Token::KW_DEFAULT) ||
+        (PEEK_T(Token::ID) && PEEK2_T(Token::OP_COLON)))
     {
         if (PEEK_T(Token::ID))
         {
@@ -1019,7 +1023,7 @@ Ast * ParsePostfixExpr(TokenIterator & ti, Ast * leftPostfixExpr /* = nullptr*/)
         postfixExpr->leftChild                  = left;
         postfixExpr->leftChild->rightSibling    = ParseExpression(ti);
         EXPECT_T(Token::RSB);
-        return postfixExpr;
+        return ParsePostfixExpr(ti, postfixExpr);
     }
     else if (SKIP_T(Token::LP))
     {
@@ -1029,7 +1033,7 @@ Ast * ParsePostfixExpr(TokenIterator & ti, Ast * leftPostfixExpr /* = nullptr*/)
                                                   ? ParseArgumentList(ti)
                                                   : NewAst(ARGUMENT_EXPR_LIST);
         EXPECT_T(Token::RP);
-        return postfixExpr;
+        return ParsePostfixExpr(ti, postfixExpr);
     }
     else if (PEEK_T(Token::OP_DOT)|| PEEK_T(Token::OP_POINTTO))
     {
@@ -1038,14 +1042,14 @@ Ast * ParsePostfixExpr(TokenIterator & ti, Ast * leftPostfixExpr /* = nullptr*/)
         postfixExpr->token                      = NEXT();
         ASSERT(PEEK_T(Token::ID));
         postfixExpr->leftChild->rightSibling    = NewAst(IDENTIFIER, NEXT());
-        return postfixExpr;
+        return ParsePostfixExpr(ti, postfixExpr);
     }
     else if (PEEK_T(Token::OP_INC) || PEEK_T(Token::OP_DEC))
     {
         Ast * postfixExpr                       = NewAst(POSTFIX_EXPR);
         postfixExpr->leftChild                  = left;
         postfixExpr->token                      = NEXT();
-        return postfixExpr;
+        return ParsePostfixExpr(ti, postfixExpr);
     }
     else
     {
@@ -1090,7 +1094,7 @@ Ast * ParseConstantExpr(TokenIterator & ti)
 {
     // TODO
     ASSERT(PEEK_T(Token::CONST_INT));
-    return NewAst(CONSTANT_EXPR, NEXT());
+    return ParsePrimaryExpr(ti);
 }
 
 Ast * ParseParameterList(TokenIterator & ti)

@@ -71,7 +71,8 @@ public:
         return prop_ & TP_VOLATILE;
     }
     bool isLvalue() const {
-        return prop_ & TP_LVALUE;
+        return true;
+        //return prop_ & TP_LVALUE;
     }
     bool isIntegral() const {
         return prop_ & TP_IS_INTEGRAL;
@@ -115,6 +116,9 @@ public:
     }
     int getQualifier() const {
         return prop_ & (TP_CONST | TP_VOLATILE);
+    }
+    bool hasQualifier(int qualifiers) const {
+        return prop_ & (qualifiers & (TP_CONST | TP_VOLATILE));
     }
     void unsetQualifier(int qualifiers) {
         prop_ &= ~(qualifiers & (TP_CONST | TP_VOLATILE));
@@ -443,8 +447,23 @@ public:
         align_ = std::max(align_, ct->getAlignment());
         size_ = roundUp(next_offset_, align_);
     }
-    // const Type * getMemberType(StringRef name) const;
+    bool hasMember(StringRef name) const {
+        return std::find(member_names_.begin(), member_names_.end(), name) != member_names_.end();
+    }
     // size_t getMemberOffset(StringRef name) const;
+    Type * getMemberType(StringRef name) const
+    {
+        size_t i = 0;
+        while (i < member_names_.size())
+        {
+            if (member_names_[i] == name)
+                break;
+            else
+                ++i;
+        }
+        assert(i < member_names_.size());
+        return member_types_[i];
+    }
 
     virtual std::string toString() const {
         std::string s = Type::toString();
@@ -523,3 +542,66 @@ Type * UsualArithmeticConversion(Type * op1, Type * op2) {
     CHECK(op1->isIntegral() && op2->isIntegral());
     return new IntegerType("Si");
 }
+
+bool IsCompatiblePointer(Type * p1, Type * p2)
+{
+    return true;
+}
+bool IsStrictCompatiblePointer(Type * p1, Type * p2)
+{
+    return true;
+}
+bool IsAssignCompatiblePointer(Type * p1, Type * p2)
+{
+    return true;
+}
+bool IsCompatibleType(Type * p1, Type * p2)
+{
+    return true;
+}
+bool IsPointerToObject(Type * p)
+{
+    if (!p->isPointer())
+        return false;
+    PointerType * pt = dynamic_cast<PointerType *>(p);
+    return pt->getTargetType()->isObject();
+}
+bool IsPointerToFunction(Type * p)
+{
+    if (!p->isPointer())
+        return false;
+    PointerType * pt = dynamic_cast<PointerType *>(p);
+    return pt->getTargetType()->isFunction();
+}
+
+class TypeBuilder
+{
+public:
+    static Type * FromConstantToken(Token constant)
+    {
+        CHECK(constant.type == Token::CONST_INT ||
+              constant.type == Token::CONST_CHAR ||
+              constant.type == Token::CONST_FLOAT ||
+              constant.type == Token::STRING);
+        Type * t = nullptr;
+        switch (constant.type)
+        {
+            case Token::CONST_INT:
+                t = new IntegerType("i");
+                break;
+            case Token::CONST_CHAR:
+                t = new CharType();
+                break;
+            case Token::CONST_FLOAT:
+                t = new FloatingType("");
+                break;
+            case Token::STRING:
+                t = new ArrayType(constant.text.size() - 1);
+                static_cast<ArrayType *>(t)->setTargetType(new CharType());
+                break;
+            default:
+                break;
+        }
+        return t;
+    }
+};

@@ -304,7 +304,7 @@ expr		:=
 comma-expr		:=
 		assign-expr
 		(
-			',' assign-expr			{}
+			',' assign-expr			{ expr_comma(expr_pop(), expr_pop()); }
 		)*
 
 assign-expr		:=

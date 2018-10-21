@@ -217,6 +217,7 @@ std::deque<StringRef> g_Ids;
 std::deque<Symbol *> g_Symbols;
 std::deque<Environment *> g_Envs;
 std::deque<ExprNode *> g_ExprTree;
+std::deque<ExprNodeList> g_argumentLists;
 std::deque<Stmt *> g_Stmts;
 
 void new_type()
@@ -648,6 +649,11 @@ void env_add_symbol(Symbol * symbol)
     CHECK(!g_Envs.empty());
     g_Envs.back()->addSymbol(symbol);
 }
+Symbol * env_find(StringRef name, Symbol::SymbolType symbolType)
+{
+    CHECK(!g_Envs.empty());
+    return g_Envs.back()->findSymbol(name, symbolType);
+}
 Symbol * env_find_in_file_scope(StringRef name, Symbol::SymbolType symbolType)
 {
     CHECK(!g_Envs.empty());
@@ -907,6 +913,152 @@ void return_stmt_set_expr(ExprNode * expr)
     rs->expr = expr;
 }
 
+ExprNode * expr_pop()
+{
+    CHECK(!g_ExprTree.empty());
+    ExprNode * e = g_ExprTree.back();
+    g_ExprTree.pop_back();
+    return e;
+}
+
+void new_argument_list()
+{
+    g_argumentLists.push_back({nullptr, nullptr});
+}
+void argument_add(ExprNode * expr)
+{
+    CHECK(!g_argumentLists.empty());
+    ExprNodeList * last = &g_argumentLists.back();
+    while (last->next)
+    {
+        last = last->next;
+    }
+    last->next = new ExprNodeList;
+    last       = last->next;
+    last->node = expr;
+    last->next = nullptr;
+}
+ExprNodeList argument_list_pop()
+{
+    ExprNodeList head = g_argumentLists.back();
+    g_argumentLists.pop_back();
+    return head;
+}
+
+void expr_comma(ExprNode * commaExpr, ExprNode * assignExpr)
+{
+    g_ExprTree.push_back(ExprTreeBuilder::Comma(commaExpr, assignExpr));
+}
+void expr_assign(ExprNode * condExpr, Token::Type op, ExprNode * assignExpr)
+{
+    g_ExprTree.push_back(ExprTreeBuilder::Assign(condExpr, assignExpr));
+}
+void expr_cond(ExprNode * orExpr, ExprNode * commaExpr, ExprNode * condExpr)
+{
+    g_ExprTree.push_back(ExprTreeBuilder::Cond(orExpr, commaExpr, condExpr));
+}
+void expr_or(ExprNode * orExpr, ExprNode * andExpr)
+{
+    g_ExprTree.push_back(ExprTreeBuilder::Or(orExpr, andExpr));
+}
+void expr_and(ExprNode * andExpr, ExprNode * bitOrExpr)
+{
+    g_ExprTree.push_back(ExprTreeBuilder::And(andExpr, bitOrExpr));
+}
+void expr_bit_or(ExprNode * bitOrExpr, ExprNode * bitXorExpr)
+{
+    g_ExprTree.push_back(ExprTreeBuilder::BitOr(bitOrExpr, bitXorExpr));
+}
+void expr_bit_xor(ExprNode * bitXorExpr, ExprNode * bitAndExpr)
+{
+    g_ExprTree.push_back(ExprTreeBuilder::BitXor(bitXorExpr, bitAndExpr));
+}
+void expr_bit_and(ExprNode * bitAndExpr, ExprNode * eqExpr)
+{
+    g_ExprTree.push_back(ExprTreeBuilder::BitAnd(bitAndExpr, eqExpr));
+}
+void expr_eq(ExprNode * eqExpr, Token::Type op, ExprNode * relExpr)
+{
+    g_ExprTree.push_back(ExprTreeBuilder::Eq(eqExpr, relExpr));
+}
+void expr_rel(ExprNode * relExpr, Token::Type op, ExprNode * shiftExpr)
+{
+    g_ExprTree.push_back(ExprTreeBuilder::Rel(relExpr, shiftExpr));
+}
+void expr_shift(ExprNode * shiftExpr, Token::Type op, ExprNode * addExpr)
+{
+    g_ExprTree.push_back(ExprTreeBuilder::Shift(shiftExpr, addExpr));
+}
+void expr_add(ExprNode * addExpr, Token::Type op, ExprNode * mulExpr)
+{
+    g_ExprTree.push_back(ExprTreeBuilder::Add(addExpr, mulExpr));
+}
+void expr_mul(ExprNode * mulExpr, Token::Type op, ExprNode * castExpr)
+{
+    g_ExprTree.push_back(ExprTreeBuilder::Mul(mulExpr, castExpr));
+}
+void expr_cast(Type * type, ExprNode * unaryExpr)
+{
+    g_ExprTree.push_back(ExprTreeBuilder::Cast(type, unaryExpr));
+}
+void expr_unary(Token::Type op, ExprNode * unaryOrCastExpr)
+{
+    switch (op)
+    {
+        case Token::OP_INC:   g_ExprTree.push_back(ExprTreeBuilder::PrefixInc(unaryOrCastExpr)); break;
+        case Token::OP_DEC:   g_ExprTree.push_back(ExprTreeBuilder::PrefixDec(unaryOrCastExpr)); break;
+        case Token::BIT_AND:  g_ExprTree.push_back(ExprTreeBuilder::GetAddress(unaryOrCastExpr)); break;
+        case Token::OP_MUL:   g_ExprTree.push_back(ExprTreeBuilder::Indirect(unaryOrCastExpr)); break;
+        case Token::OP_ADD:   g_ExprTree.push_back(ExprTreeBuilder::Positive(unaryOrCastExpr)); break;
+        case Token::OP_SUB:   g_ExprTree.push_back(ExprTreeBuilder::Negative(unaryOrCastExpr)); break;
+        case Token::BIT_NOT:  g_ExprTree.push_back(ExprTreeBuilder::BitNot(unaryOrCastExpr)); break;
+        case Token::BOOL_NOT: g_ExprTree.push_back(ExprTreeBuilder::Not(unaryOrCastExpr)); break;
+        default:              ASSERT(false); break;
+    }
+}
+//void expr_unary(size_t sizeOfValue)
+//{
+//    g_ExprTree.push_back(ExprTreeBuilder::Unary(token));
+//}
+void expr_postfix(ExprNode * primary, ExprNode * arraySizeExpr)
+{
+    g_ExprTree.push_back(ExprTreeBuilder::Subscript(primary, arraySizeExpr));
+}
+void expr_postfix(ExprNode * primary, ExprNodeList argumentList)
+{
+    g_ExprTree.push_back(ExprTreeBuilder::Call(primary, argumentList));
+}
+void expr_postfix(ExprNode * primary, Token::Type op, StringRef memberId)
+{
+    switch (op)
+    {
+        case Token::OP_DOT:     g_ExprTree.push_back(ExprTreeBuilder::GetMember(primary, memberId)); break;
+        case Token::OP_POINTTO: g_ExprTree.push_back(ExprTreeBuilder::IndirectGetMember(primary, memberId)); break;
+        default:                ASSERT(false); break;
+    }
+}
+void expr_postfix(ExprNode * primary, Token::Type op)
+{
+    switch (op)
+    {
+        case Token::OP_INC:     g_ExprTree.push_back(ExprTreeBuilder::PostfixInc(primary)); break;
+        case Token::OP_DEC:     g_ExprTree.push_back(ExprTreeBuilder::PostfixDec(primary)); break;
+        default:                ASSERT(false); break;
+    }
+}
+void expr_primary(Token token)
+{
+    if (token.type == Token::ID)
+    {
+        Symbol * symbol = env_find(token.text, Symbol::ID);
+        ASSERT(symbol);
+        g_ExprTree.push_back(ExprTreeBuilder::Primary(symbol));
+    }
+    else
+    {
+        g_ExprTree.push_back(ExprTreeBuilder::Primary(token));
+    }
+}
 
 void reset() {
     g_Envs.clear();
@@ -920,6 +1072,7 @@ void verify() {
     CHECK(g_Types.empty());
     CHECK(g_Ids.empty());
     CHECK(g_Symbols.empty());
+    CHECK(g_argumentLists.empty());
     CHECK(g_ExprTree.empty());
 
     int i = 0;
@@ -941,6 +1094,7 @@ void Visit(Ast * ast)
 {
     ASSERT(ast);
     Ast * child = ast->leftChild;
+    ExprNode * e1;
     switch(ast->type)
     {
         case TRANSLATION_UNIT:
@@ -1078,12 +1232,15 @@ void Visit(Ast * ast)
 
             while (child)
             {
-                if (child->type == CONSTANT_EXPR)
+                if (child->type == PRIMARY_EXPR)
                 {
                     new_array();
-                    // TODO: array size
+                    ASSERT(child->token.type == Token::CONST_INT);
+                    array_set_size(child->token.ival);
 
                     child = child->rightSibling;
+
+                    type_merge();
                 }
                 else
                 {
@@ -1317,39 +1474,70 @@ void Visit(Ast * ast)
             break;
         case EXPR:
             break;
+        case COMMA_EXPR:
         case ASSIGN_EXPR:
-            break;
         case COND_EXPR:
-            break;
         case OR_EXPR:
-            break;
         case AND_EXPR:
-            break;
         case BIT_OR_EXPR:
-            break;
         case BIT_XOR_EXPR:
-            break;
         case BIT_AND_EXPR:
-            break;
         case EQ_EXPR:
-            break;
         case REL_EXPR:
-            break;
         case SHIFT_EXPR:
-            break;
         case ADD_EXPR:
-            break;
         case MUL_EXPR:
+            while (child)
+            {
+                Visit(child);
+                child = child->rightSibling;
+            }
             break;
         case CAST_EXPR:
             break;
         case UNARY_EXPR:
+            Visit(child);
+            expr_unary(ast->token.type, expr_pop());
             break;
         case POSTFIX_EXPR:
+            Visit(child);
+            if (!child->rightSibling)
+            {
+                expr_postfix(expr_pop(), ast->token.type);
+            }
+            else
+            {
+                child = child->rightSibling;
+
+                if (child->type > EXPR && child->type < ARGUMENT_EXPR_LIST)
+                {
+                    e1 = expr_pop();
+                    Visit(child);
+                    expr_postfix(e1, expr_pop());
+                }
+                else if (child->type == ARGUMENT_EXPR_LIST)
+                {
+                    Visit(child);
+                    expr_postfix(expr_pop(), argument_list_pop());
+                }
+                else
+                {
+                    ASSERT(child->type == IDENTIFIER);
+                    expr_postfix(expr_pop(), ast->token.type, child->token.text);
+                }
+            }
             break;
         case PRIMARY_EXPR:
+            expr_primary(ast->token);
             break;
         case ARGUMENT_EXPR_LIST:
+            new_argument_list();
+            while (child)
+            {
+                Visit(child);
+                child = child->rightSibling;
+                argument_add(expr_pop());
+            }
             break;
         case CONSTANT_EXPR:
             break;
@@ -1375,7 +1563,7 @@ void Visit(Ast * ast)
             Visit(child);
             child = child->rightSibling;
             
-            case_stmt_set_expr(nullptr); // TODO: expr
+            case_stmt_set_expr(expr_pop());
             
             Visit(child);
 
@@ -1413,7 +1601,7 @@ void Visit(Ast * ast)
             {
                 Visit(child);
 
-                expr_stmt_set_expr(nullptr); // TODO: expr
+                expr_stmt_set_expr(expr_pop());
             }
             break;
         case SELECTION_STMT:
@@ -1425,7 +1613,7 @@ void Visit(Ast * ast)
             Visit(child);
             child = child->rightSibling;
 
-            if_stmt_set_expr(nullptr); // TODO: expr
+            if_stmt_set_expr(expr_pop());
 
             Visit(child);
             child = child->rightSibling;
@@ -1445,7 +1633,7 @@ void Visit(Ast * ast)
             Visit(child);
             child = child->rightSibling;
 
-            switch_stmt_set_expr(nullptr); // TODO: expr
+            switch_stmt_set_expr(expr_pop());
 
             Visit(child);
 
@@ -1459,7 +1647,7 @@ void Visit(Ast * ast)
             Visit(child);
             child = child->rightSibling;
 
-            while_stmt_set_expr(nullptr); // TODO: expr
+            while_stmt_set_expr(expr_pop());
 
             Visit(child);
 
@@ -1475,28 +1663,33 @@ void Visit(Ast * ast)
 
             Visit(child);
 
-            do_while_stmt_set_expr(nullptr); // TODO: expr
+            do_while_stmt_set_expr(expr_pop());
             break;
         case FOR_STMT:
             new_for_stmt();
 
-            Visit(child);
+            if (child->type != EXPR)
+            {
+                Visit(child);
+                for_stmt_set_init_expr(expr_pop());
+            }
             child = child->rightSibling;
 
-            for_stmt_set_init_expr(nullptr); // TODO: expr
-
-            Visit(child);
+            if (child->type != EXPR)
+            {
+                Visit(child);
+                for_stmt_set_cond_expr(expr_pop());
+            }
             child = child->rightSibling;
 
-            for_stmt_set_cond_expr(nullptr); // TODO: expr
-
-            Visit(child);
+            if (child->type != EXPR)
+            {
+                Visit(child);
+                for_stmt_set_tail_expr(expr_pop());
+            }
             child = child->rightSibling;
 
-            for_stmt_set_tail_expr(nullptr); // TODO: expr
-
             Visit(child);
-
             for_stmt_set_stmt(stmt_pop());
             break;
         case JUMP_STMT:
@@ -1514,7 +1707,11 @@ void Visit(Ast * ast)
         case RETURN_STMT:
             new_return_stmt();
 
-            return_stmt_set_expr(nullptr); // TODO: expr
+            if (child)
+            {
+                Visit(child);
+                return_stmt_set_expr(expr_pop());
+            }
             break;
         default:
             break;
@@ -1683,6 +1880,9 @@ public:
             //T_LABEL
         }
     }
+
+    void BeginProc();
+    void EndProc();
 
     std::string Generate() const
     {

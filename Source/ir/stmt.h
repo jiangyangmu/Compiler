@@ -151,33 +151,6 @@ struct ReturnStmt : Stmt {
     }
 };
 
-/*
-class StmtBuilder {
-public:
-    static Stmt * LABEL(StringRef label, Stmt * stmt) {
-        CHECK(stmt);
-        LabelStmt * label_stmt = new LabelStmt;
-        label_stmt->label = label;
-        label_stmt->stmt = stmt;
-        return label_stmt;
-    }
-    static Stmt * IF(ExprNode * cond_expr, Stmt * if_stmt, Stmt * else_stmt) {
-        CHECK(cond_expr);
-        CHECK(if_stmt);
-        IfStmt * ifstmt = new IfStmt;
-        ifstmt->cond_expr = cond_expr;
-        ifstmt->if_stmt = if_stmt;
-        ifstmt->else_stmt = else_stmt;
-        return ifstmt;
-    }
-    static Stmt * EXPR(ExprNode * expr) {
-        ExpressionStmt * expr_stmt = new ExpressionStmt;
-        expr_stmt->expr = expr;
-        return expr_stmt;
-    }
-};
-*/
-
 std::string StatementToString(Stmt * stmt)
 {
     assert(stmt);
