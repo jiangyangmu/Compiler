@@ -979,15 +979,23 @@ void expr_bit_and(ExprNode * bitAndExpr, ExprNode * eqExpr)
 }
 void expr_eq(ExprNode * eqExpr, Token::Type op, ExprNode * relExpr)
 {
-    g_ExprTree.push_back(ExprTreeBuilder::Eq(eqExpr, relExpr));
+    g_ExprTree.push_back(ExprTreeBuilder::Eq(eqExpr, op, relExpr));
 }
 void expr_rel(ExprNode * relExpr, Token::Type op, ExprNode * shiftExpr)
 {
-    g_ExprTree.push_back(ExprTreeBuilder::Rel(relExpr, shiftExpr));
+    g_ExprTree.push_back(ExprTreeBuilder::Rel(relExpr, op, shiftExpr));
 }
 void expr_shift(ExprNode * shiftExpr, Token::Type op, ExprNode * addExpr)
 {
-    g_ExprTree.push_back(ExprTreeBuilder::Shift(shiftExpr, addExpr));
+    if (op == Token::BIT_SHL)
+    {
+        g_ExprTree.push_back(ExprTreeBuilder::ShiftLeft(shiftExpr, addExpr));
+    }
+    else
+    {
+        ASSERT(op == Token::BIT_SHR);
+        g_ExprTree.push_back(ExprTreeBuilder::ShiftRight(shiftExpr, addExpr));
+    }
 }
 void expr_add(ExprNode * addExpr, Token::Type op, ExprNode * mulExpr)
 {
@@ -1094,7 +1102,7 @@ void Visit(Ast * ast)
 {
     ASSERT(ast);
     Ast * child = ast->leftChild;
-    ExprNode * e1;
+    ExprNode * e1, * e2;
     switch(ast->type)
     {
         case TRANSLATION_UNIT:
@@ -1475,23 +1483,139 @@ void Visit(Ast * ast)
         case EXPR:
             break;
         case COMMA_EXPR:
+            Visit(child);
+            child = child->rightSibling;
+
+            e1 = expr_pop();
+
+            Visit(child);
+
+            expr_comma(e1, expr_pop());
+            break;
         case ASSIGN_EXPR:
+            Visit(child);
+            child = child->rightSibling;
+
+            e1 = expr_pop();
+
+            Visit(child);
+
+            expr_assign(e1, ast->token.type, expr_pop());
+            break;
         case COND_EXPR:
+            Visit(child);
+            child = child->rightSibling;
+
+            e1 = expr_pop();
+
+            Visit(child);
+            child = child->rightSibling;
+
+            e2 = expr_pop();
+
+            Visit(child);
+
+            expr_cond(e1, e2, expr_pop());
+            break;
         case OR_EXPR:
+            Visit(child);
+            child = child->rightSibling;
+
+            e1 = expr_pop();
+
+            Visit(child);
+
+            expr_or(e1, expr_pop());
+            break;
         case AND_EXPR:
+            Visit(child);
+            child = child->rightSibling;
+
+            e1 = expr_pop();
+
+            Visit(child);
+
+            expr_and(e1, expr_pop());
+            break;
         case BIT_OR_EXPR:
+            Visit(child);
+            child = child->rightSibling;
+
+            e1 = expr_pop();
+
+            Visit(child);
+
+            expr_bit_or(e1, expr_pop());
+            break;
         case BIT_XOR_EXPR:
+            Visit(child);
+            child = child->rightSibling;
+
+            e1 = expr_pop();
+
+            Visit(child);
+
+            expr_bit_xor(e1, expr_pop());
+            break;
         case BIT_AND_EXPR:
+            Visit(child);
+            child = child->rightSibling;
+
+            e1 = expr_pop();
+
+            Visit(child);
+
+            expr_bit_and(e1, expr_pop());
+            break;
         case EQ_EXPR:
+            Visit(child);
+            child = child->rightSibling;
+
+            e1 = expr_pop();
+
+            Visit(child);
+
+            expr_eq(e1, ast->token.type, expr_pop());
+            break;
         case REL_EXPR:
+            Visit(child);
+            child = child->rightSibling;
+
+            e1 = expr_pop();
+
+            Visit(child);
+
+            expr_rel(e1, ast->token.type, expr_pop());
+            break;
         case SHIFT_EXPR:
+            Visit(child);
+            child = child->rightSibling;
+
+            e1 = expr_pop();
+
+            Visit(child);
+
+            expr_shift(e1, ast->token.type, expr_pop());
+            break;
         case ADD_EXPR:
+            Visit(child);
+            child = child->rightSibling;
+
+            e1 = expr_pop();
+
+            Visit(child);
+
+            expr_add(e1, ast->token.type, expr_pop());
+            break;
         case MUL_EXPR:
-            while (child)
-            {
-                Visit(child);
-                child = child->rightSibling;
-            }
+            Visit(child);
+            child = child->rightSibling;
+
+            e1 = expr_pop();
+            
+            Visit(child);
+            
+            expr_mul(e1, ast->token.type, expr_pop());
             break;
         case CAST_EXPR:
             break;

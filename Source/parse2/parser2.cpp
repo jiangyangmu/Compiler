@@ -786,9 +786,11 @@ Ast * ParseCondExpr(TokenIterator & ti)
     if (SKIP_T(Token::OP_QMARK))
     {
         Ast * condExpr                          = NewAst(COND_EXPR);
-        condExpr->leftChild                     = ParseExpression(ti);
+        condExpr->leftChild                     = orExpr;
+        condExpr->leftChild->rightSibling       = ParseExpression(ti);
         EXPECT_T(Token::OP_COLON);
-        condExpr->leftChild->rightSibling       = ParseCondExpr(ti);
+        condExpr->leftChild->rightSibling->rightSibling
+                                                = ParseCondExpr(ti);
         return condExpr;
     }
     else

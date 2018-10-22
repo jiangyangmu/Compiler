@@ -13,9 +13,13 @@ enum ExprType {
     EXPR_BIT_AND,
     EXPR_EQ,
     EXPR_REL,
-    EXPR_SHIFT,
+    EXPR_SHIFT_LEFT,
+    EXPR_SHIFT_RIGHT,
     EXPR_ADD,
+    EXPR_SUB,
     EXPR_MUL,
+    EXPR_DIV,
+    EXPR_MOD,
     EXPR_CAST,
     EXPR_UNARY,
     EXPR_UNARY_INC,
@@ -51,9 +55,13 @@ std::string ExprTypeToString(ExprType et)
         case EXPR_BIT_AND:                      s = "bit_and"; break;
         case EXPR_EQ:                           s = "eq"; break;
         case EXPR_REL:                          s = "rel"; break;
-        case EXPR_SHIFT:                        s = "shift"; break;
+        case EXPR_SHIFT_LEFT:                   s = "shl"; break;
+        case EXPR_SHIFT_RIGHT:                  s = "shr"; break;
         case EXPR_ADD:                          s = "add"; break;
+        case EXPR_SUB:                          s = "sub"; break;
         case EXPR_MUL:                          s = "mul"; break;
+        case EXPR_DIV:                          s = "div"; break;
+        case EXPR_MOD:                          s = "mod"; break;
         case EXPR_CAST:                         s = "cast"; break;
         case EXPR_UNARY:                        s = "unary"; break;
         case EXPR_UNARY_INC:                    s = "inc"; break;
@@ -99,6 +107,7 @@ struct ExprNodeList {
 struct BinaryNode : ExprNode {
     ExprNode * left;
     ExprNode * right;
+    Token::Type op;
 };
 
 struct CondNode : ExprNode {
@@ -142,20 +151,62 @@ std::string ExprTreeToStringImpl(const ExprNode * root, std::string indent)
         s += ":" + root->objectType->toString();
         s += "\n";
     }
+    else if (root->exprType == EXPR_COND)
+    {
+        const CondNode * p = static_cast<const CondNode *>(root);
+        s += "()?():()";
+        s += ":" + root->objectType->toString();
+        s += "\n";
+        indent += "  ";
+        s += ExprTreeToStringImpl(p->cond, indent);
+        s += ExprTreeToStringImpl(p->trueResult, indent);
+        s += ExprTreeToStringImpl(p->falseResult, indent);
+    }
+    else if (root->exprType >= EXPR_COMMA && root->exprType <= EXPR_MOD)
+    {
+        const BinaryNode * p = static_cast<const BinaryNode *>(root);
+        s += "()";
+        switch (root->exprType)
+        {
+            case EXPR_COMMA:        s += ","; break;
+            case EXPR_ASSIGN:       s += "="; break;
+            case EXPR_OR:           s += "||"; break;
+            case EXPR_AND:          s += "&&"; break;
+            case EXPR_BIT_OR:       s += "|"; break;
+            case EXPR_BIT_XOR:      s += "^"; break;
+            case EXPR_BIT_AND:      s += "&"; break;
+            case EXPR_EQ:           s += "eq"; break;
+            case EXPR_REL:          s += "rel"; break;
+            case EXPR_SHIFT_LEFT:   s += "<<"; break;
+            case EXPR_SHIFT_RIGHT:  s += ">>"; break;
+            case EXPR_ADD:          s += "+"; break;
+            case EXPR_SUB:          s += "-"; break;
+            case EXPR_MUL:          s += "*"; break;
+            case EXPR_DIV:          s += "/"; break;
+            case EXPR_MOD:          s += "%"; break;
+            default:                break;
+        }
+        s += "()";
+        s += ":" + root->objectType->toString();
+        s += "\n";
+        indent += "  ";
+        s += ExprTreeToStringImpl(p->left, indent);
+        s += ExprTreeToStringImpl(p->right, indent);
+    }
     else if (root->exprType >= EXPR_UNARY_INC &&
              root->exprType <= EXPR_UNARY_NOT)
     {
         const UnaryNode * p = static_cast<const UnaryNode *>(root);
         switch (root->exprType)
         {
-            case EXPR_UNARY_INC:            s = "++"; break;
-            case EXPR_UNARY_DEC:            s = "--"; break;
-            case EXPR_UNARY_GET_ADDRESS:    s = "&"; break;
-            case EXPR_UNARY_INDIRECT:       s = "*"; break;
-            case EXPR_UNARY_POSITIVE:       s = "+"; break;
-            case EXPR_UNARY_NEGATIVE:       s = "-"; break;
-            case EXPR_UNARY_BIT_NOT:        s = "~"; break;
-            case EXPR_UNARY_NOT:            s = "!"; break;
+            case EXPR_UNARY_INC:            s += "++"; break;
+            case EXPR_UNARY_DEC:            s += "--"; break;
+            case EXPR_UNARY_GET_ADDRESS:    s += "&"; break;
+            case EXPR_UNARY_INDIRECT:       s += "*"; break;
+            case EXPR_UNARY_POSITIVE:       s += "+"; break;
+            case EXPR_UNARY_NEGATIVE:       s += "-"; break;
+            case EXPR_UNARY_BIT_NOT:        s += "~"; break;
+            case EXPR_UNARY_NOT:            s += "!"; break;
             default:                        break;
         }
         s += "()";
@@ -232,20 +283,12 @@ class ExprTreeBuilder {
 public:
     static BinaryNode * Comma(ExprNode * n1, ExprNode * n2)
     {
-        BinaryNode * comma = new BinaryNode;
-        //comma->
-        return nullptr;
-    }
-    static BinaryNode * Assign(ExprNode * to, ExprNode * from)
-    {
-        CHECK(to->objectType->isLvalue() &&
-              ((to->objectType->isArithmetic()         && from->objectType->isArithmetic()) ||
-               (to->objectType->getClass() == T_STRUCT && IsCompatibleType(to->objectType, from->objectType)) ||
-               (to->objectType->getClass() == T_UNION  && IsCompatibleType(to->objectType, from->objectType)) ||
-               (to->objectType->isPointer()            && IsAssignCompatiblePointer(to->objectType, from->objectType))));
-
-
-        return nullptr;
+        BinaryNode * p  = new BinaryNode;
+        p->exprType     = EXPR_COMMA;
+        p->objectType   = n2->objectType;
+        p->left         = n1;
+        p->right        = n2;
+        return p;
     }
     static CondNode * Cond(ExprNode * cond, ExprNode * n1, ExprNode * n2)
     {
@@ -256,64 +299,144 @@ public:
                (n1->objectType->getClass() == T_VOID   && n2->objectType->getClass() == T_VOID) ||
                (n1->objectType->isPointer()            && n2->objectType->isIntegral())));
 
+        CondNode * p    = new CondNode;
+        p->exprType     = EXPR_COND;
+        p->objectType   = n1->objectType;
+        p->cond         = cond;
+        p->trueResult   = n1;
+        p->falseResult  = n2;
+        return p;
+    }
+    static BinaryNode * Assign(ExprNode * to, ExprNode * from)
+    {
+        CHECK(to->objectType->isLvalue() &&
+              ((to->objectType->isArithmetic()         && from->objectType->isArithmetic()) ||
+               (to->objectType->getClass() == T_STRUCT && IsCompatibleType(to->objectType, from->objectType)) ||
+               (to->objectType->getClass() == T_UNION  && IsCompatibleType(to->objectType, from->objectType)) ||
+               (to->objectType->isPointer()            && IsAssignCompatiblePointer(to->objectType, from->objectType))));
 
-        return nullptr;
+
+        BinaryNode * p  = new BinaryNode;
+        p->exprType     = EXPR_ASSIGN;
+        p->objectType   = to->objectType;
+        p->left         = to;
+        p->right        = from;
+        return p;
     }
     static BinaryNode * Or(ExprNode * left, ExprNode * right)
     {
         CHECK(left->objectType->isScalar() && right->objectType->isScalar());
 
-        return nullptr;
+        BinaryNode * p  = new BinaryNode;
+        p->exprType     = EXPR_OR;
+        p->objectType   = new IntegerType("i");
+        p->left         = left;
+        p->right        = right;
+        return p;
     }
     static BinaryNode * And(ExprNode * left, ExprNode * right)
     {
         CHECK(left->objectType->isScalar() && right->objectType->isScalar());
 
-        return nullptr;
+        BinaryNode * p  = new BinaryNode;
+        p->exprType     = EXPR_AND;
+        p->objectType   = new IntegerType("i");
+        p->left         = left;
+        p->right        = right;
+        return p;
     }
     static BinaryNode * BitOr(ExprNode * left, ExprNode * right)
     {
         CHECK(left->objectType->isIntegral() && right->objectType->isIntegral());
 
-        return nullptr;
+        BinaryNode * p  = new BinaryNode;
+        p->exprType     = EXPR_BIT_OR;
+        p->objectType   = left->objectType;
+        p->left         = left;
+        p->right        = right;
+        return p;
     }
     static BinaryNode * BitXor(ExprNode * left, ExprNode * right)
     {
         CHECK(left->objectType->isIntegral() && right->objectType->isIntegral());
 
-        return nullptr;
+        BinaryNode * p  = new BinaryNode;
+        p->exprType     = EXPR_BIT_XOR;
+        p->objectType   = left->objectType;
+        p->left         = left;
+        p->right        = right;
+        return p;
     }
     static BinaryNode * BitAnd(ExprNode * left, ExprNode * right)
     {
         CHECK(left->objectType->isIntegral() && right->objectType->isIntegral());
 
-        return nullptr;
+        BinaryNode * p  = new BinaryNode;
+        p->exprType     = EXPR_BIT_AND;
+        p->objectType   = left->objectType;
+        p->left         = left;
+        p->right        = right;
+        return p;
     }
-    static BinaryNode * Eq(ExprNode * left, ExprNode * right)
+    static BinaryNode * Eq(ExprNode * left, Token::Type op, ExprNode * right)
     {
         CHECK((left->objectType->isArithmetic() && right->objectType->isArithmetic()) ||
               (left->objectType->isPointer()    && IsCompatiblePointer(left->objectType, right->objectType)));
 
-        return nullptr;
+        BinaryNode * p  = new BinaryNode;
+        p->exprType     = EXPR_EQ;
+        p->objectType   = new IntegerType("i");
+        p->left         = left;
+        p->right        = right;
+        p->op           = op;
+        return p;
     }
-    static BinaryNode * Rel(ExprNode * left, ExprNode * right)
+    static BinaryNode * Rel(ExprNode * left, Token::Type op, ExprNode * right)
     {
         CHECK((left->objectType->isArithmetic() && right->objectType->isArithmetic()) ||
               (left->objectType->isPointer()    && IsStrictCompatiblePointer(left->objectType, right->objectType)));
-        return nullptr;
+        
+        BinaryNode * p  = new BinaryNode;
+        p->exprType     = EXPR_REL;
+        p->objectType   = new IntegerType("i");
+        p->left         = left;
+        p->right        = right;
+        p->op           = op;
+        return p;
     }
-    static BinaryNode * Shift(ExprNode * left, ExprNode * right)
+    static BinaryNode * ShiftLeft(ExprNode * left, ExprNode * right)
     {
         CHECK(left->objectType->isIntegral() && right->objectType->isIntegral());
 
-        return nullptr;
+        BinaryNode * p  = new BinaryNode;
+        p->exprType     = EXPR_SHIFT_LEFT;
+        p->objectType   = left->objectType;
+        p->left         = left;
+        p->right        = right;
+        return p;
+    }
+    static BinaryNode * ShiftRight(ExprNode * left, ExprNode * right)
+    {
+        CHECK(left->objectType->isIntegral() && right->objectType->isIntegral());
+
+        BinaryNode * p  = new BinaryNode;
+        p->exprType     = EXPR_SHIFT_RIGHT;
+        p->objectType   = left->objectType;
+        p->left         = left;
+        p->right        = right;
+        return p;
     }
     static BinaryNode * Add(ExprNode * left, ExprNode * right)
     {
         CHECK((left->objectType->isArithmetic()    && right->objectType->isArithmetic()) ||
               (IsPointerToObject(left->objectType) && right->objectType->isIntegral()));
 
-        return nullptr;
+        BinaryNode * p  = new BinaryNode;
+        p->exprType     = EXPR_ADD;
+        p->objectType   = left->objectType;
+        p->left         = left;
+        p->right        = right;
+        return p;
     }
     static BinaryNode * Sub(ExprNode * left, ExprNode * right)
     {
@@ -322,25 +445,45 @@ public:
               (IsPointerToObject(left->objectType) && IsCompatibleType(dynamic_cast<PointerType *>(left->objectType)->getTargetType(),
                                                                        dynamic_cast<PointerType *>(right->objectType)->getTargetType())));
 
-        return nullptr;
+        BinaryNode * p  = new BinaryNode;
+        p->exprType     = EXPR_SUB;
+        p->objectType   = left->objectType;
+        p->left         = left;
+        p->right        = right;
+        return p;
     }
     static BinaryNode * Mul(ExprNode * left, ExprNode * right)
     {
         CHECK(left->objectType->isArithmetic() && right->objectType->isArithmetic());
 
-        return nullptr;
+        BinaryNode * p  = new BinaryNode;
+        p->exprType     = EXPR_MUL;
+        p->objectType   = left->objectType;
+        p->left         = left;
+        p->right        = right;
+        return p;
     }
     static BinaryNode * Div(ExprNode * left, ExprNode * right)
     {
         CHECK(left->objectType->isArithmetic() && right->objectType->isArithmetic());
 
-        return nullptr;
+        BinaryNode * p  = new BinaryNode;
+        p->exprType     = EXPR_DIV;
+        p->objectType   = left->objectType;
+        p->left         = left;
+        p->right        = right;
+        return p;
     }
     static BinaryNode * Mod(ExprNode * left, ExprNode * right)
     {
         CHECK(left->objectType->isIntegral() && right->objectType->isIntegral());
 
-        return nullptr;
+        BinaryNode * p  = new BinaryNode;
+        p->exprType     = EXPR_MOD;
+        p->objectType   = left->objectType;
+        p->left         = left;
+        p->right        = right;
+        return p;
     }
     static CastNode * Cast(Type * type, ExprNode * origin)
     {
