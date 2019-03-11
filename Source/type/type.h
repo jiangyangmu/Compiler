@@ -1,607 +1,254 @@
 #pragma once
 
-#include "../common.h"
+#include "../util/String.h"
+#include "../util/Integer.h"
 
-// enum ETypeOperations
+#include <vector>
+#include <map>
+#include <tuple>
 
-enum ETypeProperty {
-    // properties
-    TP_INCOMPLETE = 1,
-    TP_CONST = (1 << 2),
-    TP_VOLATILE = (1 << 3),
-    TP_LVALUE = (1 << 4),
-    // categorys
-    TP_IS_INTEGRAL = (1 << 5),
-    TP_IS_ARITHMETIC = (1 << 6),
-    TP_IS_SCALAR = (1 << 7),
-    // categorys - object type
-    TP_IS_OBJECT = (1 << 8),
-    TP_IS_FUNCTION = (1 << 9),
-};
+namespace Language {
 
-enum ETypeClass {
-    T_NONE,
-    T_VOID,
-    T_CHAR,
-    T_INT,
-    T_FLOAT,
-    T_POINTER,
-    T_ARRAY,
-    T_TAG,
-    T_STRUCT,
-    T_UNION,
-    T_ENUM,
-    T_ENUM_CONST,
-    T_FUNCTION,
-    T_TYPEDEF,
-    T_LABEL
-};
-
-class Type {
-protected:
-    ETypeClass tc_;
-    // properties
-    int prop_;
-    // representation
-    size_t size_;
-    size_t align_;
-
-    Type(ETypeClass tc, int prop, size_t size = 0, size_t align = 0)
-        : tc_(tc)
-        , prop_(prop)
-        , size_(size)
-        , align_(align) {
-    }
-    void setProp(int p) {
-        prop_ |= p;
-    }
-    void unsetProp(int p) {
-        prop_ &= ~p;
-    }
-
-public:
-    virtual ~Type() = default;
-    bool isIncomplete() const {
-        return prop_ & TP_INCOMPLETE;
-    }
-    bool isConst() const {
-        return prop_ & TP_CONST;
-    }
-    bool isVolatile() const {
-        return prop_ & TP_VOLATILE;
-    }
-    bool isLvalue() const {
-        return true;
-        //return prop_ & TP_LVALUE;
-    }
-    bool isIntegral() const {
-        return prop_ & TP_IS_INTEGRAL;
-    }
-    bool isArithmetic() const {
-        return prop_ & TP_IS_ARITHMETIC;
-    }
-    bool isScalar() const {
-        return prop_ & TP_IS_SCALAR;
-    }
-    bool isObject() const {
-        return prop_ & TP_IS_OBJECT;
-    }
-    bool isFunction() const {
-        return prop_ & TP_IS_FUNCTION;
-    }
-    bool isModifiable() const {
-        return isLvalue() && !isIncomplete() && !isConst();
-    }
-    bool isPointer() const {
-        return tc_ == T_POINTER;
-    }
-    ETypeClass getClass() const {
-        return tc_;
-    }
-    size_t getSize() const {
-        return size_;
-    }
-    size_t getAlignment() const {
-        return align_;
-    }
-
-    void setLvalue() {
-        setProp(TP_LVALUE);
-    }
-    void unsetLvalue() {
-        unsetProp(TP_LVALUE);
-    }
-    void setQualifier(int qualifiers) {
-        prop_ |= (qualifiers & (TP_CONST | TP_VOLATILE));
-    }
-    int getQualifier() const {
-        return prop_ & (TP_CONST | TP_VOLATILE);
-    }
-    bool hasQualifier(int qualifiers) const {
-        return prop_ & (qualifiers & (TP_CONST | TP_VOLATILE));
-    }
-    void unsetQualifier(int qualifiers) {
-        prop_ &= ~(qualifiers & (TP_CONST | TP_VOLATILE));
-    }
-    void markComplete() {
-        unsetProp(TP_INCOMPLETE);
-    }
-
-    virtual std::string toString() const {
-        if (prop_ & TP_CONST)
-            return "const ";
-        else if (prop_ & TP_VOLATILE)
-            return "volatile ";
-        else
-            return "";
-    }
-};
-
-class IntegralType : public Type {
-protected:
-    bool signed_;
-
-    IntegralType(ETypeClass tc, int prop, size_t size, size_t align)
-        : Type(tc,
-               prop | TP_IS_INTEGRAL | TP_IS_ARITHMETIC | TP_IS_SCALAR,
-               size,
-               align)
-        , signed_(false) {
-    }
-
-public:
-    bool isSigned() const {
-        return signed_;
-    }
-};
-
-class DerivedType : public Type {
-protected:
-    Type * t_;
-
-    DerivedType(ETypeClass tc, int prop, size_t size = 0, size_t align = 0)
-        : Type(tc, prop, size, align)
-        , t_(nullptr) {
-    }
-
-public:
-    virtual void setTargetType(Type * t) {
-        // assert(t_ == nullptr);
-        assert(t != nullptr);
-        t_ = t;
-    }
-    Type * getTargetType() {
-        return t_;
-    }
-
-    virtual std::string toString() const {
-        return Type::toString();
-    }
-};
-
-class VoidType : public Type {
-public:
-    VoidType()
-        : Type(T_VOID, TP_INCOMPLETE | TP_IS_OBJECT) {
-    }
-
-    virtual std::string toString() const {
-        return Type::toString() + "void";
-    }
-};
-
-class CharType : public IntegralType {
-public:
-    CharType()
-        : IntegralType(T_CHAR, TP_IS_OBJECT, 1, 1) {
-        signed_ = true;
-    }
-
-    virtual std::string toString() const {
-        return Type::toString() + "char";
-    }
-};
-
-class IntegerType : public IntegralType {
-    const char * desc_;
-
-public:
-    IntegerType(const char * desc)
-        : IntegralType(T_INT, TP_IS_OBJECT, 4, 4)
-        , desc_(desc) {
-        // assume desc is valid combination
-        assert(desc != nullptr);
-
-        // sign
-        signed_ = true;
-        if (*desc == 'S')
-            ++desc;
-        else if (*desc == 'U')
-            signed_ = false, ++desc;
-        // size
-        switch (*desc)
-        {
-            case 'c':
-                size_ = 1;
-                break;
-            case 's':
-                size_ = 2;
-                break;
-            case 'l':
-                size_ = sizeof(long);
-                break;
-            default:
-                break;
-        }
-        align_ = size_;
-    }
-
-    virtual std::string toString() const {
-        std::string s;
-        for (const char * p = desc_; *p != '\0'; ++p)
-        {
-            if (!s.empty())
-                s += ' ';
-            switch (*p)
-            {
-                case 'S':
-                    s += "signed";
-                    break;
-                case 'U':
-                    s += "unsigned";
-                    break;
-                case 'c':
-                    s += "char";
-                    break;
-                case 's':
-                    s += "short";
-                    break;
-                case 'l':
-                    s += "long";
-                    break;
-                case 'i':
-                    s += "int";
-                    break;
-                default:
-                    break;
-            }
-        }
-        return Type::toString() + s;
-    }
-};
-
-class FloatingType : public Type {
-    const char * desc_;
-
-public:
-    FloatingType(const char * desc)
-        : Type(T_FLOAT, TP_IS_ARITHMETIC | TP_IS_SCALAR | TP_IS_OBJECT, 4, 4)
-        , desc_(desc) {
-        // assume desc is valid combination
-        assert(desc != nullptr);
-
-        // size
-        switch (*desc)
-        {
-            case 'd':
-                align_ = size_ = 8;
-                break;
-            case 'l': // long double
-                size_ = 10;
-                align_ = 16;
-                break;
-            default:
-                break;
-        }
-    }
-
-    virtual std::string toString() const {
-        std::string s;
-        for (const char * p = desc_; *p != '\0'; ++p)
-        {
-            if (!s.empty())
-                s += ' ';
-            switch (*p)
-            {
-                case 'f':
-                    s += "float";
-                    break;
-                case 'd':
-                    s += "double";
-                    break;
-                case 'l':
-                    s += "long";
-                    break;
-                default:
-                    break;
-            }
-        }
-        return Type::toString() + s;
-    }
-};
-
-class PointerType : public DerivedType {
-public:
-    PointerType()
-        : DerivedType(T_POINTER,
-                      TP_IS_SCALAR | TP_IS_OBJECT,
-                      sizeof(void *),
-                      sizeof(void *)) {
-    }
-
-    virtual std::string toString() const {
-        return DerivedType::toString() + "pointer to " +
-            (t_ ? t_->toString() : "<unknown>");
-    }
-};
-
-class ArrayType : public DerivedType {
-    size_t n_;
-
-public:
-    ArrayType()
-        : DerivedType(T_ARRAY, TP_CONST | TP_INCOMPLETE | TP_IS_OBJECT)
-        , n_(0) {
-    }
-    ArrayType(size_t n)
-        : DerivedType(T_ARRAY, TP_CONST | TP_IS_OBJECT)
-        , n_(n) {
-    }
-
-    void setSize(size_t n) {
-        assert(n > 0);
-        n_ = n;
-        unsetProp(TP_INCOMPLETE);
-    }
-
-    virtual void setTargetType(Type * t) {
-        DerivedType::setTargetType(t);
-        assert(!t->isIncomplete());
-        size_ = n_ * t->getSize();
-    }
-
-    virtual std::string toString() const {
-        return DerivedType::toString() + "array[" +
-            (n_ > 0 ? std::to_string(n_) : "") + "] of " +
-            (t_ ? t_->toString() : "<unknown>");
-    }
-};
-
-class EnumType : public IntegralType {
-    StringRef tag_;
-    vector<StringRef> econst_name_;
-    vector<int> econst_value_;
-    int next_value_;
-
-public:
-    EnumType()
-        : IntegralType(T_ENUM, TP_INCOMPLETE, 4, 4)
-        , next_value_(0) {
-        signed_ = true;
-    }
-    void setTag(StringRef tag) {
-        tag_ = tag;
-    }
-    StringRef getTag() const {
-        return tag_;
-    }
-    void addEnumConst(StringRef name) {
-        econst_name_.push_back(name);
-        econst_value_.push_back(next_value_++);
-    }
-    void setLastEnumConstValue(int value) {
-        CHECK(!econst_value_.empty());
-        next_value_ = value;
-        econst_value_.back() = next_value_++;
-    }
-
-    virtual std::string toString() const {
-        std::string s = Type::toString();
-        s += "enum " + tag_.toString() + " { ";
-        for (size_t i = 0; i < econst_name_.size(); ++i)
-        {
-            s += econst_name_[i].toString();
-            s += " = ";
-            s += std::to_string(econst_value_[i]);
-            s += ", ";
-        }
-        s += "}";
-        return s;
-    }
-};
-
-class StructType : public Type {
-    vector<StringRef> member_names_;
-    vector<Type *> member_types_;
-    vector<size_t> member_offsets_;
-    StringRef tag_;
-
-    size_t next_offset_;
-
-    size_t roundUp(size_t value, size_t unit) {
-        assert(unit > 0);
-        value += unit - 1;
-        value -= value % unit;
-        return value;
-    }
-
-public:
-    StructType()
-        : Type(T_STRUCT, 0, 0, 1), next_offset_(0) {
-    }
-    void setTag(StringRef tag) {
-        tag_ = tag;
-    }
-    StringRef getTag() const {
-        return tag_;
-    }
-    void addMember(StringRef name, Type * ct) {
-        member_names_.push_back(name);
-        member_types_.push_back(ct);
-
-        assert(ct->getAlignment() > 0);
-        next_offset_ = roundUp(next_offset_, ct->getAlignment());
-        member_offsets_.push_back(next_offset_);
-        next_offset_ += ct->getSize();
-
-        align_ = std::max(align_, ct->getAlignment());
-        size_ = roundUp(next_offset_, align_);
-    }
-    bool hasMember(StringRef name) const {
-        return std::find(member_names_.begin(), member_names_.end(), name) != member_names_.end();
-    }
-    // size_t getMemberOffset(StringRef name) const;
-    Type * getMemberType(StringRef name) const
-    {
-        size_t i = 0;
-        while (i < member_names_.size())
-        {
-            if (member_names_[i] == name)
-                break;
-            else
-                ++i;
-        }
-        assert(i < member_names_.size());
-        return member_types_[i];
-    }
-
-    virtual std::string toString() const {
-        std::string s = Type::toString();
-        s += "struct " + tag_.toString() + " { ";
-        for (size_t i = 0; i < member_types_.size(); ++i)
-        {
-            s += "\"" + member_names_[i].toString() + "\"" +
-                 ":(" + member_types_[i]->toString() + ")" +
-                 ":"  + std::to_string(member_offsets_[i]) + " ";
-        }
-        s += "}";
-        return s;
-    }
-};
-
-//// TODO: UnionType
-
-class Environment;
-struct Stmt;
-class FuncType : public DerivedType {
-    vector<Type *> param_types_; // can be nullptr for identifier_list
-    vector<StringRef> param_names_; // can be "" for parameter_type_list
-    bool is_varlist_;
-
-    Environment * env_;
-    Stmt * body_;
-
-public:
-    FuncType()
-        : DerivedType(T_FUNCTION, TP_CONST | TP_INCOMPLETE | TP_IS_FUNCTION)
-        , is_varlist_(false)
-        , env_(nullptr)
-        , body_(nullptr) {
-    }
-
-    void addParam(StringRef name, Type * ct) {
-        param_names_.push_back(name);
-        param_types_.push_back(ct);
-    }
-    // void fixParamType(size_t i, const Type * t);
-    void enableVarList() {
-        is_varlist_ = true;
-    }
-    void setBody(Stmt * body) {
-        body_ = body;
-    }
-
-    void linkEnv(Environment * env) {
-        CHECK(env_ == nullptr);
-        env_ = env;
-    }
-    Environment * getEnv() const {
-        CHECK(env_ != nullptr);
-        return env_;
-    }
-
-    virtual std::string toString() const {
-        std::string s = Type::toString();
-        s += "function(";
-        for (size_t i = 0; i < param_types_.size(); ++i)
-        {
-            s += "\"" + param_names_[i].toString() + "\":(" +
-                param_types_[i]->toString() + "), ";
-        }
-        if (is_varlist_)
-            s += "...";
-        else if (!param_types_.empty())
-            s.pop_back(), s.pop_back();
-        s += ") returns " + (t_ ? t_->toString() : "<unknown>");
-        return s;
-    }
-};
-
-Type * UsualArithmeticConversion(Type * op1, Type * op2) {
-    CHECK(op1 && op2);
-    CHECK(op1->isIntegral() && op2->isIntegral());
-    return new IntegerType("Si");
-}
-
-bool IsCompatiblePointer(Type * p1, Type * p2)
+// INT1, INT2, UINT1, UINT2, ...
+// FLT4, FLT8, FLT10
+enum TypeName
 {
-    return true;
-}
-bool IsStrictCompatiblePointer(Type * p1, Type * p2)
-{
-    return true;
-}
-bool IsAssignCompatiblePointer(Type * p1, Type * p2)
-{
-    return true;
-}
-bool IsCompatibleType(Type * p1, Type * p2)
-{
-    return true;
-}
-bool IsPointerToObject(Type * p)
-{
-    if (!p->isPointer())
-        return false;
-    PointerType * pt = dynamic_cast<PointerType *>(p);
-    return pt->getTargetType()->isObject();
-}
-bool IsPointerToFunction(Type * p)
-{
-    if (!p->isPointer())
-        return false;
-    PointerType * pt = dynamic_cast<PointerType *>(p);
-    return pt->getTargetType()->isFunction();
-}
-
-class TypeBuilder
-{
-public:
-    static Type * FromConstantToken(Token constant)
-    {
-        CHECK(constant.type == Token::CONST_INT ||
-              constant.type == Token::CONST_CHAR ||
-              constant.type == Token::CONST_FLOAT ||
-              constant.type == Token::STRING);
-        Type * t = nullptr;
-        switch (constant.type)
-        {
-            case Token::CONST_INT:
-                t = new IntegerType("i");
-                break;
-            case Token::CONST_CHAR:
-                t = new CharType();
-                break;
-            case Token::CONST_FLOAT:
-                t = new FloatingType("");
-                break;
-            case Token::STRING:
-                t = new ArrayType(constant.text.size() - 1);
-                static_cast<ArrayType *>(t)->setTargetType(new CharType());
-                break;
-            default:
-                break;
-        }
-        return t;
-    }
+    VOID,
+    BOOL,
+    CHAR,
+    INT,
+    FLOAT,
+    ARRAY,
+    POINTER,
+    FUNCTION,
+    ENUM,
+    STRUCT,
+    UNION,
 };
+
+enum TypeProperty
+{
+    TP_INCOMPLETE       = 1,
+    TP_CONST            = (1 << 2),
+    TP_ADDRESSABLE      = (1 << 3),
+    TP_ASSIGNABLE       = (1 << 4),
+
+    TP_IS_INTEGRAL      = (1 << 5),
+    TP_IS_ARITHMETIC    = (1 << 6),
+    TP_IS_SCALAR        = (1 << 7),
+    
+    TP_IS_OBJECT        = (1 << 8),
+};
+
+struct Type
+{
+    TypeName        name;
+    int             prop;
+    size_t          size;
+    size_t          align;
+    u64             baseId;
+};
+
+struct VoidType
+{
+    Type type;
+};
+
+struct BoolType
+{
+    Type type;
+};
+
+struct CharType
+{
+    Type type;
+};
+
+struct IntType
+{
+    Type type;
+};
+
+struct FloatType
+{
+    Type type;
+};
+
+struct ArrayType
+{
+    Type type;
+
+    size_t length;
+    Type * target;
+};
+
+struct PointerType
+{
+    Type type;
+
+    Type * target;
+};
+
+struct FunctionType
+{
+    Type type;
+
+    Type *      target;
+    StringRef   memberName[10];
+    Type *      memberType[10];
+    bool        isVarList;
+};
+
+struct EnumType
+{
+    Type type;
+
+    StringRef   memberName[10];
+    int         memberValue[10];
+};
+
+struct StructType
+{
+    Type type;
+
+    StringRef   memberName[10];
+    Type *      memberType[10];
+    size_t      memberOffset[10];
+};
+
+struct UnionType
+{
+    Type type;
+
+    StringRef   memberName[10];
+    Type *      memberType[10];
+};
+
+u64             TypeId(Type * type);
+
+VoidType *      AsVoid(Type * type);
+BoolType *      AsBool(Type * type);
+CharType *      AsChar(Type * type);
+IntType *       AsInt(Type * type);
+FloatType *     AsFloat(Type * type);
+ArrayType *     AsArray(Type * type);
+PointerType *   AsPointer(Type * type);
+FunctionType *  AsFunction(Type * type);
+EnumType *      AsEnum(Type * type);
+StructType *    AsStruct(Type * type);
+UnionType *     AsUnion(Type * type);
+
+// Build
+
+struct TypeContext;
+
+VoidType *      MakeVoid(TypeContext * context);
+BoolType *      MakeBool(TypeContext * context);
+CharType *      MakeChar(TypeContext * context);
+IntType *       MakeInt(TypeContext * context, size_t width = 4);
+FloatType *     MakeFloat(TypeContext * context, size_t width = 4);
+
+ArrayType *     MakeArray(TypeContext * context, size_t length); // length, target
+void            ArraySetTarget(TypeContext * context, ArrayType * type, Type * target);
+
+PointerType *   MakePointer(TypeContext * context);  // target
+void            PointerSetTarget(TypeContext * context, PointerType * type, Type * target);
+PointerType *   MakePointer(TypeContext * context, Type * target);
+
+FunctionType *  MakeFunction(TypeContext * context); // protocol
+void            FunctionSetTarget(FunctionType * type, Type * target);
+void            FunctionAddParameter(FunctionType * type, StringRef pname, Type * ptype);
+void            FunctionSetVarList(FunctionType * type);
+void            FunctionDone(TypeContext * context, FunctionType * type);
+
+EnumType *      MakeEnum(TypeContext * context);     // enum const name/value
+void            EnumAddConst(EnumType * type, StringRef name, int value);
+void            EnumChangeLastConstValue(EnumType * type, int value);
+
+StructType *    MakeStruct(TypeContext * context);   // member id/type/offset
+void            StructAddMember(StructType * type, StringRef mname, Type * mtype);
+
+UnionType *     MakeUnion(TypeContext * context);    // member id/type
+void            UnionAddMember(UnionType * type, StringRef mname, Type * mtype);
+
+// set target of {array, pointer, function}
+void            SetTargetType(TypeContext * context, Type * type, Type * target);
+
+void            TypeSetProperties(Type * type, int prop);
+void            TypeSetAssignable(Type * type);
+void            TypeSetAddressable(Type * type);
+
+Type *          IntegralPromotion(TypeContext * context, Type * type);
+Type *          UsualArithmeticConversion(TypeContext * context, Type * left, Type * right);
+Type *          DefaultArgumentPromotion(TypeContext * context, Type * type);
+
+// array of T           -> pointer to T (keep qualifiers)
+// function returns T   -> pointer to function returns T
+// *                    -> *
+Type *          DecayType(TypeContext * context, Type * type);
+Type *          PtrDiffType(TypeContext * context);
+//Type *          RemoveAssignable(TypeContext * context, Type * type);
+
+// Manage
+
+struct TypeContext
+{
+    // all types
+    std::vector<Type *> types;
+    //Type *      types[100];
+    //size_t      size;
+
+    // type id allocation
+    u64 nextTypeBaseId;
+    // target type id -> pointer type base id
+    std::map<u64, u64> existingPointTypeIdMap;
+    // {target type id, array length} -> array type base id
+    std::map<std::tuple<u64, u64>, u64> existingArrayTypeIdMap;
+    // protocol hash -> function type base id
+    std::map<u64, u64> existingFunctionTypeIdMap;
+};
+
+TypeContext *   CreateTypeContext();
+
+// Query
+
+bool            TypeEqual(Type * a, Type * b);
+size_t          TypeSize(Type * type);
+size_t          TypeAlignment(Type * type);
+
+bool            IsScalar(Type * type);
+bool            IsIntegral(Type * type);
+bool            IsFloating(Type * type);
+bool            IsArithmetic(Type * type);
+bool            IsConst(Type * type);
+bool            IsAssignable(Type * type);
+bool            IsAddressable(Type * type);
+bool            IsVoid(Type * type);
+bool            IsBool(Type * type);
+bool            IsInt(Type * type);
+bool            IsStructOrUnion(Type * type);
+bool            IsPointer(Type * type);
+//bool            IsNullPointer();
+bool            IsPointerToObject(Type * type);
+bool            IsCallableObject(Type * type); // function, pointer to function
+
+// TODO: remove these, use specific type test is more clear.
+bool            IsComparable(Type * t1, Type * t2); // arithmetic or same type pointer
+bool            CanTestEquality(Type * t1, Type * t2);
+bool            CanAssign(Type * from, Type * to);
+
+bool            ImplicitConvertible(Type * from, Type * to);
+
+// Type must be struct or union. Return type inherits props like const.
+Type *          GetMemberType(Type * type, StringRef memberName);
+size_t          GetMemberOffset(Type * type, StringRef memberName);
+// Type must be pointer. Return type inherits props like const.
+Type *          GetTargetType(Type * type);
+bool            IsMatchedCall(FunctionType * func, std::vector<Type *> & arguments);
+
+// Debug
+std::string     TypeDebugString(Type * type);
+void            PrintType(Type * type);
+void            PrintTypeContext(TypeContext * context);
+
+} // namespace Language

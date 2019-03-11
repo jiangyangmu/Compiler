@@ -69,7 +69,6 @@ enum AstType
     COMPOUND_STMT,
     EXPRESSION_STMT,
     SELECTION_STMT,
-    IF_STMT,
     IF_ELSE_STMT,
     SWITCH_STMT,
     ITERATION_STMT,
@@ -96,5 +95,10 @@ struct Ast
     Environment * env;
 };
 
-Ast * ParseTranslationUnit(TokenIterator & ti);
-void DebugPrintAst(Ast * ast);
+// Build
+
+Ast *   ParseTranslationUnit(TokenIterator & ti);
+
+// Debug
+
+void    DebugPrintAst(Ast * ast);

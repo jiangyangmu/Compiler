@@ -1,4 +1,4 @@
-#include "parser2.h"
+#include "Ast.h"
 
 Ast * NewAst(AstType type)
 {
@@ -630,9 +630,7 @@ Ast * ParseStatememt(TokenIterator & ti)
                                                   ? ParseStatememt(ti)
                                                   : nullptr;
 
-            Ast * ifStatement                   = NewAst(elseBlock
-                                                  ? IF_ELSE_STMT
-                                                  : IF_STMT);
+            Ast * ifStatement                   = NewAst(IF_ELSE_STMT);
             ifStatement->leftChild              = expression;
             ifStatement->leftChild->rightSibling= ifBlock;
             ifStatement->leftChild->rightSibling->rightSibling
@@ -1200,7 +1198,6 @@ void DebugPrintAstImpl(Ast * ast, size_t indent)
                                     "compound stmt",
                                     "expression stmt",
                                     "selection stmt",
-                                    "if stmt",
                                     "if else stmt",
                                     "switch stmt",
                                     "iteration stmt",
@@ -1232,6 +1229,5 @@ void DebugPrintAstImpl(Ast * ast, size_t indent)
 
 void DebugPrintAst(Ast * ast)
 {
-    std::cout << "Ast:" << std::endl;
     DebugPrintAstImpl(ast, 0);
 }

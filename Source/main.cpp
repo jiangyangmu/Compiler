@@ -7,9 +7,8 @@
 #include <streambuf>
 using namespace std;
 
-#include "parse2/parser2.h"
-
-extern void GenerateX64ASM(Ast * ast);
+#include "ir/Ast.h"
+#include "codegen/AstCompiler.h"
 
 std::string GetFileContent(const char * fileName)
 {
@@ -34,9 +33,22 @@ void Compile(std::string sourceCode)
     TokenIterator ti = tokenizer.getIterator();
 
     Ast * ast = ParseTranslationUnit(ti);
+    std::cout << "Ast:" << std::endl;
     DebugPrintAst(ast);
 
-    GenerateX64ASM(ast);
+    AstCompileContext * context = CreateAstCompileContext();
+    CompileAst(context, ast);
+
+    // Debug print
+    std::cout << std::endl << "TypeContext:" << std::endl;
+    Language::PrintTypeContext(context->typeContext);
+    std::cout << std::endl << "DefinitionContext:" << std::endl;
+    Language::PrintDefinitionContext(context->globalDefinitionContext);
+    for (Language::FunctionContext * functionContext : context->functionContexts)
+    {
+        std::cout << std::endl << "FunctionContext:" << std::endl;
+        Language::PrintFunctionContext(functionContext);
+    }
 }
 
 int main(int argc, char *argv[])

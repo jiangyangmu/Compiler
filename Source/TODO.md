@@ -1,21 +1,11 @@
+﻿[x] Function.cpp 完成 表达式树的 type checking
+[x] Function.cpp 完成 表达式树的 location allocation
+[x] Function.cpp 完成 stack 分配大小计算
 
+[x] 在 Ast 中构建 DefinitionContext, FunctionContext
+[x] Debug print FunctionContext
 
-TODO:
-    * Understand "translation phrases" in C89
-
-1. Lexical Analysis
-
-2. Type System
-
-type.h/.cpp - all about C type, type conversion, etc.
-
-3. symtab.h - manage symbols
-
-4. symbol.h - all about C symbol
-   parser.h/.cpp - EBNF parser
-
-ir.h/.cpp - refined Ast
-
-common.h - StringBuf, StringRef, debug-utils
-
-check int types usage.
+[ ] 结束中期测试，加入 Translation.cpp, X64Recipe.cpp/.h
+[ ] IR已经改了，对应修改 Translation.cpp 和 x64Recipe.cpp 的东西。
+[ ] 处理 x64 汇编中的寄存器 保存/恢复 问题
+[ ] 处理 Function.cpp 中的 intention 机制，是否保留？
