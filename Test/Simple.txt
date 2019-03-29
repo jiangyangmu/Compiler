@@ -1,0 +1,8 @@
+int run()
+{
+    int i;
+
+    i = 40 + 2;
+
+    return i;
+}

@@ -530,6 +530,11 @@ Type * PtrDiffType(TypeContext * context)
     return &MakeInt(context, 8)->type;
 }
 
+bool IsPtrDiffType(Type * type)
+{
+    return IsInt(type) && type->size == 8;
+}
+
 TypeContext * CreateTypeContext()
 {
     TypeContext * context = new TypeContext;
@@ -671,6 +676,11 @@ bool IsPointerToObject(Type * type)
     return IsPointer(type) && (AsPointer(type)->target->prop & TP_IS_OBJECT);
 }
 
+bool IsPointerToFunction(Type * type)
+{
+    return IsPointer(type) && (AsPointer(type)->target->name == FUNCTION);
+}
+
 bool IsCallableObject(Type * type)
 {
     return (type->name == FUNCTION) ||
@@ -687,11 +697,6 @@ bool IsComparable(Type * t1, Type * t2)
 bool CanTestEquality(Type * t1, Type * t2)
 {
     return TypeEqual(t1, t2);
-}
-
-bool CanAssign(Type * from, Type * to)
-{
-    return TypeEqual(to, from) && IsAssignable(to);
 }
 
 // TODO: impl

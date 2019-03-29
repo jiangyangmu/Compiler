@@ -190,11 +190,13 @@ void ExitDefinitionContext(AstCompileContext * context)
 }
 // for function context list.
 void BeginFunctionContext(AstCompileContext * context,
-                        StringRef functionName,
-                        Language::DefinitionContext * functionDefinitionContext)
+                          StringRef functionName,
+                          Language::FunctionType * functionType,
+                          Language::DefinitionContext * functionDefinitionContext)
 {
     ASSERT(!context->currentFunctionContext);
     context->currentFunctionContext = CreateFunctionContext(functionDefinitionContext,
+                                                            functionType,
                                                             context->constantContext,
                                                             context->typeContext,
                                                             functionName);
@@ -483,7 +485,7 @@ void CompileAst(AstCompileContext * context, Ast * ast)
 
         EnterDefinitionContext(context, functionDefinitionContext);
         BeginScope(context, IN_COMPOUND_STATEMENT);
-        BeginFunctionContext(context, functionName, functionDefinitionContext);
+        BeginFunctionContext(context, functionName, Language::AsFunction(functionType), functionDefinitionContext);
 
         // TODO: temp solution
         context->currentFunctionContext->currentIntention.push_back(Language::WANT_VALUE);

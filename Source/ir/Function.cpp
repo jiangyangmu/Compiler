@@ -1,5 +1,8 @@
 #include "Function.h"
 
+#include "../ir/CallingConvention.h"
+#include "../util/Bit.h"
+
 namespace Language {
 
 ConstantContext * CreateConstantContext()
@@ -27,6 +30,7 @@ Location LocateFloat(ConstantContext * context,
 }
 
 FunctionContext * CreateFunctionContext(DefinitionContext * functionDefinitionContext,
+                                        FunctionType * functionType,
                                         ConstantContext * constantContext,
                                         TypeContext * typeContext,
                                         StringRef functionName)
@@ -34,11 +38,22 @@ FunctionContext * CreateFunctionContext(DefinitionContext * functionDefinitionCo
     FunctionContext * functionContext = new FunctionContext;
     
     functionContext->functionDefinitionContext = functionDefinitionContext;
+    functionContext->functionType = functionType;
     functionContext->nextUniqueLabel = 0;
     functionContext->constantContext = constantContext;
     functionContext->typeContext = typeContext;
     functionContext->functionName = functionName.toString();
+    functionContext->localZoneSize = 0;
+    functionContext->maxTempZoneSize = 0;
+    functionContext->maxCallZoneSize = 0;
     functionContext->stackAllocSize = 0;
+    functionContext->stackFrameSize = 0;
+    functionContext->registerZoneEndOffset = 0;
+    functionContext->localZoneEndOffset = 0;
+    functionContext->tempZoneBeginOffset = 0;
+    functionContext->swapZoneEndOffset = 0;
+    functionContext->callZoneEndOffset = 0;
+    functionContext->dirtyRegisters = 0;
     functionContext->functionBody = nullptr;
 
     return functionContext;
@@ -74,6 +89,23 @@ int CountChild(Node * node)
         next = next->right;
     }
     return n;
+}
+
+Node * LastChild(Node * parent)
+{
+    ASSERT(parent);
+
+    Node * lastChild = parent->down;
+    
+    if (lastChild)
+    {
+        while (lastChild->right)
+        {
+            lastChild = lastChild->right;
+        }
+    }
+
+    return lastChild;
 }
 
 Node * MakeNode(NodeType type)
@@ -165,14 +197,9 @@ size_t ComputeCallZoneSize(Node * call)
 
     size_t size = 0;
 
-    // int/float/block(<=64)
-    // block(>64)
-    for (Node * next = call->down->right; next; next = next->right)
-    {
-        Type * argumentType = next->expr.type;
-
-        size += std::max(8ull, TypeSize(argumentType));
-    }
+    // int/float/block(<=64)    -> register/value-on-stack
+    // block(>64)               -> address-on-stack
+    size += (CountChild(call) - 1) * 8;
 
     // large return value
     Type * returnType = call->down->expr.type;
@@ -209,6 +236,27 @@ Node * EmptyExpression(FunctionContext * context)
     return node;
 }
 
+Location GetArgumentLocation(FunctionType * functionType,
+                             StringRef argumentName)
+{
+    ParameterPassingCalleeProtocol calleeProtocol(functionType);
+
+    size_t argumentIndex = calleeProtocol.IsReturnValueAddressAsFirstParameter()
+                           ? 1
+                           : 0;
+    
+    while (true)
+    {
+        ASSERT(functionType->memberType[argumentIndex]);
+        if (argumentName == functionType->memberName[argumentIndex])
+            break;
+        else
+            ++argumentIndex;
+    }
+
+    return calleeProtocol.GetParameterLocation(argumentIndex);
+}
+
 Node * IdExpression(FunctionContext * context,
                     StringRef id)
 {
@@ -219,14 +267,53 @@ Node * IdExpression(FunctionContext * context,
                                                id,
                                                DefinitionContextNamespace::ID_NAMESPACE,
                                                true);
-    ASSERT(definition);
+    ASSERT(definition &&
+           (
+               definition->type == OBJECT_DEFINITION ||
+               definition->type == FUNCTION_DEFINITION
+            ));
 
     Type * definitionType = ExtractDefinitionCType(definition);
-    // assert definition type is in {object, function}
 
     Node * node = MakeNode(EXPR_ID);
 
     node->expr.type = DecayType(context->typeContext, definitionType);
+
+    // function                 -> label
+    // import object            -> label
+    // global (export) object   -> label
+    // function static object   -> label
+    // argument object          -> GetArgumentLocation(functionType, argumentIndex)
+    // local object             -> delay (search localObjectOffsets, not ready yet)
+    if (definition->type == FUNCTION_DEFINITION)
+    {
+        node->expr.loc.type = LocationType::LABEL;
+        node->expr.loc.labelValue = new StringRef(id);
+    }
+    else
+    {
+        ObjectDefinition * objectDefinition = AsObjectDefinition(definition);
+        switch (objectDefinition->objStorageType)
+        {
+            case IMPORT_OBJECT:
+            case GLOBAL_OBJECT:
+            case GLOBAL_EXPORT_OBJECT:
+            case FUNCTION_STATIC_OBJECT:
+                node->expr.loc.type = LocationType::LABEL;
+                node->expr.loc.labelValue = new StringRef(id);
+                break;
+            case PARAM_OBJECT:
+                node->expr.loc = GetArgumentLocation(context->functionType, id);
+                break;
+            case LOCAL_OBJECT:
+                node->expr.loc.type = LocationType::SEARCH_LOCAL_DEFINITION_TABLE;
+                node->expr.loc.definitionValue = definition;
+                break;
+            default:
+                ASSERT(false);
+                break;
+        }
+    }
 
     return node;
 }
@@ -345,10 +432,10 @@ Node * PostIncExpression(FunctionContext * context, Node * expr)
 
     Type * type = expr->expr.type;
 
-    Node * copyNode = MakeNode(EXPR_MCOPY);
-    copyNode->expr.type = type;
-    copyNode->expr.loc.type = NEED_ALLOC;
-    AddChild(copyNode, expr);
+    Node * dupNode = MakeNode(EXPR_MDUP);
+    dupNode->expr.type = type;
+    dupNode->expr.loc.type = NEED_ALLOC;
+    AddChild(dupNode, expr);
 
     if (IsIntegral(type))
     {
@@ -356,7 +443,7 @@ Node * PostIncExpression(FunctionContext * context, Node * expr)
         addNode->expr.type = type;
         addNode->expr.loc.type = SAME_AS_FIRST_GRANDCHILD;
 
-        AddChild(addNode, copyNode);
+        AddChild(addNode, dupNode);
         node = addNode;
     }
     else if (IsFloating(type))
@@ -365,7 +452,7 @@ Node * PostIncExpression(FunctionContext * context, Node * expr)
         addNode->expr.type = type;
         addNode->expr.loc.type = SAME_AS_FIRST_GRANDCHILD;
 
-        AddChild(addNode, copyNode);
+        AddChild(addNode, dupNode);
         AddChild(addNode, ConstantExpression(context, 1.0f));
         node = addNode;
     }
@@ -376,7 +463,7 @@ Node * PostIncExpression(FunctionContext * context, Node * expr)
         addNode->expr.type = type;
         addNode->expr.loc.type = SAME_AS_FIRST_GRANDCHILD;
 
-        AddChild(addNode, copyNode);
+        AddChild(addNode, dupNode);
         AddChild(addNode, ConstantExpression(context, 1));
         node = addNode;
     }
@@ -443,10 +530,10 @@ Node * PostDecExpression(FunctionContext * context, Node * expr)
 
     Type * type = expr->expr.type;
 
-    Node * copyNode = MakeNode(EXPR_MCOPY);
-    copyNode->expr.type = type;
-    copyNode->expr.loc.type = NEED_ALLOC;
-    AddChild(copyNode, expr);
+    Node * dupNode = MakeNode(EXPR_MDUP);
+    dupNode->expr.type = type;
+    dupNode->expr.loc.type = NEED_ALLOC;
+    AddChild(dupNode, expr);
 
     if (IsIntegral(type))
     {
@@ -454,7 +541,7 @@ Node * PostDecExpression(FunctionContext * context, Node * expr)
         subNode->expr.type = type;
         subNode->expr.loc.type = SAME_AS_FIRST_GRANDCHILD;
 
-        AddChild(subNode, copyNode);
+        AddChild(subNode, dupNode);
         node = subNode;
     }
     else if (IsFloating(type))
@@ -463,7 +550,7 @@ Node * PostDecExpression(FunctionContext * context, Node * expr)
         subNode->expr.type = type;
         subNode->expr.loc.type = SAME_AS_FIRST_GRANDCHILD;
 
-        AddChild(subNode, copyNode);
+        AddChild(subNode, dupNode);
         AddChild(subNode, ConstantExpression(context, 1.0f));
         node = subNode;
     }
@@ -474,7 +561,7 @@ Node * PostDecExpression(FunctionContext * context, Node * expr)
         subNode->expr.type = type;
         subNode->expr.loc.type = SAME_AS_FIRST_GRANDCHILD;
 
-        AddChild(subNode, copyNode);
+        AddChild(subNode, dupNode);
         AddChild(subNode, ConstantExpression(context, 1));
         node = subNode;
     }
@@ -577,7 +664,7 @@ Node * IndirectExpression(FunctionContext * context, Node * expr)
 
     Node * node = MakeNode(EXPR_PVAL);
     node->expr.type = AsPointer(expr->expr.type)->target;
-    node->expr.loc.type = RUNTIME_MEMORY;
+    node->expr.loc.type = REGISTER_INDIRECT;
 
     AddChild(node, expr);
 
@@ -643,6 +730,7 @@ Node * CastExpression(Node * expr, Type * type)
     if (IsVoid(toType))
     {
         node = MakeNode(EXPR_CVT_NOOP);
+        node->expr.loc.type = SAME_AS_FIRST_CHILD;
     }
     else
     {
@@ -651,6 +739,7 @@ Node * CastExpression(Node * expr, Type * type)
         if (IsPointer(fromType) && IsPointer(toType))
         {
             node = MakeNode(EXPR_CVT_NOOP);
+            node->expr.loc.type = SAME_AS_FIRST_CHILD;
         }
         else if (IsIntegral(fromType))
         {
@@ -660,6 +749,7 @@ Node * CastExpression(Node * expr, Type * type)
                 node = MakeNode(EXPR_CVT_I2F);
             else if (IsBool(toType))
                 node = MakeNode(EXPR_CVT_I2B);
+            node->expr.loc.type = NEED_ALLOC;
         }
         else if (IsFloating(fromType))
         {
@@ -669,6 +759,7 @@ Node * CastExpression(Node * expr, Type * type)
                 node = MakeNode(EXPR_CVT_F2F);
             else if (IsBool(toType))
                 node = MakeNode(EXPR_CVT_F2B);
+            node->expr.loc.type = NEED_ALLOC;
         }
         else if (IsBool(fromType))
         {
@@ -676,12 +767,12 @@ Node * CastExpression(Node * expr, Type * type)
                 node = MakeNode(EXPR_CVT_B2I);
             else if (IsFloating(toType))
                 node = MakeNode(EXPR_CVT_B2F);
+            node->expr.loc.type = NEED_ALLOC;
         }
     }
     ASSERT(node);
 
     node->expr.type = toType;
-    node->expr.loc.type = SAME_AS_FIRST_CHILD;
 
     AddChild(node, expr);
 
@@ -716,6 +807,12 @@ Node * AddExpression(FunctionContext * context, Node * a, Node * b)
             Node * t = a;
             a = b;
             b = t;
+        }
+
+        if (TypeSize(b->expr.type) < 8)
+        {
+            Type * type = &MakeInt(context->typeContext, 8)->type;
+            b = WrapCastNode(b, type);
         }
 
         node = MakeNode(EXPR_PADD);
@@ -1096,7 +1193,8 @@ Node * GtExpression(FunctionContext * context, Node * a, Node * b)
 Node * AssignExpression(FunctionContext * context, Node * a, Node * b)
 {
     // arithmetic/struct/union/pointer
-    ASSERT(CanAssign(b->expr.type, a->expr.type));
+    ASSERT(TypeEqual(a->expr.type, b->expr.type));
+    ASSERT(IsAssignable(a->expr.type));
     
     Node * node = MakeNode(EXPR_MCOPY);
     node->expr.type = a->expr.type;
@@ -1105,13 +1203,13 @@ Node * AssignExpression(FunctionContext * context, Node * a, Node * b)
     AddChild(node, a);
     AddChild(node, WrapCastNode(b, a->expr.type));
 
-    Node * copyNode = MakeNode(EXPR_MCOPY);
-    copyNode->expr.type = a->expr.type;
-    copyNode->expr.loc.type = NEED_ALLOC;
+    Node * dupNode = MakeNode(EXPR_MDUP);
+    dupNode->expr.type = a->expr.type;
+    dupNode->expr.loc.type = NEED_ALLOC;
 
-    AddChild(copyNode, node);
+    AddChild(dupNode, node);
 
-    return copyNode;
+    return dupNode;
 }
 
 Node * ConditionExpression(FunctionContext * context, Node * a, Node * b, Node * c)
@@ -1173,71 +1271,6 @@ Node * CommaExpression(std::vector<Node *> & exprs)
     }
 
     return node;
-}
-
-void   FillLocationAndStackAllocSize(FunctionContext * context, Node * exprTree)
-{
-    size_t callZoneSize = 0;
-    size_t tempZoneSize = 0;
-
-    size_t offset = 0;
-
-    // post-order
-    std::vector<std::pair<Node *, bool>> st = {{exprTree, false}};
-    while (!st.empty())
-    {
-        Node * node = st.back().first;
-        if (!st.back().second)
-        {
-            st.back().second = true;
-
-            std::vector<Node *> children;
-            for (Node * child = node->down; child; child = child->right)
-            {
-                children.push_back(child);
-            }
-            for (auto it = children.rbegin(); it != children.rend(); ++it)
-            {
-                st.push_back({*it, false});
-            }
-        }
-        else
-        {
-            // compute stack memory usage
-            if (node->expr.loc.type == NEED_ALLOC)
-            {
-                size_t align = TypeAlignment(node->expr.type);
-                size_t size = TypeSize(node->expr.type);
-
-                tempZoneSize = (tempZoneSize + size + align - 1) / align * align;
-                node->expr.loc.type = ESP_OFFSET;
-                node->expr.loc.offsetValue = tempZoneSize;
-            }
-            else if (node->expr.loc.type == SAME_AS_FIRST_CHILD)
-            {
-                node->expr.loc = node->down->expr.loc;
-            }
-            else
-            {
-                node->expr.loc = node->down->down->expr.loc;
-            }
-            if (node->type = EXPR_CALL)
-            {
-                size_t newCallZoneSize = ComputeCallZoneSize(node);
-
-                callZoneSize = callZoneSize < newCallZoneSize
-                               ? newCallZoneSize
-                               : callZoneSize;
-            }
-            
-            st.pop_back();
-        }
-    }
-
-    size_t newStackAllocSize = (tempZoneSize + callZoneSize + 15) / 16 * 16;
-    context->stackAllocSize = context->stackAllocSize < newStackAllocSize
-                              ? newStackAllocSize
-                              : context->stackAllocSize;
 }
 
 void   Function_Begin(FunctionContext * context)
@@ -1575,6 +1608,227 @@ Node * DefaultStatement(FunctionContext * context)
     return node;
 }
 
+void GetAllLocalObjectsInDefinitionContext(DefinitionContext * context,
+                                           std::vector<ObjectDefinition *> & objects)
+{
+    ASSERT(context);
+
+    for (Definition * definition : context->definitions[ID_NAMESPACE])
+    {
+        if (definition->type == OBJECT_DEFINITION)
+        {
+            ObjectDefinition * objectDefinition = AsObjectDefinition(definition);
+            if (objectDefinition->objStorageType == LOCAL_OBJECT)
+            {
+                objects.push_back(objectDefinition);
+            }
+        }
+    }
+
+    if (context->firstChild)
+        GetAllLocalObjectsInDefinitionContext(context->firstChild, objects);
+
+    if (context->next)
+        GetAllLocalObjectsInDefinitionContext(context->next, objects);
+}
+
+void ForExpressionTreeInFunctionBody(FunctionContext * context,
+                                     Node * body,
+                                     void(*func)(FunctionContext *, Node *))
+{
+    ASSERT(body);
+    if (body->type > BEGIN_EXPRESSION && body->type < END_EXPRESSION)
+    {
+        (*func)(context, body);
+    }
+    else
+    {
+        for (Node * child = body->down;
+             child;
+             child = child->right)
+        {
+            ForExpressionTreeInFunctionBody(context, child, func);
+        }
+    }
+}
+
+void UpdateMaxTempAndCallZone(FunctionContext * context, Node * exprTree)
+{
+    size_t tempZoneSize = 0;
+    size_t callZoneSize = 0;
+
+    // post-order
+    std::vector<std::pair<Node *, bool>> st = { { exprTree, false } };
+    while (!st.empty())
+    {
+        Node * node = st.back().first;
+        if (!st.back().second)
+        {
+            st.back().second = true;
+
+            std::vector<Node *> children;
+            for (Node * child = node->down; child; child = child->right)
+            {
+                children.push_back(child);
+            }
+            for (auto it = children.rbegin(); it != children.rend(); ++it)
+            {
+                st.push_back({ *it, false });
+            }
+        }
+        else
+        {
+            // compute tempZoneSize
+            if (node->expr.loc.type == NEED_ALLOC)
+            {
+                size_t align = TypeAlignment(node->expr.type);
+                size_t size = TypeSize(node->expr.type);
+
+                ASSERT(align <= 8);
+
+                tempZoneSize = (tempZoneSize + size + align - 1) / align * align;
+            }
+            // compute callZoneSize
+            if (node->type == EXPR_CALL)
+            {
+                size_t newCallZoneSize = ComputeCallZoneSize(node);
+
+                callZoneSize = callZoneSize < newCallZoneSize
+                    ? newCallZoneSize
+                    : callZoneSize;
+            }
+
+            st.pop_back();
+        }
+    }
+
+    context->maxTempZoneSize = Max(context->maxTempZoneSize, tempZoneSize);
+    context->maxCallZoneSize = Max(context->maxCallZoneSize, callZoneSize);
+}
+
+void FillLocalAndTempLocationInExpressionTree(FunctionContext * context,
+                                              Node * exprTree)
+{
+    size_t offset = context->tempZoneBeginOffset;
+
+    // post-order
+    std::vector<std::pair<Node *, bool>> st = { { exprTree, false } };
+    while (!st.empty())
+    {
+        Node * node = st.back().first;
+        if (!st.back().second)
+        {
+            st.back().second = true;
+
+            std::vector<Node *> children;
+            for (Node * child = node->down; child; child = child->right)
+            {
+                children.push_back(child);
+            }
+            for (auto it = children.rbegin(); it != children.rend(); ++it)
+            {
+                st.push_back({ *it, false });
+            }
+        }
+        else
+        {
+            // fill location
+            if (node->expr.loc.type == NEED_ALLOC)
+            {
+                size_t align = TypeAlignment(node->expr.type);
+                size_t size = TypeSize(node->expr.type);
+
+                ASSERT(align <= 8);
+
+                offset = (offset + size + align - 1) / align * align;
+
+                node->expr.loc.type = ESP_OFFSET;
+                node->expr.loc.offsetValue = context->stackFrameSize - offset;
+            }
+            else if (node->expr.loc.type == SAME_AS_FIRST_CHILD)
+            {
+                node->expr.loc = node->down->expr.loc;
+            }
+            else if (node->expr.loc.type == SAME_AS_FIRST_GRANDCHILD)
+            {
+                node->expr.loc = node->down->down->expr.loc;
+            }
+            else if (node->expr.loc.type == SEARCH_LOCAL_DEFINITION_TABLE)
+            {
+                node->expr.loc.type = ESP_OFFSET;
+                node->expr.loc.offsetValue = context->stackFrameSize - context->localObjectOffsets.at(node->expr.loc.definitionValue);
+            }
+
+            st.pop_back();
+        }
+    }
+
+    ASSERT(offset <= (context->tempZoneBeginOffset + context->maxTempZoneSize));
+}
+
+Location GetSwapLocation(FunctionContext * functionContext)
+{
+    ASSERT(functionContext->stackFrameSize != 0);
+    Location location;
+    location.type = ESP_OFFSET;
+    location.offsetValue = functionContext->stackFrameSize - functionContext->swapZoneEndOffset;
+    return location;
+}
+
+void    PrepareStack(FunctionContext * context)
+{
+    // step:
+    //      1. scan for non-volatile registers, fill {dirtyRegisters, registerZoneEndOffset}
+    //      2. scan for local objects, fill {localZoneSize, localZoneEndOffset, localObjectOffsets}
+    //      3. scan for temp objects, fill {maxTempZoneSize, tempZoneBeginOffset}
+    //      4. scan for call nodes, fill {maxCallZoneSize, callZoneEndOffset}
+    //      5. fill {swapZoneEndOffset}
+    //      6. fill {stackFrameSize, stackAllocSize}
+    //      7. fill {local location in expression tree, temp location in expression tree}
+    //          * both depends on stackFrameSize
+
+    // "offset to previous stack frame"
+    size_t offset = 8;
+
+    context->dirtyRegisters = RBP_MASK | RSI_MASK | RDI_MASK;
+    offset = context->registerZoneEndOffset = offset + 8 * CountBits(context->dirtyRegisters);
+
+    // local zone
+    std::vector<ObjectDefinition *> objectDefinitions;
+    GetAllLocalObjectsInDefinitionContext(context->functionDefinitionContext, objectDefinitions);
+    for (ObjectDefinition * objectDefinition : objectDefinitions)
+    {
+        size_t objectSize = TypeSize(objectDefinition->objType);
+        size_t objectAlign = TypeAlignment(objectDefinition->objType);
+        context->localZoneSize = (context->localZoneSize + objectSize + objectAlign - 1) / objectAlign * objectAlign;
+        context->localObjectOffsets.emplace(&objectDefinition->def, offset + context->localZoneSize);
+    }
+    offset = context->localZoneEndOffset = offset + context->localZoneSize;
+
+    // temp zone
+    ForExpressionTreeInFunctionBody(context,
+                                    context->functionBody,
+                                    UpdateMaxTempAndCallZone);
+    context->tempZoneBeginOffset = (offset + 7) / 8 * 8;
+    offset = context->tempZoneBeginOffset + context->maxTempZoneSize;
+    offset = (offset + 7) / 8 * 8;
+
+    // swap zone
+    offset = context->swapZoneEndOffset = offset + 8;
+
+    // call zone
+    offset = context->callZoneEndOffset = (offset + 15) / 16 * 16;
+
+    // stack layout
+    context->stackFrameSize = offset;
+    context->stackAllocSize = offset - context->registerZoneEndOffset;
+
+    // fill expression node location
+    ForExpressionTreeInFunctionBody(context,
+                                    context->functionBody,
+                                    FillLocalAndTempLocationInExpressionTree);
+}
+
 std::string NodeDebugString(Node * node)
 {
     std::string s;
@@ -1655,6 +1909,7 @@ std::string NodeDebugString(Node * node)
         case EXPR_PGT:          s = "pgt"; break;
         case EXPR_MADDR:        s = "maddr"; break;
         case EXPR_MCOPY:        s = "mcopy"; break;
+        case EXPR_MDUP:         s = "mdup"; break;
         case EXPR_MADD:         s = "madd"; break;
         case EXPR_CONDITION:    s = "condition"; break;
         case EXPR_ELIST:        s = "elist"; break;
@@ -1678,9 +1933,17 @@ void PrintNodeTree(Node * root, std::string indent)
         PrintNodeTree(root->right, indent);
 }
 
+void PrintStackAllocation(FunctionContext * context)
+{
+    std::cout << "return address:        8" << std::endl
+              << "non-volatile register: " << CountBits(context->dirtyRegisters) * 8 << std::endl
+              << "local zone:            " << context->localZoneSize << std::endl;
+}
+
 void PrintFunctionContext(FunctionContext * context)
 {
     PrintNodeTree(context->functionBody, "");
+    PrintStackAllocation(context);
 }
 
 }

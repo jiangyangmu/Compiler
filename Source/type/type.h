@@ -187,6 +187,7 @@ Type *          DefaultArgumentPromotion(TypeContext * context, Type * type);
 // *                    -> *
 Type *          DecayType(TypeContext * context, Type * type);
 Type *          PtrDiffType(TypeContext * context);
+bool            IsPtrDiffType(Type * type);
 //Type *          RemoveAssignable(TypeContext * context, Type * type);
 
 // Manage
@@ -230,12 +231,12 @@ bool            IsStructOrUnion(Type * type);
 bool            IsPointer(Type * type);
 //bool            IsNullPointer();
 bool            IsPointerToObject(Type * type);
+bool            IsPointerToFunction(Type * type);
 bool            IsCallableObject(Type * type); // function, pointer to function
 
 // TODO: remove these, use specific type test is more clear.
 bool            IsComparable(Type * t1, Type * t2); // arithmetic or same type pointer
 bool            CanTestEquality(Type * t1, Type * t2);
-bool            CanAssign(Type * from, Type * to);
 
 bool            ImplicitConvertible(Type * from, Type * to);
 

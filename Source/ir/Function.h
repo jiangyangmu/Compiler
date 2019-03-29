@@ -64,7 +64,8 @@ enum NodeType
 
     // memory operations (size)
     EXPR_MADDR,
-    EXPR_MCOPY,
+    EXPR_MCOPY, // two children
+    EXPR_MDUP, // one child
     EXPR_MADD,
 
     // TODO: divide
@@ -128,12 +129,34 @@ enum ExpressionIntention
     WANT_NOTHING,
 };
 
+#define R12_MASK (1)
+#define R13_MASK (1 << 1)
+#define R14_MASK (1 << 2)
+#define R15_MASK (1 << 3)
+#define RDI_MASK (1 << 4)
+#define RSI_MASK (1 << 5)
+#define RBX_MASK (1 << 6)
+#define RBP_MASK (1 << 7)
+#define RSP_MASK (1 << 8)
+#define XMM6_MASK (1 << 9)
+#define XMM7_MASK (1 << 10)
+#define XMM8_MASK (1 << 11)
+#define XMM9_MASK (1 << 12)
+#define XMM10_MASK (1 << 13)
+#define XMM11_MASK (1 << 14)
+#define XMM12_MASK (1 << 15)
+#define XMM13_MASK (1 << 16)
+#define XMM14_MASK (1 << 17)
+#define XMM15_MASK (1 << 18)
+
 struct FunctionContext
 {
     // Shared build state
 
     DefinitionContext * functionDefinitionContext;
     std::vector<DefinitionContext *> currentDefinitionContext;
+
+    FunctionType * functionType; // used in id expression, to figure out argument object location
 
     // Statement tree build state
 
@@ -170,8 +193,40 @@ struct FunctionContext
     // Code generation state
 
     std::string functionName;
-    size_t stackAllocSize; // tempZoneSize + gap + callZoneSize (16-byte aligned)
-    // register to save
+    
+    // stack allocation
+    // layout:
+    //      returnAddress                   (8-byte aligned)
+    //      saved rbp                       (8-byte aligned) <-- rbp
+    //      nonVolatileReg                  (8-byte aligned)
+    //      localZoneSize
+    //      gap                             (8-byte aligned)
+    //      maxTempZoneSize
+    //      gap                             (8-byte aligned)
+    //      swapZoneSize                    (8-byte aligned)
+    //      gap
+    //      maxCallZoneSize                 (16-byte aligned) <-- rsp
+    // step:
+    //      1. scan for non-volatile registers, fill {dirtyRegisters, registerZoneEndOffset}
+    //      2. scan for local objects, fill {localZoneSize, localZoneEndOffset, localObjectOffsets, local location in expression tree}
+    //      3. scan for temp objects, fill {maxTempZoneSize, tempZoneBeginOffset, temp location in expression tree}
+    //      4. scan for call nodes, fill {maxCallZoneSize, callZoneEndOffset}
+    // allocation zone
+    size_t localZoneSize;
+    size_t maxTempZoneSize;
+    size_t maxCallZoneSize;
+    size_t stackAllocSize; // local zone + temp zone + swap zone + call zone + gaps
+    size_t stackFrameSize;
+    // allocation offset - "offset to previous stack frame"
+    size_t registerZoneEndOffset;
+    size_t localZoneEndOffset;
+    size_t tempZoneBeginOffset;
+    size_t swapZoneEndOffset; // needed by some expression node (e.g. EXPR_PVAL, EXPR_CVT_F2B)
+    size_t callZoneEndOffset;
+    std::map<Definition *, size_t> localObjectOffsets;
+
+    // non-volatile register mask (also used in stack allocation)
+    size_t dirtyRegisters;
 
     // Final tree
 
@@ -179,9 +234,12 @@ struct FunctionContext
 };
 
 FunctionContext * CreateFunctionContext(DefinitionContext * functionDefinitionContext,
+                                        FunctionType * functionType,
                                         ConstantContext * constantContext,
                                         TypeContext * typeContext,
                                         StringRef functionName);
+
+Location GetSwapLocation(FunctionContext * functionContext);
 
 // Debug
 
@@ -189,9 +247,11 @@ void PrintFunctionContext(FunctionContext * context);
 
 // Build
 
-void AddChild(Node * parent, Node * child);
+void    AddChild(Node * parent, Node * child);
+Node *  LastChild(Node * parent);
 
-// TODO: type-filtering, type-based-refinement, storage-setup, reigster-setup
+// allocate stack, fill locals/temps
+void    PrepareStack(FunctionContext * context);
 
 // Expression construction front end, fit C syntax
 // Construct tree base on intention, check children type, refer self type, insert cast node.
@@ -254,8 +314,6 @@ Node * GtExpression(FunctionContext * context, Node * a, Node * b);
 Node * AssignExpression(FunctionContext * context, Node * a, Node * b);
 Node * ConditionExpression(FunctionContext * context, Node * a, Node * b, Node * c);
 Node * CommaExpression(std::vector<Node *> & exprs);
-
-void   FillLocationAndStackAllocSize(FunctionContext * context, Node * exprTree);
 
 // Construct flow-control tree, check and create labels (goto label defined, break/continue has target, case/default in switch).
 
