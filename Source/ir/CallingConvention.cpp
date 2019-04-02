@@ -9,6 +9,20 @@ bool IsLargeOrIrregularType(Type * type)
     return size > 8 || CountBits(size) != 1;
 }
 
+bool IsRAXType(Type * type)
+{
+    return IsIntegral(type) && !IsLargeOrIrregularType(type);
+}
+
+bool IsXMMType(Type * type)
+{
+    return IsFloating(type) && !IsLargeOrIrregularType(type);
+}
+
+bool IsStackOnlyType(Type * type)
+{
+    return IsLargeOrIrregularType(type);
+}
 
 ParameterPassingCallerProtocol::ParameterPassingCallerProtocol(FunctionType * functionType)
 {
@@ -96,6 +110,7 @@ bool ParameterPassingCallerProtocol::IsReturnValueAddressAsFirstParameter()
     return rvaAsFirstParameter;
 }
 
+
 ParameterPassingCalleeProtocol::ParameterPassingCalleeProtocol(FunctionType * functionType)
 {
     // 1. maybe return value as first parameter
@@ -171,7 +186,6 @@ Location ParameterPassingCalleeProtocol::GetParameterLocation(size_t index)
     return parameterLocations[index];
 }
 
-
 bool ParameterPassingCalleeProtocol::IsParameterPassedByAddress(size_t index)
 {
     ASSERT(index < parameterLocations.size());
@@ -181,6 +195,28 @@ bool ParameterPassingCalleeProtocol::IsParameterPassedByAddress(size_t index)
 bool ParameterPassingCalleeProtocol::IsReturnValueAddressAsFirstParameter()
 {
     return rvaAsFirstParameter;
+}
+
+
+Location GetReturnValueLocation(Type * type)
+{
+    Location loc;
+
+    if (IsLargeOrIrregularType(type))
+    {
+        loc.type = REGISTER_INDIRECT;
+        loc.registerType = RAX;
+    }
+    else
+    {
+        loc.type = REGISTER;
+        if (IsFloating(type))
+            loc.registerType = XMM0;
+        else
+            loc.registerType = RAX;
+    }
+
+    return loc;
 }
 
 }

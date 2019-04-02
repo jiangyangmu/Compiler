@@ -618,7 +618,7 @@ Node * CallExpression(FunctionContext * context,
 
     Node * node = MakeNode(EXPR_CALL);
     node->expr.type = functionType->target;
-    node->expr.loc.type = NEED_ALLOC;
+    node->expr.loc = GetReturnValueLocation(functionType->target);
 
     AddChild(node, pointerToFunction);
     Type ** paramTypeIter = functionType->memberType;
@@ -632,7 +632,12 @@ Node * CallExpression(FunctionContext * context,
 
     TypeChecking_Call(node);
 
-    return node;
+    Node * dupNode = MakeNode(EXPR_MDUP);
+    dupNode->expr.type = node->expr.type;
+    dupNode->expr.loc.type = NEED_ALLOC;
+    AddChild(dupNode, node);
+
+    return dupNode;
 }
 
 Node * SubscriptExpression(FunctionContext * context,

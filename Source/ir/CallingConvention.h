@@ -39,4 +39,12 @@ private:
     bool rvaAsFirstParameter;
 };
 
+Location GetReturnValueLocation(Type * type);
+
+// Category (TODO: remove)
+
+bool IsRAXType(Type * type);
+bool IsXMMType(Type * type);
+bool IsStackOnlyType(Type * type);
+
 }

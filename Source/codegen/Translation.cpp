@@ -158,6 +158,7 @@ std::string RegisterTypeToString(RegisterType type, size_t width)
     std::string s;
     switch (type)
     {
+        case RAX:                       s = AX(width); break;
         case RCX:                       s = CX(width); break;
         case RDX:                       s = DX(width); break;
         case R8:    ASSERT(width == 8); s = "r8"; break;
@@ -356,6 +357,7 @@ std::string TranslateCallExpression(Type * pointerToFuncType,
     // 1. maybe copy return value as first parameter
     // 2. copy param to reg/stack
     // 3. maybe use register call, issue call
+    // 4. copy return value to outLoc
 
     std::string s;
 
@@ -417,6 +419,27 @@ std::string TranslateCallExpression(Type * pointerToFuncType,
         // call r11
         s += "mov r11, " + X64LocationString(funcLoc, 8) + "\n";
         s += std::string("call ") + "r11" + "\n";
+    }
+
+    size_t outSize = TypeSize(outType);
+    if (IsIntegral(outType))
+    {
+        // mov outLoc, rax
+        s += "mov " + X64LocationString(outLoc, outSize) + ", " + AX(outSize) + "\n";
+    }
+    else if (IsFloating(outType))
+    {
+        // movss outLoc, xmm0
+        if (outSize == 4)
+            s += "movss " + X64LocationString(outLoc, outSize) + ", " + XMM(0) + "\n";
+        else if (outSize == 8)
+            s += "movsd " + X64LocationString(outLoc, outSize) + ", " + XMM(0) + "\n";
+        else
+            ASSERT(false);
+    }
+    else
+    {
+        ASSERT(false);
     }
 
     return s;
@@ -481,8 +504,8 @@ std::string TranslateExpression(FunctionContext * context,
                                      functionLoc,
                                      paramTypes,
                                      paramLocations,
-                                     expression->expr.type,
-                                     expression->expr.loc);
+                                     outType,
+                                     outLoc);
     }
     else if (expression->type == EXPR_CVT_NOOP)
     {
@@ -771,11 +794,13 @@ std::string TranslateExpression(FunctionContext * context,
 
         // mov rax, inLoc
         // cmp rax, 0
-        // cmovne rax, 1
+        // mov rcx, 1
+        // cmovne rax, rcx
         // mov outLoc, rax
         s += "mov " + AX(inSize) + ", " + X64LocationString(inLoc, inSize) + "\n" +
              "cmp " + AX(inSize) + ", " + IntegerToHexString(0) + "\n" +
-             "cmovne " + AX(inSize) + ", " + IntegerToHexString(1) + "\n" +
+             "mov " + CX(2) + ", " + IntegerToHexString(1) + "\n" +
+             "cmovne " + AX(2) + ", " + CX(2) + "\n" +
              "mov " + X64LocationString(outLoc, outSize) + ", " + AX(outSize) + "\n";
     }
     else if (expression->type == EXPR_CVT_F2B)
@@ -1069,13 +1094,15 @@ std::string TranslateExpression(FunctionContext * context,
         // mov rdx, inLoc2
         // cmp rax, rdx
         // mov rax, 0
-        // cmovXX rax, 1
+        // mov rcx, 1
+        // cmovXX rax, rcx
         // mov outLoc, rax
         s += "mov " + AX(width) + ", " + X64LocationString(inLoc1, width) + "\n" +
              "mov " + DX(width) + ", " + X64LocationString(inLoc2, width) + "\n" +
              "cmp " + AX(width) + ", " + DX(width) + "\n" +
              "mov " + AX(1) + ", " + IntegerToHexString(0) + "\n" +
-             cmov   + AX(1) + ", " + IntegerToHexString(1) + "\n" +
+             "mov " + CX(2) + ", " + IntegerToHexString(1) + "\n" +
+             cmov   + AX(2) + ", " + CX(2) + "\n" +
              "mov " + X64LocationString(outLoc, 1) + ", " + AX(1) + "\n";
     }
     else if (expression->type == EXPR_FNEG)
@@ -1187,7 +1214,8 @@ std::string TranslateExpression(FunctionContext * context,
         // movss inLoc1, xmm0 ; use left operand space to compute result
         // mov   rax, inLoc1
         // cmp   rax, 0
-        // cmovne rax, 1
+        // mov   rcx, 1
+        // cmovne rax, rcx
         // mov   outLoc, rax
         // movss inLoc1, xmm2 ; restore left operand
         s += "movss " + XMM(2) + ", " + X64LocationString(inLoc1, width) + "\n" + 
@@ -1197,7 +1225,8 @@ std::string TranslateExpression(FunctionContext * context,
              "movss " + X64LocationString(inLoc1, width) + ", " + XMM(0) + "\n" +
              "mov "   + AX(1) + ", " + X64LocationString(inLoc1, 1) + "\n" +
              "cmp "   + AX(1) + ", " + IntegerToHexString(0) + "\n" +
-             "cmovne " + AX(1) + ", " + IntegerToHexString(1) + "\n" +
+             "mov "   + CX(2) + ", " + IntegerToHexString(1) + "\n" +
+             "cmovne " + AX(2) + ", " + CX(2) + "\n" +             
              "mov "   + X64LocationString(outLoc, 1) + ", " + AX(1) + "\n" +
              "movss " + X64LocationString(inLoc1, width) + ", " + XMM(2) + "\n";
     }
@@ -1326,13 +1355,15 @@ std::string TranslateExpression(FunctionContext * context,
         // mov rdx, inLoc2
         // cmp rax, rdx
         // mov rax, 0
-        // cmovXX rax, 1
+        // mov rcx, 1
+        // cmovXX rax, rcx
         // mov outLoc, rax
         s += "mov " + AX(width) + ", " + X64LocationString(inLoc1, width) + "\n" +
              "mov " + DX(width) + ", " + X64LocationString(inLoc2, width) + "\n" +
              "cmp " + AX(width) + ", " + DX(width) + "\n" +
              "mov " + AX(1) + ", " + IntegerToHexString(0) + "\n" +
-             cmov   + AX(1) + ", " + IntegerToHexString(1) + "\n" +
+             "mov " + CX(2) + ", " + IntegerToHexString(1) + "\n" +
+             cmov   + AX(2) + ", " + CX(2) + "\n" +
              "mov " + X64LocationString(outLoc, 1) + ", " + AX(1) + "\n";
     }
     else if (expression->type == EXPR_MADDR)
@@ -1655,7 +1686,32 @@ std::string TranslateReturnStatement(FunctionContext * context, Node * returnSta
         context->currentIntention.push_back(WANT_NOTHING);
         s += TranslateExpression(context, expr);
         context->currentIntention.pop_back();
-        // copy return value to reg/stack (no need)
+
+        // copy return value to reg/stack
+        Type *      outType = expr->expr.type;
+        size_t      outSize = TypeSize(outType);
+        Location    outLoc = expr->expr.loc;
+        s += "; copy return value\n";
+        if (IsRAXType(expr->expr.type))
+        {
+            // mov rax, outLoc
+            s += "mov " + AX(outSize) + ", " + X64LocationString(outLoc, outSize) + "\n";
+        }
+        else if (IsXMMType(expr->expr.type))
+        {
+            // movss xmm0, outLoc
+            if (outSize == 4)
+                s += "movss " + XMM(0) + ", " + X64LocationString(outLoc, outSize) + "\n";
+            else if (outSize == 8)
+                s += "movsd " + XMM(0) + ", " + X64LocationString(outLoc, outSize) + "\n";
+            else
+                ASSERT(false);
+        }
+        else
+        {
+            // TODO: copy non-register return value
+            ASSERT(false);
+        }
     }
     
     // epilog: add stack, restore regs
@@ -1707,13 +1763,13 @@ std::string TranslateStatement(FunctionContext * context,
         s += TranslateExpression(context, expr);
         context->currentIntention.pop_back();
 
-        s += "cmp rax, 0\n";
+        s += "cmp al, 0\n";
         if (!elseBody)
         {
             std::string L0 = std::string("@L") + std::to_string(context->nextUniqueLabel++);
 
             s += "je " + L0 + "\n";
-            s += TranslateStatement(context, expr);
+            s += TranslateStatement(context, ifBody);
             s += L0 + ":\n";
         }
         else
@@ -1722,10 +1778,10 @@ std::string TranslateStatement(FunctionContext * context,
             std::string L1 = std::string("@L") + std::to_string(context->nextUniqueLabel++);
 
             s += "je " + L0 + "\n";
-            s += TranslateStatement(context, expr);        
+            s += TranslateStatement(context, ifBody);
             s += "jmp " + L1 + "\n";
             s += L0 + ":\n";
-            s += TranslateStatement(context, expr);        
+            s += TranslateStatement(context, elseBody);        
             s += L1 + ":\n";
         }
     }
@@ -1743,7 +1799,7 @@ std::string TranslateStatement(FunctionContext * context,
         context->currentIntention.push_back(WANT_VALUE);
         s += TranslateExpression(context, expr);
         context->currentIntention.pop_back();
-        s += "cmp rax, 0\n";
+        s += "cmp al, 0\n";
         s += "je " + L1 + "\n";
         s += TranslateStatement(context, body);
         s += "jmp " + L0 + "\n";
@@ -1766,7 +1822,7 @@ std::string TranslateStatement(FunctionContext * context,
         context->currentIntention.push_back(WANT_VALUE);
         s += TranslateExpression(context, expr);
         context->currentIntention.pop_back();
-        s += "cmp rax, 0\n";
+        s += "cmp al, 0\n";
         s += "jne " + L0 + "\n";
 
         s += L1 + ":\n";
@@ -1794,7 +1850,7 @@ std::string TranslateStatement(FunctionContext * context,
         context->currentIntention.push_back(WANT_VALUE);
         s += TranslateExpression(context, loopExpr);
         context->currentIntention.pop_back();
-        s += "cmp rax, 0\n";
+        s += "cmp al, 0\n";
         s += "je " + L1 + "\n";
 
         s += TranslateStatement(context, body);

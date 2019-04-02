@@ -693,6 +693,10 @@ void CompileAst(AstCompileContext * context, Ast * ast)
                 StringRef           id = PopId(context);
                 Language::Type *    type = PopType(context);
                 Language::FunctionAddParameter(functionType, id, type);
+                (void)Language::NewObjectDefinition(CurrentDefinitionContext(context),
+                                                    id,
+                                                    type,
+                                                    ComputeObjectStorageType(GetScope(context), Token::UNKNOWN));
             }
             else
             {
@@ -1395,9 +1399,15 @@ void CompileAst(AstCompileContext * context, Ast * ast)
 
         Language::Node * right = PopNode(context);
 
-        Language::Node * mul = Language::MulExpression(context->currentFunctionContext,
-                                                       left,
-                                                       right);
+        Language::Node * mul = nullptr;
+        switch (ast->token.type)
+        {
+            case Token::OP_MUL: mul = Language::MulExpression(context->currentFunctionContext, left, right); break;
+            case Token::OP_DIV: mul = Language::DivExpression(context->currentFunctionContext, left, right); break;
+            case Token::OP_MOD: mul = Language::ModExpression(context->currentFunctionContext, left, right); break;
+            default: ASSERT(false); break;
+        }
+
         PushNode(context, mul);
     }
     else if (ast->type == ADD_EXPR)
@@ -1411,9 +1421,9 @@ void CompileAst(AstCompileContext * context, Ast * ast)
 
         Language::Node * right = PopNode(context);
 
-        Language::Node * add = Language::AddExpression(context->currentFunctionContext,
-                                                       left,
-                                                       right);
+        Language::Node * add = ast->token.type == Token::OP_ADD
+                               ? Language::AddExpression(context->currentFunctionContext, left, right)
+                               : Language::SubExpression(context->currentFunctionContext, left, right);
         PushNode(context, add);
     }
     else if (ast->type == SHIFT_EXPR)

@@ -5,6 +5,7 @@
 
 enum RegisterType
 {
+    RAX,
     RCX,
     RDX,
     R8,

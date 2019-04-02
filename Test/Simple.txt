@@ -1,8 +1,11 @@
-int run()
+int ASMfib(int ii)
 {
     int i;
-
-    i = 40 + 2;
-
-    return i;
+    i = ii;
+    if (i == 1)
+        return 1;
+    else if (i == 2)
+        return 1;
+    else
+        return ASMfib(i - 1) + ASMfib(i - 2);
 }

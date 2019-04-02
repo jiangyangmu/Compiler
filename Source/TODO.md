@@ -9,6 +9,10 @@ Translation
 [x] Translation.cpp x64 PROC non-volatile 寄存器 保存/恢复
 [x] Translation.cpp 实现 function calling 的汇编翻译
 [ ] Translation.cpp 实现 shortcut in boolean expression
-
-
 [ ] Translation.cpp 实现 pointer indirection 的汇编翻译
+
+
+TODO:
+[ ] bug: Translation.cpp 处理 参数寄存器 被修改 后再用来 读取参数。
+[ ] bug: Translation.cpp if-else 会导致没有 ret 情况
+[ ] test 计划
