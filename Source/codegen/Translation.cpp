@@ -182,7 +182,7 @@ std::string X64LocationString(Location loc, size_t width)
         case REGISTER:      s = RegisterTypeToString(loc.registerType, width); break;
         case ESP_OFFSET:    s = SizeToX64TypeString(width) + " PTR [rsp + " + std::to_string(loc.offsetValue) + "]"; break;
         case BP_OFFSET:     s = SizeToX64TypeString(width) + " PTR [rbp + " + std::to_string(loc.offsetValue) + "]"; break;
-        case LABEL:         s = loc.labelValue->toString(); break;
+        case LABEL:         s = SizeToX64TypeString(width) + " PTR " + loc.labelValue->toString(); break;
         case INLINE:        s = IntegerToHexString(loc.inlineValue); break;
         default:            break;
     }
@@ -298,7 +298,8 @@ void AddFunctionDefinition(x64Program * program,
     }
     else if (functionDefinition->funcStorageType == FunctionStorageType::IMPORT_FUNCTION)
     {
-        AddExtern(program, functionDefinition->def.name);
+        std::string s = functionDefinition->def.name.toString() + ":PROC";
+        AddExtern(program, StringRef(s.c_str(), s.length()));
     }
 }
 
@@ -332,8 +333,10 @@ void TranslateConstantContext(x64Program * program,
     for (auto kv : context->hashToStringConstant)
     {
         const StringRef & label = kv.second.label;
-        const StringRef & value = kv.second.value;
-        program->constSegment += label.toString() + " DB '" + value.toString() + "',00H\n";
+        const StringRef & stringLabel = kv.second.stringLabel;
+        const StringRef & stringValue = kv.second.stringValue;
+        program->constSegment += stringLabel.toString() + " DB '" + stringValue.toString() + "',00H\n";
+        program->dataSegment += label.toString() + " DQ " + stringLabel.toString() + "\n";
     }
 
     // float constant   -> <label> DD 0<hex>r ; <value>
@@ -489,21 +492,21 @@ std::string TranslateExpression(FunctionContext * context,
 
         Type * functionType = expression->down->expr.type;
         Location functionLoc = expression->down->expr.loc;
-        std::vector<Type *> paramTypes;
-        std::vector<Location> paramLocations;
+        std::vector<Type *> argumentTypes;
+        std::vector<Location> argumentLocations;
 
-        for (Node * paramNode = expression->down->right;
-             paramNode;
-             paramNode = paramNode->right)
+        for (Node * argumentNode = expression->down->right;
+             argumentNode;
+             argumentNode = argumentNode->right)
         {
-            paramTypes.push_back(paramNode->expr.type);
-            paramLocations.push_back(paramNode->expr.loc);
+            argumentTypes.push_back(argumentNode->expr.type);
+            argumentLocations.push_back(argumentNode->expr.loc);
         }
 
         s += TranslateCallExpression(functionType,
                                      functionLoc,
-                                     paramTypes,
-                                     paramLocations,
+                                     argumentTypes,
+                                     argumentLocations,
                                      outType,
                                      outLoc);
     }
@@ -1409,9 +1412,39 @@ std::string TranslateExpression(FunctionContext * context,
             size_t      width = objSize;
 
             // mov rax, inLoc2
-            // mov outLoc, rax
-            s += "mov " + AX(width) + ", " + X64LocationString(inLoc2, width) + "\n" +
-                 "mov " + X64LocationString(outLoc, width) + ", " + AX(width) + "\n";
+            // mov inLoc1, rax
+            if  (outLoc.type != REGISTER_INDIRECT)
+            {
+                s += "mov " + AX(width) + ", " + X64LocationString(inLoc2, width) + "\n" +
+                     "mov " + X64LocationString(outLoc, width) + ", " + AX(width) + "\n";
+            }
+            else
+            {
+                // mov rax, inLoc2
+                // mov rcx, pval
+                // *mov rcx, [rcx]
+                // mov [rcx], rax
+                ASSERT(expression->down->type == EXPR_PVAL);
+
+                Location origin;
+                int pvalCount = 0;
+
+                Node * pvalChain = expression->down;
+                while(pvalChain->type == EXPR_PVAL)
+                {
+                    ++pvalCount;
+                    pvalChain = pvalChain->down;
+                }
+                origin = pvalChain->expr.loc;
+
+                s += "mov " + AX(width) + ", " + X64LocationString(inLoc2, width) + "\n";
+                s += "mov " + CX(8) + ", " + X64LocationString(origin, 8) + "\n";
+                for (int i = 1; i < pvalCount; ++i)
+                {
+                    s += "mov " + CX(8) + ", " + SizeToX64TypeString(8) + " PTR [" + CX(8) + "]\n";
+                }
+                s += "mov " + SizeToX64TypeString(width) + " PTR [" + CX(8) + "], " + AX(width) + "\n";
+            }
         }
         else
         {
@@ -1454,8 +1487,20 @@ std::string TranslateExpression(FunctionContext * context,
 
             // mov rax, inLoc
             // mov outLoc, rax
-            s += "mov " + AX(width) + ", " + X64LocationString(inLoc, width) + "\n" +
-                 "mov " + X64LocationString(outLoc, width) + ", " + AX(width) + "\n";
+            if (inLoc.type != REGISTER_INDIRECT)
+            {
+                s += "mov " + AX(width) + ", " + X64LocationString(inLoc, width) + "\n" +
+                     "mov " + X64LocationString(outLoc, width) + ", " + AX(width) + "\n";
+            }
+            else
+            {
+                ASSERT(outLoc.type != REGISTER_INDIRECT);
+                
+                // MDUP( out, MCOPY(PVAL(p), 2) )
+                // Convention: value is in rax
+                // mov outLoc, rax
+                s += "mov " + X64LocationString(outLoc, width) + ", " + AX(width) + "\n";
+            }
         }
         else
         {
@@ -1495,7 +1540,7 @@ std::string TranslateExpression(FunctionContext * context,
         Type *      inType2 = expression->down->right->expr.type;
         size_t      inSize2 = TypeSize(inType2);
 
-        ASSERT(IsPointer(inType1) && IsPointer(inType2));
+        ASSERT(IsPointer(inType1) && IsInt(inType2));
 
         size_t      width = outSize;
 
@@ -1985,6 +2030,48 @@ x64Program Translate(DefinitionContext * definitionContext,
     return program;
 }
 
+std::string GetProgram(const x64Program & program)
+{
+    std::string s;
+
+    for (auto & publicLabel : program.publicLabels)
+    {
+        s += "PUBLIC " + publicLabel + "\n";
+    }
+    for (auto & externLabel : program.externLabels)
+    {
+        s += "EXTERN " + externLabel + "\n";
+    }
+    if (!program.constSegment.empty())
+    {
+        s += "CONST SEGMENT\n" +
+            program.constSegment +
+            "CONST ENDS\n";
+    }
+    if (!program.bssSegment.empty())
+    {
+        s += "_BSS SEGMENT\n" +
+            program.bssSegment +
+            "_BSS ENDS\n";
+    }
+    if (!program.dataSegment.empty())
+    {
+        s += "_DATA SEGMENT\n" +
+            program.dataSegment +
+            "_DATA ENDS\n";
+    }
+    if (!program.textSegment.empty())
+    {
+        s += "_TEXT SEGMENT\n" +
+            program.textSegment +
+            "_TEXT ENDS\n";
+    }
+
+    s += "END\n\n";
+
+    return s;
+}
+
 void PrintProgram(x64Program * program)
 {
     for (auto & publicLabel : program->publicLabels)
@@ -2023,6 +2110,7 @@ void PrintProgram(x64Program * program)
             << program->textSegment
             << "_TEXT ENDS" << std::endl;
     }
+    std::cout << "END" << std::endl;
 }
 
 }

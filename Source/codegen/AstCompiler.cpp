@@ -539,11 +539,21 @@ void CompileAst(AstCompileContext * context, Ast * ast)
                                               typeQualifier,
                                               declarator);
 
-        if (GetStorage(context) == Token::KW_TYPEDEF)
+        if (storageToken == Token::KW_TYPEDEF)
         {
             (void)Language::NewTypeAliasDefinition(CurrentDefinitionContext(context),
                                                    id,
                                                    type);
+        }
+        else if (type->name == Language::FUNCTION)
+        {
+            (void)NewFunctionDefinition(CurrentDefinitionContext(context),
+                                        id,
+                                        type,
+                                        storageToken == Token::KW_STATIC
+                                            ? Language::FunctionStorageType::GLOBAL_FUNCTION
+                                            : Language::FunctionStorageType::IMPORT_FUNCTION,
+                                        false);
         }
         else
         {
@@ -832,8 +842,92 @@ void CompileAst(AstCompileContext * context, Ast * ast)
             child = child->rightSibling;
         }
 
+
+        Language::TypeTagDefinition * existingTagDefinition = nullptr;
+        Language::TypeTagDefinition * existingParentTagDefinition = nullptr;
+        {
+            Language::Definition * definition =
+                Language::LookupDefinition(CurrentDefinitionContext(context),
+                                           tag,
+                                           Language::TAG_NAMESPACE,
+                                           false);
+
+            existingTagDefinition =
+                definition ? Language::AsTypeTagDefinition(definition) : nullptr;
+
+            if (existingTagDefinition == nullptr)
+            {
+                definition =
+                    Language::LookupDefinition(CurrentDefinitionContext(context),
+                                               tag,
+                                               Language::TAG_NAMESPACE,
+                                               true);
+
+                existingParentTagDefinition =
+                    definition ? Language::AsTypeTagDefinition(definition) : nullptr;
+            }
+        }
+
+        // 1. old exists
+        //  type
+        //      old-incomplete x new-incomplete  => reuse old-incomplete
+        //      old-incomplete x new-complete    => make old-incomplete complete
+        //      old-complete x new-incomplete    => reuse old-complete
+        //      old-complete x new-complete      => error
+        //  tag definition
+        //      reuse
+        // 2. parent-complete exists
+        //  type
+        //      parent-complete x new-incomplete => reuse parent-complete
+        //      parent-complete x new-complete   => create new-complete
+        //  tag definition
+        //      create
+        // 3. otherwise
+        //  type
+        //      new-incomplete                  => create new-incomplete
+        //      new-complete                    => create new-complete
+        //  tag definition
+        //      create
+
+        Language::StructType * structType = nullptr;
+        
+        bool needCreateTagDefinition = false;
+
+        if (existingTagDefinition != nullptr)
+        {
+            bool isOldIncomplete = Language::IsIncomplete(existingTagDefinition->taggedType);
+            bool isNewIncomplete = (child == nullptr);
+
+            ASSERT(isOldIncomplete || isNewIncomplete);
+
+            structType = Language::AsStruct(existingTagDefinition->taggedType);
+        }
+        else if (existingParentTagDefinition != nullptr &&
+                 !Language::IsIncomplete(existingParentTagDefinition->taggedType))
+        {
+            bool isNewIncomplete = (child == nullptr);
+
+            if (isNewIncomplete)
+                structType = Language::AsStruct(existingParentTagDefinition->taggedType);
+            else
+                structType = Language::MakeStruct(context->typeContext);
+
+            needCreateTagDefinition = true;
+        }
+        else
+        {
+            structType = Language::MakeStruct(context->typeContext);
+            needCreateTagDefinition = true;
+        }
+
+        if (needCreateTagDefinition)
+        {
+            (void)NewTypeTagDefinition(CurrentDefinitionContext(context),
+                                       tag,
+                                       &structType->type);
+        }
+
         // struct declarations
-        Language::StructType * structType = Language::MakeStruct(context->typeContext);
         if (child)
         {
             do
@@ -845,14 +939,14 @@ void CompileAst(AstCompileContext * context, Ast * ast)
                     BeginTypeQualifier(context);
 
                     // type specifier / type qualifier
-                    ASSERT(subChild && (subChild->type == TYPE_SPECIFIER ||
-                                        subChild->type == TYPE_QUALIFIER));
+                    ASSERT(subChild && (IsAstTypeSpecifier(subChild->type) ||
+                                        IsAstTypeQualifier(subChild->type)));
                     do
                     {
                         CompileAst(context, subChild);
                         subChild = subChild->rightSibling;
-                    } while (subChild && (subChild->type == TYPE_SPECIFIER ||
-                                          subChild->type == TYPE_QUALIFIER));
+                    } while (subChild && (IsAstTypeSpecifier(subChild->type) ||
+                                          IsAstTypeQualifier(subChild->type)));
 
                     Language::Type *    typeSpecifier = GetTypeSpecifier(context);
                     int                 typeQualifier = GetTypeQualifier(context);
@@ -879,11 +973,8 @@ void CompileAst(AstCompileContext * context, Ast * ast)
                 }
                 child = child->rightSibling;
             } while (child);
+            Language::StructDone(structType);
         }
-
-        (void)NewTypeTagDefinition(CurrentDefinitionContext(context),
-                                   tag,
-                                   &structType->type);
 
         AddTypeSpecifier(context, Token::KW_STRUCT, &structType->type);
     }
@@ -913,7 +1004,8 @@ void CompileAst(AstCompileContext * context, Ast * ast)
         }
 
         // enum constant
-        Language::EnumType * enumType = Language::MakeEnum(context->typeContext);
+        Language::EnumType *    enumType = Language::MakeEnum(context->typeContext);
+        bool                    isEnumDefinition = (child != nullptr);
         if (child)
         {
             StringRef enumConstName;
@@ -937,7 +1029,9 @@ void CompileAst(AstCompileContext * context, Ast * ast)
 
                 (void)NewEnumConstDefinition(CurrentDefinitionContext(context),
                                              enumConstName,
-                                             &enumType->type,
+                                             isEnumDefinition
+                                                ? &enumType->type
+                                                : nullptr,
                                              nextEnumConstValue);
             }
         }

@@ -1,18 +1,26 @@
-﻿IR
-[x] AstCompiler.cpp 从 Ast 构建 DefinitionContext, FunctionContext, ...
-[x] Function.cpp 完成 表达式树 的 type checking
-[x] Function.cpp 完成 表达式树 的 location allocation (stack, register, ...)
-[x] Function.cpp 计算 id expression 的 location
-[ ] 处理 Function.cpp 中的 intention 机制，是否保留？
+﻿
 
-Translation
-[x] Translation.cpp x64 PROC non-volatile 寄存器 保存/恢复
-[x] Translation.cpp 实现 function calling 的汇编翻译
-[ ] Translation.cpp 实现 shortcut in boolean expression
-[ ] Translation.cpp 实现 pointer indirection 的汇编翻译
+[ ] bug: Translation 处理 参数寄存器 被修改 后再用来 读取参数。
+[ ] bug: Translation if-else 会导致没有 ret 情况
+[ ] bug: Definition x AstCompiler 处理 tag 的声明和定义
+
+[ ] test: cc-integration-test 不能直接 debug 编译器
+[ ] Translation: 实现 shortcut in boolean expression
+[ ] IR: 处理 Function.cpp 中的 intention 机制，是否保留？
+
+[ ] refactor: make FunctionContext an extention to FunctionDefinition
+        Function Type = function signature
+        Function Definition = {id, Function Type, hasBody}
+        Function Context = {id, Function Type, Definition Context, Body IR}
+
+[ ] Type: "const" concept
+[ ] Type: "assignable" concept
+
+[ ] think: Division of duty: Definition vs Type vs Function
 
 
-TODO:
-[ ] bug: Translation.cpp 处理 参数寄存器 被修改 后再用来 读取参数。
-[ ] bug: Translation.cpp if-else 会导致没有 ret 情况
-[ ] test 计划
+
+[ ] test & fix:
+    n1.value = i;
+
+[ ] Translation: 实现 pointer indirection

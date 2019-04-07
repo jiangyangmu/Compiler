@@ -353,7 +353,7 @@ StructType * MakeStruct(TypeContext * context)
 {
     StructType * type = new StructType;
     type->type.name = STRUCT;
-    type->type.prop = TP_IS_OBJECT;
+    type->type.prop = TP_IS_OBJECT | TP_INCOMPLETE;
     type->type.size = 0; // to fill
     type->type.align = 0; // to fill
     type->type.baseId = ChooseTypeBaseId(context, &type->type);
@@ -364,6 +364,7 @@ StructType * MakeStruct(TypeContext * context)
 
 void StructAddMember(StructType * type, StringRef mname, Type * mtype)
 {
+    ASSERT(IsIncomplete(&type->type));
     int i = 0;
     while (type->memberType[i] != nullptr) { ++i; ASSERT(i < 10); }
     type->memberName[i] = mname;
@@ -371,6 +372,12 @@ void StructAddMember(StructType * type, StringRef mname, Type * mtype)
     type->memberOffset[i] = ((type->memberOffset[i - 1] + mtype->size) + mtype->align - 1) / mtype->align * mtype->align;
     type->type.align = Max(type->type.align, mtype->align);
     type->type.size = ((type->memberOffset[i] + mtype->size) + type->type.align - 1) / type->type.align * type->type.align;
+}
+
+void StructDone(StructType * type)
+{
+    ASSERT(IsIncomplete(&type->type));
+    type->type.prop &= ~TP_INCOMPLETE;
 }
 
 UnionType * MakeUnion(TypeContext * context)
@@ -557,7 +564,7 @@ bool TypeEqual(Type * a, Type * b)
     if (a->name != b->name)
         return false;
 
-    int propSet = TP_INCOMPLETE | TP_CONST;
+    int propSet = TP_INCOMPLETE /*| TP_CONST*/; // TODO: add TP_CONST
     if ((a->prop & propSet) != (b->prop & propSet))
         return false;
 
@@ -636,9 +643,15 @@ bool IsConst(Type * type)
     return type->prop & TP_CONST;
 }
 
+bool IsIncomplete(Type * type)
+{
+    return type->prop & TP_INCOMPLETE;
+}
+
 bool IsAssignable(Type * type)
 {
-    return type->prop & TP_ASSIGNABLE;
+    //return type->prop & TP_ASSIGNABLE; // TODO: impl IsAssignable
+    return true;
 }
 
 bool IsAddressable(Type * type)
@@ -707,7 +720,7 @@ bool ImplicitConvertible(Type * from, Type * to)
 
 Type * GetMemberType(Type * type, StringRef memberName)
 {
-    ASSERT(IsStructOrUnion(type));
+    ASSERT(IsStructOrUnion(type) && !IsIncomplete(type));
 
     Type * memberType = nullptr;
 
@@ -745,7 +758,7 @@ Type * GetMemberType(Type * type, StringRef memberName)
 
 size_t GetMemberOffset(Type * type, StringRef memberName)
 {
-    ASSERT(IsStructOrUnion(type));
+    ASSERT(IsStructOrUnion(type) && !IsIncomplete(type));
 
     size_t offset = 10;
 

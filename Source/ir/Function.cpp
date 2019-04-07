@@ -7,17 +7,47 @@ namespace Language {
 
 ConstantContext * CreateConstantContext()
 {
-    return new ConstantContext();
+    ConstantContext * constantContext = new ConstantContext();
+    constantContext->nextStringLabel = 0;
+    constantContext->nextFloatLabel = 0;
+    return constantContext;
 }
 
-// TODO: impl
-Location LocateString(ConstantContext * context,
-                      StringRef strValue)
+int StringHash(StringRef string)
 {
-    ASSERT(false);
-    Location loc;
-    loc.type = NO_WHERE;
-    return loc;
+    int i = 1610612741;
+    for (char c : string)
+    {
+        i *= c;
+    }
+    return i;
+}
+
+void LocateString(ConstantContext * context,
+                  StringRef stringValue,
+                  Location * stringLocation,
+                  Location * stringPtrLocation)
+{
+    int stringHash = StringHash(stringValue);
+
+    ConstantContext::StringConstant * stringConstant = &context->hashToStringConstant[stringHash];
+
+    if (stringConstant->label.empty())
+    {
+        std::string * label = new std::string("$sp" + std::to_string(context->nextStringLabel));
+        std::string * stringLabel = new std::string("$str" + std::to_string(context->nextStringLabel));
+
+        stringConstant->label = StringRef(label->c_str(), label->length());
+        stringConstant->stringLabel = StringRef(stringLabel->c_str(), stringLabel->length());
+        stringConstant->stringValue = stringValue;
+
+        ++context->nextStringLabel;
+    }
+
+    stringLocation->type = LocationType::LABEL;
+    stringLocation->labelValue = new StringRef(stringConstant->stringLabel);
+    stringPtrLocation->type = LocationType::LABEL;
+    stringPtrLocation->labelValue = new StringRef(stringConstant->label);
 }
 // TODO: impl
 Location LocateFloat(ConstantContext * context,
@@ -185,6 +215,9 @@ Node * WrapCastNode(Node * node, Type * toType)
     ASSERT(castNode);
 
     castNode->expr.type = toType;
+    castNode->expr.loc.type = castNode->type == EXPR_CVT_NOOP
+                              ? SAME_AS_FIRST_CHILD
+                              : NEED_ALLOC;
 
     AddChild(castNode, node);
 
@@ -337,7 +370,7 @@ Node * ConstantExpression(FunctionContext * context, size_t value)
     ASSERT(context->currentIntention.back() == WANT_VALUE);
 
     Node * node = MakeNode(EXPR_CONSTANT);
-    node->expr.type = &MakeInt(context->typeContext)->type;
+    node->expr.type = &MakeInt(context->typeContext, 8)->type;
     node->expr.loc.type = INLINE;
     node->expr.loc.inlineValue = value;
 
@@ -363,7 +396,11 @@ Node * ConstantExpression(FunctionContext * context, StringRef value)
     pointer->target = &MakeChar(context->typeContext)->type;
     node->expr.type = &pointer->type;
     
-    node->expr.loc = LocateString(context->constantContext, value);
+    Location stringLocation;
+    Location stringPointerLocation;
+    LocateString(context->constantContext, value, &stringLocation, &stringPointerLocation);
+
+    node->expr.loc = stringPointerLocation;
 
     return node;
 }
@@ -408,7 +445,7 @@ Node * IncExpression(FunctionContext * context, Node * expr)
         node->expr.type = type;
 
         AddChild(node, expr);
-        AddChild(node, ConstantExpression(context, 1));
+        AddChild(node, ConstantExpression(context, 1ull));
     }
 
     node->expr.loc.type = SAME_AS_FIRST_CHILD;
@@ -464,7 +501,7 @@ Node * PostIncExpression(FunctionContext * context, Node * expr)
         addNode->expr.loc.type = SAME_AS_FIRST_GRANDCHILD;
 
         AddChild(addNode, dupNode);
-        AddChild(addNode, ConstantExpression(context, 1));
+        AddChild(addNode, ConstantExpression(context, 1ull));
         node = addNode;
     }
 
@@ -585,12 +622,12 @@ Node * MemberOfExpression(FunctionContext * context,
     AddChild(addrNode, structOrUnion);
     
     Node * addNode = MakeNode(EXPR_MADD);
-    addNode->expr.type = memberType;
+    addNode->expr.type = &(MakePointer(context->typeContext, memberType)->type);
     addNode->expr.loc.type = SAME_AS_FIRST_CHILD;
     AddChild(addNode, addrNode);
     AddChild(addNode, ConstantExpression(context, memberOffset));
 
-    return addNode;
+    return IndirectExpression(context, addNode);
 }
 Node * IndirectMemberOfExpression(FunctionContext * context,
                                   Node * pointerToStructOrUnion,
@@ -853,6 +890,12 @@ Node * SubExpression(FunctionContext * context, Node * a, Node * b)
     }
     else if (IsIntegral(b->expr.type))
     {
+        if (TypeSize(b->expr.type) < 8)
+        {
+            Type * type = &MakeInt(context->typeContext, 8)->type;
+            b = WrapCastNode(b, type);
+        }
+
         node = MakeNode(EXPR_PSUB);
         node->expr.type = a->expr.type;
         node->expr.loc.type = NEED_ALLOC;
@@ -1581,7 +1624,7 @@ Node * CaseStatement(FunctionContext * context, u64 caseValue)
 
     context->nodeToTarget.insert({
         node,
-        { switchNode, switchLabels.size() - 1 }
+        { switchNode, static_cast<int>(switchLabels.size() - 1) }
     });
     ASSERT(context->switchToChildren.find(switchNode) != context->switchToChildren.end());
     context->switchToChildren[switchNode].push_back(node);

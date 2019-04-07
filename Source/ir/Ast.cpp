@@ -294,6 +294,10 @@ Ast * ParseDeclaration(TokenIterator & ti, Ast * declarationSpecifiers, Ast * de
     return declaration;
 }
 
+bool IsAstTypeQualifier(AstType type)
+{
+    return type == TYPE_QUALIFIER;
+}
 Ast * ParseDeclarationSpecifiers(TokenIterator & ti)
 {
     Ast * declarationSpecifiers                 = NewAst(DECLARATION_SPECIFIERS);
@@ -326,6 +330,14 @@ Ast * ParseDeclarationSpecifiers(TokenIterator & ti)
     return declarationSpecifiers;
 }
 
+bool IsAstTypeSpecifier(AstType type)
+{
+    return type == STRUCT_SPECIFIER ||
+           type == UNION_SPECIFIER ||
+           type == ENUM_SPECIFIER ||
+           type == TYPEDEF_NAME ||
+           type == TYPE_SPECIFIER;
+}
 Ast * ParseTypeSpecifier(TokenIterator & ti)
 {
     ASSERT(First(TYPE_SPECIFIER, PEEK()));

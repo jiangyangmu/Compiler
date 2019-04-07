@@ -167,6 +167,7 @@ void            EnumChangeLastConstValue(EnumType * type, int value);
 
 StructType *    MakeStruct(TypeContext * context);   // member id/type/offset
 void            StructAddMember(StructType * type, StringRef mname, Type * mtype);
+void            StructDone(StructType * type);
 
 UnionType *     MakeUnion(TypeContext * context);    // member id/type
 void            UnionAddMember(UnionType * type, StringRef mname, Type * mtype);
@@ -222,6 +223,7 @@ bool            IsIntegral(Type * type);
 bool            IsFloating(Type * type);
 bool            IsArithmetic(Type * type);
 bool            IsConst(Type * type);
+bool            IsIncomplete(Type * type);
 bool            IsAssignable(Type * type);
 bool            IsAddressable(Type * type);
 bool            IsVoid(Type * type);

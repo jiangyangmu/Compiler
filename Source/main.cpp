@@ -7,6 +7,7 @@
 #include <streambuf>
 using namespace std;
 
+#include "common.h"
 #include "ir/Ast.h"
 #include "codegen/AstCompiler.h"
 #include "codegen/Translation.h"
@@ -19,6 +20,32 @@ std::string GetFileContent(const char * fileName)
                        std::istreambuf_iterator<char>());
 }
 
+void SetFileContent(const char * fileName, const std::string & content)
+{
+    std::ofstream ofs(fileName, std::ifstream::out);
+    ofs << content;
+    ofs.close();
+}
+
+std::string ChangeFileExtention(const std::string & filename,
+                                std::string from,
+                                std::string to)
+{
+    ASSERT(filename.size() > from.size());
+
+    auto i1 = filename.crbegin();
+    auto i2 = from.crbegin();
+    while (i2 != from.crend())
+    {
+        ASSERT(*i1 == *i2);
+        ++i1, ++i2;
+    }
+
+    std::string newFilename = std::string(filename.cbegin(), filename.cend() - from.size());
+    newFilename += to;
+    return newFilename;
+}
+
 std::string GetLineInput()
 {
     std::string line;
@@ -26,7 +53,7 @@ std::string GetLineInput()
     return line;
 }
 
-void Compile(std::string sourceCode)
+std::string Compile(std::string sourceCode)
 {
     // 1. Token
     SourceScanner scanner(StringRef(sourceCode.data(), sourceCode.length()));
@@ -61,11 +88,28 @@ void Compile(std::string sourceCode)
 
     std::cout << std::endl << "Program:" << std::endl;
     Language::PrintProgram(&program);
+
+    return Language::GetProgram(program);
 }
 
 int main(int argc, char *argv[])
 {
-    auto sourceCode = GetFileContent("C:\\Users\\celsi\\Documents\\Github\\jcc\\Test\\Simple.txt");
-    Compile(sourceCode);
+    if (argc > 1)
+    {
+        for (int i = 1; i < argc; ++i)
+        {
+            std::string sourceCode = GetFileContent(argv[i]);
+            std::string destCode = Compile(sourceCode);
+
+            SetFileContent(
+                ChangeFileExtention(argv[i], ".c", ".asm").c_str(),
+                destCode);
+        }
+    }
+    else
+    {
+        std::string sourceCode = GetFileContent("C:\\Users\\celsi\\Documents\\Github\\jcc\\Test\\Simple.txt");
+        (void)Compile(sourceCode);
+    }
     return 0;
 }

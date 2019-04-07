@@ -1,11 +1,20 @@
-int ASMfib(int ii)
+int main()
 {
     int i;
-    i = ii;
-    if (i == 1)
-        return 1;
-    else if (i == 2)
-        return 1;
-    else
-        return ASMfib(i - 1) + ASMfib(i - 2);
+    int * p;
+    int ** pp;
+    
+    p = &i;
+    pp = &p;
+
+    i = 1;
+    *p = 2;
+    **pp = 3;
+
+    pp = pp - 1;
+    p = p - 1;
+
+    *(*(pp + 1) + 1) = 4;
+
+    return i;
 }

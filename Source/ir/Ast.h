@@ -99,6 +99,9 @@ struct Ast
 
 Ast *   ParseTranslationUnit(TokenIterator & ti);
 
+bool    IsAstTypeSpecifier(AstType type);
+bool    IsAstTypeQualifier(AstType type);
+
 // Debug
 
 void    DebugPrintAst(Ast * ast);

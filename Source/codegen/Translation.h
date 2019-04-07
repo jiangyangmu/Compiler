@@ -27,6 +27,8 @@ extern x64Program Translate(DefinitionContext * definitionContext,
                             ConstantContext * constantContext,
                             std::vector<FunctionContext *> & functionContexts);
 
+extern std::string GetProgram(const x64Program & program);
+
 // Debug
 
 extern void PrintProgram(x64Program * program);
