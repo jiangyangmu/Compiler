@@ -6,6 +6,180 @@
 namespace Language
 {
 
+struct Code
+{
+    x64Program * program;
+
+    static std::string LEA(RegisterType reg, Location loc)
+    {
+        // 1. lea rax (return value address), loc (return loc)
+        // 2. lea rax, loc (mdup)
+
+        ASSERT(loc.type != REGISTER_INDIRECT);
+        ASSERT(reg == RAX);
+
+        return "lea " +
+            RegisterTypeToString(reg, 8) + ", " +
+            X64LocationString(loc, 8) + "\n";
+    }
+
+    static std::string LEA_RCX(RegisterType reg, Location loc)
+    {
+        // 1. lea rax (argument address), [rcx]/loc (argument loc)
+        // 2. lea rax, [rcx]/loc (maddr)
+        // 3. lea rax/rcx, [rcx]/loc (mcopy)
+        // 4. lea rcx, [rcx]/loc (mdup)
+
+        ASSERT(reg == RAX || reg == RCX);
+
+        return "lea " +
+            RegisterTypeToString(reg, 8) + ", " +
+            X64LocationString(loc, 8) + "\n";
+    }
+
+    static std::string MOV1(RegisterType reg, Location loc, size_t width)
+    {
+        // 3. mov rax, loc (b2i, b2f)
+
+        ASSERT(loc.type != REGISTER_INDIRECT);
+
+        return "mov " +
+            RegisterTypeToString(reg, width) + ", " +
+            X64LocationString(loc, width) + "\n";
+    }
+
+    static std::string MOV1_RCX(RegisterType reg, Location loc, size_t width)
+    {
+        // 1. mov rax (argument value), [rcx]/loc (argument loc)
+        // 2. mov r11, [rcx]/loc (function loc)
+        // 3. mov rax, [rcx]/loc (i2i, i2f, i2b)
+        // 4. mov rax/rdx/cl, [rcx]/loc (unary int, arith int, shift int, rel int)
+        // 5. mov rax, [rcx]/loc (pointer expr value)
+        // 6. mov rcx, [rcx]/loc (pval)
+        // 7. mov rax, [rcx]/loc (mcopy)
+        // 8. mov rax, [rcx]/loc (mdup)
+        // 9. mov rax, [rcx]/loc (madd)
+
+        return "mov " +
+            RegisterTypeToString(reg, width) + ", " +
+            X64LocationString(loc, width) + "\n";
+    }
+
+    static std::string MOV2(Location loc, RegisterType reg, size_t width)
+    {
+        // 1. mov loc (argument loc), rax (argument address)
+        // 2. mov loc (argument loc), rax (argument value)
+        // 3. mov loc (return   loc), rax (return value)
+        // 4. mov loc (return   loc), rax (return value address)
+        // 5. mov loc (expr value), rax
+        // 6. mov loc, rax (cvt expr result value)
+        // 7. mov loc, rax (bool expr result value)
+        // 8. mov loc, rax (int expr value)
+        // 9. mov loc, rax (pointer expr value)
+        // 10. mov loc, rax (maddr)
+        // 11. mov loc, rax (mdup)
+        // 12. mov loc, rax (madd)
+
+        ASSERT(loc.type != REGISTER_INDIRECT);
+
+        return "mov " +
+            X64LocationString(loc, width) + ", " +
+            RegisterTypeToString(reg, width) + "\n";
+    }
+
+    static std::string MOV3_RCX(Location loc, RegisterType reg, size_t width)
+    {
+        // 1. mov [rcx]/loc, rax (mcopy)
+
+        ASSERT(reg == RAX);
+
+        return "mov " +
+            X64LocationString(loc, width) + ", " +
+            RegisterTypeToString(reg, width) + "\n";
+    }
+
+    static std::string MOVSX(RegisterType dst, size_t dstWidth, RegisterType src, size_t srcWidth)
+    {
+        // 1. movsx rax, ax (expr value)
+
+        ASSERT(dstWidth > srcWidth);
+
+        return (srcWidth == 4 ? "movsxd " : "movsx ") +
+            RegisterTypeToString(dst, dstWidth) + ", " +
+            RegisterTypeToString(src, srcWidth) + "\n";
+    }
+
+    static std::string MOVSS0(RegisterType xmm, RegisterType rax, size_t width)
+    {
+        // 1. movss xmm, rax (argument value)
+
+        ASSERT(XMM0 <= xmm && xmm <= XMM3);
+        ASSERT(rax == RAX);
+        ASSERT(width == 4 || width == 8);
+
+        return (width == 4 ? "movss " : "movsd ") +
+            RegisterTypeToString(xmm, width) + ", " +
+            RegisterTypeToString(rax, width) + "\n";
+    }
+
+    static std::string MOVSS1_RCX(RegisterType xmm, Location loc, size_t width)
+    {
+        // 1. movss xmm, [rcx]/loc (expr value)
+
+        ASSERT(XMM0 <= xmm && xmm <= XMM3);
+        ASSERT(width == 4 || width == 8);
+
+        return (width == 4 ? "movss " : "movsd ") +
+            RegisterTypeToString(xmm, width) + ", " +
+            X64LocationString(loc, width) + "\n";
+    }
+
+    static std::string MOVSS2(Location loc, RegisterType xmm, size_t width)
+    {
+        // 1. movss loc (return loc), xmm (return value)
+        // 2. movss loc, xmm (cvt expr result value)
+        // 3. movss loc, xmm (float expr result value)
+
+        ASSERT(XMM0 <= xmm && xmm <= XMM3);
+        ASSERT(width == 4 || width == 8);
+
+        return (width == 4 ? "movss " : "movsd ") +
+            X64LocationString(loc, width) + ", " +
+            RegisterTypeToString(xmm, width) + "\n";
+    }
+
+    static std::string CALL(Location loc)
+    {
+        // 1. call label
+        // 2. call r11
+
+        ASSERT(loc.type == LABEL ||
+               (loc.type == REGISTER && loc.registerType == R11));
+
+        return "call " +
+            (loc.type == LABEL ? loc.labelValue->toString() : "r11") + "\n";
+    }
+
+    static std::string SUB_RCX(RegisterType reg, Location loc, size_t width)
+    {
+        // 1. sub reg, loc (bool expr value)
+        // 2. sub reg, [rcx]/loc (pointer expr value)
+
+        return "sub " +
+            RegisterTypeToString(reg, width) + ", " +
+            X64LocationString(loc, width) + "\n";
+    }
+
+    static std::string ADD_RCX(RegisterType reg, Location loc, size_t width)
+    {
+        // 1. add reg, [rcx]/loc (pointer expr value)
+
+        return "add " +
+            RegisterTypeToString(reg, width) + ", " +
+            X64LocationString(loc, width) + "\n";
+    }
+};
+
 // constant value -> x64 text
 
 std::string SizeToX64TypeString(size_t size)
@@ -32,15 +206,15 @@ std::string ByteToHexString(unsigned char i)
 std::string IntegerToHexString(size_t i)
 {
     char hex[18];
-    sprintf_s(hex, 18, "%0.16llxh", i);
-    return std::string(hex, hex + 17);
+    sprintf_s(hex, 19, "0%0.16llxh", i);
+    return std::string(hex, hex + 18);
 }
 
 std::string IntegerToHexString(int i)
 {
     char hex[10];
-    sprintf_s(hex, 10, "%0.8xh", i);
-    return std::string(hex, hex + 9);
+    sprintf_s(hex, 11, "0%0.8xh", i);
+    return std::string(hex, hex + 10);
 }
 
 std::string IntegerToHexString(void * data, size_t size)
@@ -184,6 +358,8 @@ std::string X64LocationString(Location loc, size_t width)
         case BP_OFFSET:     s = SizeToX64TypeString(width) + " PTR [rbp + " + std::to_string(loc.offsetValue) + "]"; break;
         case LABEL:         s = SizeToX64TypeString(width) + " PTR " + loc.labelValue->toString(); break;
         case INLINE:        s = IntegerToHexString(loc.inlineValue); break;
+        case REGISTER_INDIRECT:
+                            s = SizeToX64TypeString(width) + " PTR [" + RegisterTypeToString(loc.registerType, width) + "]"; break;
         default:            break;
     }
     return s;
@@ -377,8 +553,9 @@ std::string TranslateCallExpression(Type * pointerToFuncType,
 
         // lea rax, outLoc
         // mov ..., rax
-        s += "lea " + AX(width) + ", " + X64LocationString(outLoc, width) + "\n" +
-             "mov " + X64LocationString(callerProtocol.GetParameterLocation(argumentIndex), width) + ", " + AX(width) + "\n";
+        s +=
+            Code::LEA(RAX, outLoc) +
+            Code::MOV2(callerProtocol.GetParameterLocation(argumentIndex), RAX, width);
 
         argumentIndex += 1;
     }
@@ -395,8 +572,19 @@ std::string TranslateCallExpression(Type * pointerToFuncType,
 
             // lea rax, paramLoc
             // mov ..., rax
-            s += "lea " + AX(width) + ", " + X64LocationString(paramLoc, width) + "\n" +
-                 "mov " + X64LocationString(callerProtocol.GetParameterLocation(argumentIndex), width) + ", " + AX(width) + "\n";
+            s +=
+                Code::LEA_RCX(RAX, paramLoc) +
+                Code::MOV2(callerProtocol.GetParameterLocation(argumentIndex), RAX, width);
+        }
+        else if (callerProtocol.IsParameterPassedByXMM(argumentIndex))
+        {
+            size_t width = paramSize;
+
+            // mov rax, paramLoc
+            // movss xmm, rax
+            s +=
+                Code::MOV1_RCX(RAX, paramLoc, width) +
+                Code::MOVSS0(callerProtocol.GetParameterLocation(argumentIndex).registerType, RAX, width);
         }
         else
         {
@@ -404,8 +592,9 @@ std::string TranslateCallExpression(Type * pointerToFuncType,
 
             // mov rax, paramLoc
             // mov ..., rax
-            s += "mov " + AX(width) + ", " + X64LocationString(paramLoc, width) + "\n" +
-                 "mov " + X64LocationString(callerProtocol.GetParameterLocation(argumentIndex), width) + ", " + AX(width) + "\n";
+            s +=
+                Code::MOV1_RCX(RAX, paramLoc, width) +
+                Code::MOV2(callerProtocol.GetParameterLocation(argumentIndex), RAX, width);
         }
 
         argumentIndex += 1;
@@ -414,42 +603,37 @@ std::string TranslateCallExpression(Type * pointerToFuncType,
     if (funcLoc.type == LocationType::LABEL)
     {
         // call label
-        s += "call " + funcLoc.labelValue->toString() + "\n";
+        s += Code::CALL(funcLoc);
     }
     else
     {
         // mov r11, inLoc
         // call r11
-        s += "mov r11, " + X64LocationString(funcLoc, 8) + "\n";
-        s += std::string("call ") + "r11" + "\n";
+        s +=
+            Code::MOV1_RCX(R11, funcLoc, 8) +
+            Code::CALL(funcLoc);
     }
 
     size_t outSize = TypeSize(outType);
     if (IsIntegral(outType))
     {
         // mov outLoc, rax
-        s += "mov " + X64LocationString(outLoc, outSize) + ", " + AX(outSize) + "\n";
+        s += Code::MOV2(outLoc, RAX, outSize);
     }
     else if (IsFloating(outType))
     {
         // movss outLoc, xmm0
-        if (outSize == 4)
-            s += "movss " + X64LocationString(outLoc, outSize) + ", " + XMM(0) + "\n";
-        else if (outSize == 8)
-            s += "movsd " + X64LocationString(outLoc, outSize) + ", " + XMM(0) + "\n";
-        else
-            ASSERT(false);
+        s += Code::MOVSS2(outLoc, XMM0, outSize);
     }
     else
     {
+        // TODO: support large return value
         ASSERT(false);
     }
 
     return s;
 }
 
-// TODO: shortcut effect
-// TODO: implement register indirection
 std::string TranslateExpression(FunctionContext * context,
                                 Node * expression)
 {
@@ -464,6 +648,8 @@ std::string TranslateExpression(FunctionContext * context,
     Type *      outType = expression->expr.type;
     size_t      outSize = TypeSize(outType);
     Location    outLoc = expression->expr.loc;
+
+    Location    tmpLoc = GetSwapLocation(context);
 
     // Each expression code block should
     // 1. visit children (eval order, shortcut effect)
@@ -540,16 +726,18 @@ std::string TranslateExpression(FunctionContext * context,
             // mov ax, inLoc
             // movsx rax, ax
             // mov outLoc, rax
-            s += "mov " + AX(inSize) + ", " + X64LocationString(inLoc, inSize) + "\n" +
-                 "movsx " + AX(outSize) + ", " + AX(inSize) + "\n" +
-                 "mov " + X64LocationString(outLoc, outSize) + ", " + AX(outSize) + "\n";
+            s +=
+                Code::MOV1_RCX(RAX, inLoc, inSize) +
+                Code::MOVSX(RAX, outSize, RAX, inSize) +
+                Code::MOV2(outLoc, RAX, outSize);
         }
         else
         {
             // mov rax, inLoc
             // mov outLoc, ax
-            s += "mov " + AX(inSize) + ", " + X64LocationString(inLoc, inSize) + "\n" +
-                 "mov " + X64LocationString(outLoc, outSize) + ", " + AX(outSize) + "\n";
+            s +=
+                Code::MOV1_RCX(RAX, inLoc, inSize) +
+                Code::MOV2(outLoc, RAX, outSize);
         }
     }
     else if (expression->type == EXPR_CVT_F2I)
@@ -574,14 +762,16 @@ std::string TranslateExpression(FunctionContext * context,
             // movss xmm0, inLoc
             // cvtss2si eax, xmm0
             // cvt_i2i outLoc, eax
-            s += "movss " + XMM(0) + ", " + X64LocationString(inLoc, inSize) + "\n" +
-                 "cvtss2si " + AX(inSize) + ", " + XMM(0) + "\n";
+            s +=
+                Code::MOVSS1_RCX(XMM0, inLoc, inSize) +
+                "cvtss2si " + AX(inSize) + ", " + XMM(0) + "\n";
             {
                 if (outSize > inSize)
                 {
-                    s += "movsx " + AX(outSize) + ", " + AX(inSize) + "\n";
+                    s += Code::MOVSX(RAX, outSize, RAX, inSize);
                 }
-                s += "mov " + X64LocationString(outLoc, outSize) + ", " + AX(outSize) + "\n";
+                
+                s += Code::MOV2(outLoc, RAX, outSize);
             }
         }
         else if (inSize == 8)
@@ -589,11 +779,12 @@ std::string TranslateExpression(FunctionContext * context,
             // movsd xmm0, inLoc
             // cvtsd2si rax, xmm0
             // cvt_i2i outLoc, rax
-            s += "movsd " + XMM(0) + ", " + X64LocationString(inLoc, inSize) + "\n" +
+            s +=
+                Code::MOVSS1_RCX(XMM0, inLoc, inSize) +
                 "cvtsd2si " + AX(inSize) + ", " + XMM(0) + "\n";
             {
                 ASSERT(outSize <= inSize);
-                s += "mov " + X64LocationString(outLoc, outSize) + ", " + AX(outSize) + "\n";
+                s += Code::MOV2(outLoc, RAX, outSize);
             }
         }
         else
@@ -624,16 +815,18 @@ std::string TranslateExpression(FunctionContext * context,
             // mov ax, inLoc
             // movsx rax, ax
             // mov outLoc, rax
-            s += "mov " + AX(inSize) + ", " + X64LocationString(inLoc, inSize) + "\n" +
-                "movsx " + AX(outSize) + ", " + AX(inSize) + "\n" +
-                "mov " + X64LocationString(outLoc, outSize) + ", " + AX(outSize) + "\n";
+            s +=
+                Code::MOV1(RAX, inLoc, inSize) +
+                Code::MOVSX(RAX, outSize, RAX, inSize) +
+                Code::MOV2(outLoc, RAX, outSize);
         }
         else
         {
             // mov rax, inLoc
             // mov outLoc, rax
-            s += "mov " + AX(inSize) + ", " + X64LocationString(inLoc, inSize) + "\n" +
-                "mov " + X64LocationString(outLoc, outSize) + ", " + AX(outSize) + "\n";
+            s +=
+                Code::MOV1(RAX, inLoc, inSize) +
+                Code::MOV2(outLoc, RAX, outSize);
         }
     }
     else if (expression->type == EXPR_CVT_F2F)
@@ -659,18 +852,20 @@ std::string TranslateExpression(FunctionContext * context,
             // movss xmm1, inLoc
             // cvtss2sd xmm0, xmm1
             // movsd outLoc, xmm0
-            s += "movss " + XMM(1) + ", " + X64LocationString(inLoc, inSize) + "\n" +
-                 "cvtss2sd " + XMM(0) + ", " + XMM(1) + "\n" +
-                 "movsd " + X64LocationString(outLoc, outSize) + ", " + XMM(0) + "\n";
+            s +=
+                Code::MOVSS1_RCX(XMM1, inLoc, inSize) +
+                "cvtss2sd " + XMM(0) + ", " + XMM(1) + "\n" +
+                Code::MOVSS2(outLoc, XMM0, outSize);
         }
         else if (inSize == 8 && outSize == 4)
         {
             // movsd xmm1, inLoc
             // cvtsd2ss xmm0, xmm1
             // movss outLoc, xmm0
-            s += "movsd " + XMM(1) + ", " + X64LocationString(inLoc, inSize) + "\n" +
-                 "cvtsd2ss " + XMM(0) + ", " + XMM(1) + "\n" +
-                 "movss " + X64LocationString(outLoc, outSize) + ", " + XMM(0) + "\n";
+            s +=
+                Code::MOVSS1_RCX(XMM1, inLoc, inSize) +
+                "cvtsd2ss " + XMM(0) + ", " + XMM(1) + "\n" +
+                Code::MOVSS2(outLoc, XMM0, outSize);
         }
         else
         {
@@ -703,15 +898,15 @@ std::string TranslateExpression(FunctionContext * context,
             // cvt_i2i rax, ax
             // cvtsi2ss xmm0, rax
             // movss outLoc, xmm0
-            s += "mov " + AX(inSize) + ", " + X64LocationString(inLoc, inSize) + "\n";
+            s += Code::MOV1_RCX(RAX, inLoc, inSize);
             {
                 if (width > inSize)
                 {
-                    s += "movsx " + AX(width) + ", " + AX(inSize) + "\n";
+                    s += Code::MOVSX(RAX, width, RAX, inSize);
                 }
             }
-            s += "cvtsi2ss " + XMM(0) + ", " + AX(inSize) + "\n";
-            s += "movss " + X64LocationString(outLoc, outSize) + ", " + XMM(0) + "\n";
+            s += "cvtsi2ss " + XMM(0) + ", " + AX(width) + "\n";
+            s += Code::MOVSS2(outLoc, XMM0, outSize);
         }
         else if (outSize == 8)
         {
@@ -721,15 +916,15 @@ std::string TranslateExpression(FunctionContext * context,
             // cvt_i2i rax, ax
             // cvtsi2sd xmm0, rax
             // movsd outLoc, xmm0
-            s += "mov " + AX(inSize) + ", " + X64LocationString(inLoc, inSize) + "\n";
+            s += Code::MOV1_RCX(RAX, inLoc, inSize);
             {
                 if (width > inSize)
                 {
-                    s += "movsx " + AX(width) + ", " + AX(inSize) + "\n";
+                    s += Code::MOVSX(RAX, width, RAX, inSize);
                 }
             }
-            s += "cvtsi2sd " + XMM(0) + ", " + AX(inSize) + "\n";
-            s += "movsd " + X64LocationString(outLoc, outSize) + ", " + XMM(0) + "\n";
+            s += "cvtsi2sd " + XMM(0) + ", " + AX(width) + "\n";
+            s += Code::MOVSS2(outLoc, XMM0, outSize);
         }
         else
         {
@@ -760,10 +955,11 @@ std::string TranslateExpression(FunctionContext * context,
             // movsx rax, ax
             // cvtsi2ss xmm0, rax
             // movss outLoc, xmm0
-            s += "mov " + AX(inSize) + ", " + X64LocationString(inLoc, inSize) + "\n" +
-                 "movsx " + AX(outSize) + ", " + AX(inSize) + "\n" +
-                 "cvtsi2ss " + XMM(0) + ", " + AX(inSize) + "\n" +
-                 "movss " + X64LocationString(outLoc, outSize) + ", " + XMM(0) + "\n";
+            s += 
+                Code::MOV1(RAX, inLoc, inSize) +
+                Code::MOVSX(RAX, outSize, RAX, inSize) +
+                "cvtsi2ss " + XMM(0) + ", " + AX(inSize) + "\n" +
+                Code::MOVSS2(outLoc, XMM0, outSize);
         }
         else if (outSize == 8)
         {
@@ -771,10 +967,11 @@ std::string TranslateExpression(FunctionContext * context,
             // movsx rax, ax
             // cvtsi2sd xmm0, rax
             // movsd outLoc, xmm0
-            s += "mov " + AX(inSize) + ", " + X64LocationString(inLoc, inSize) + "\n" +
-                 "movsx " + AX(outSize) + ", " + AX(inSize) + "\n" +
-                 "cvtsi2sd " + XMM(0) + ", " + AX(inSize) + "\n" +
-                 "movsd " + X64LocationString(outLoc, outSize) + ", " + XMM(0) + "\n";
+            s +=
+                Code::MOV1(RAX, inLoc, inSize) +
+                Code::MOVSX(RAX, outSize, RAX, inSize) +
+                "cvtsi2sd " + XMM(0) + ", " + AX(inSize) + "\n" +
+                Code::MOVSS2(outLoc, XMM0, outSize);
         }
         else
         {
@@ -800,11 +997,12 @@ std::string TranslateExpression(FunctionContext * context,
         // mov rcx, 1
         // cmovne rax, rcx
         // mov outLoc, rax
-        s += "mov " + AX(inSize) + ", " + X64LocationString(inLoc, inSize) + "\n" +
-             "cmp " + AX(inSize) + ", " + IntegerToHexString(0) + "\n" +
-             "mov " + CX(2) + ", " + IntegerToHexString(1) + "\n" +
-             "cmovne " + AX(2) + ", " + CX(2) + "\n" +
-             "mov " + X64LocationString(outLoc, outSize) + ", " + AX(outSize) + "\n";
+        s +=
+            Code::MOV1_RCX(RAX, inLoc, inSize) +
+            "cmp " + AX(inSize) + ", " + IntegerToHexString(0) + "\n" +
+            "mov " + CX(2) + ", " + IntegerToHexString(1) + "\n" +
+            "cmovne " + AX(2) + ", " + CX(2) + "\n" +
+            Code::MOV2(outLoc, RAX, outSize);
     }
     else if (expression->type == EXPR_CVT_F2B)
     {
@@ -831,21 +1029,23 @@ std::string TranslateExpression(FunctionContext * context,
         // mov outLoc, ax
         if (inSize == 4)
         {
-            s += "movss " + XMM(0) + ", " + X64LocationString(inLoc, inSize) + "\n" +
-                 "movss " + XMM(1) + ", " + X64LocationString(LocateFloat(context->constantContext, 0.0f), inSize) + "\n" +
-                 "cmpness " + XMM(0) + ", " + XMM(1) + "\n" +
-                 "movss " + X64LocationString(GetSwapLocation(context), inSize) + ", " + XMM(0) + "\n" +
-                 "mov " + AX(inSize) + ", " + X64LocationString(GetSwapLocation(context), inSize) + "\n" +
-                 "mov " + X64LocationString(outLoc, outSize) + ", " + AX(outSize) + "\n";
+            s +=
+                Code::MOVSS1_RCX(XMM0, inLoc, inSize) +
+                "movss " + XMM(1) + ", " + X64LocationString(LocateFloat(context->constantContext, 0.0f), inSize) + "\n" +
+                "cmpness " + XMM(0) + ", " + XMM(1) + "\n" +
+                "movss " + X64LocationString(GetSwapLocation(context), inSize) + ", " + XMM(0) + "\n" +
+                "mov " + AX(inSize) + ", " + X64LocationString(GetSwapLocation(context), inSize) + "\n" +
+                Code::MOV2(outLoc, RAX, outSize);
         }
         else if (inSize == 8)
         {
-            s += "movsd " + XMM(0) + ", " + X64LocationString(inLoc, inSize) + "\n" +
-                 "movsd " + XMM(1) + ", " + X64LocationString(LocateFloat(context->constantContext, 0.0f), inSize) + "\n" +
-                 "cmpnesd " + XMM(0) + ", " + XMM(1) + "\n" +
-                 "movsd " + X64LocationString(GetSwapLocation(context), inSize) + ", " + XMM(0) + "\n" +
-                 "mov " + AX(inSize) + ", " + X64LocationString(GetSwapLocation(context), inSize) + "\n" +
-                 "mov " + X64LocationString(outLoc, outSize) + ", " + AX(outSize) + "\n";
+            s +=
+                Code::MOVSS1_RCX(XMM0, inLoc, inSize) +
+                "movsd " + XMM(1) + ", " + X64LocationString(LocateFloat(context->constantContext, 0.0f), inSize) + "\n" +
+                "cmpnesd " + XMM(0) + ", " + XMM(1) + "\n" +
+                "movsd " + X64LocationString(GetSwapLocation(context), inSize) + ", " + XMM(0) + "\n" +
+                "mov " + AX(inSize) + ", " + X64LocationString(GetSwapLocation(context), inSize) + "\n" +
+                Code::MOV2(outLoc, RAX, outSize);
         }
         else
         {
@@ -869,9 +1069,10 @@ std::string TranslateExpression(FunctionContext * context,
         // mov rax, 1
         // sub rax, inLoc
         // mov outloc, rax
-        s += "mov " + AX(1) + ", " + IntegerToHexString(1) + "\n" +
-             "sub " + AX(1) + ", " + X64LocationString(inLoc, 1) + "\n" +
-             "mov " + X64LocationString(outLoc, 1) + ", " + AX(1) + "\n";
+        s +=
+            "mov " + AX(1) + ", " + IntegerToHexString(1) + "\n" +
+            Code::SUB_RCX(RAX, inLoc, 1) +
+            Code::MOV2(outLoc, RAX, 1);
     }
     else if (expression->type == EXPR_BOOL_AND ||
              expression->type == EXPR_BOOL_OR)
@@ -900,6 +1101,9 @@ std::string TranslateExpression(FunctionContext * context,
             default: ASSERT(false); break;
         }
 
+        ASSERT(inLoc1.type != REGISTER_INDIRECT &&
+               inLoc2.type != REGISTER_INDIRECT &&
+               outLoc.type != REGISTER_INDIRECT);
         // mov rax, inLoc1
         // op  rax, inLoc2
         // mov outLoc, rax
@@ -940,9 +1144,10 @@ std::string TranslateExpression(FunctionContext * context,
         // mov rax, inLoc
         // op  rax
         // mov outLoc, rax
-        s += "mov " + AX(width) + ", " + X64LocationString(inLoc, width) + "\n" +
-             op     + AX(width) + "\n" +
-             "mov " + X64LocationString(outLoc, width) + ", " + AX(width) + "\n";
+        s +=
+            Code::MOV1_RCX(RAX, inLoc, width) +
+            op + AX(width) + "\n" +
+            Code::MOV2(outLoc, RAX, width);
     }
     else if (expression->type == EXPR_IADD ||
              expression->type == EXPR_ISUB ||
@@ -992,25 +1197,25 @@ std::string TranslateExpression(FunctionContext * context,
             expression->type == EXPR_IDIV ||
             expression->type == EXPR_IMOD)
         {
-            std::string result = expression->type == EXPR_IMOD
-                                 ? DX(width)
-                                 : AX(width);
+            RegisterType resultReg = expression->type == EXPR_IMOD ? RDX : RAX;
 
             // mov rax, inLoc1
             // op  inLoc2
             // mov outLoc, result
-            s += "mov " + AX(width) + ", " + X64LocationString(inLoc1, width) + "\n" +
-                 op     + X64LocationString(inLoc2, width) + "\n" +
-                 "mov " + X64LocationString(outLoc, width) + ", " + result + "\n";
+            s +=
+                Code::MOV1_RCX(RAX, inLoc1, width) +
+                op + X64LocationString(inLoc2, width) + "\n" +
+                Code::MOV2(outLoc, resultReg, width);
         }
         else
         {
             // mov rax, inLoc1
             // op  rax, inLoc2
             // mov outLoc, rax
-            s += "mov " + AX(width) + ", " + X64LocationString(inLoc1, width) + "\n" +
-                 op     + AX(width) + ", " + X64LocationString(inLoc2, width) + "\n" +
-                 "mov " + X64LocationString(outLoc, width) + ", " + AX(width) + "\n";
+            s +=
+                Code::MOV1_RCX(RAX, inLoc1, width) +
+                op + AX(width) + ", " + X64LocationString(inLoc2, width) + "\n" +
+                Code::MOV2(outLoc, RAX, width);
         }
     }
     else if (expression->type == EXPR_ISHL ||
@@ -1045,14 +1250,19 @@ std::string TranslateExpression(FunctionContext * context,
         }
 
         // XXX: shift count >= 256
-        // mov cl, inLoc2
+        // mov al, inLoc2
+        // mov <tmp>, al
         // mov rax, inLoc1
+        // mov cl, <tmp>
         // op  rax, cl
         // mov outLoc, rax
-        s += "mov " + CX(1) + ", " + X64LocationString(inLoc2, 1) + "\n" +
-             "mov " + AX(width) + ", " + X64LocationString(inLoc1, width) + "\n" +
-             op     + AX(width) + ", " + CX(1) + "\n" +
-             "mov " + X64LocationString(outLoc, width) + ", " + AX(width) + "\n";
+        s +=
+            Code::MOV1_RCX(RAX, inLoc2, 1) +
+            Code::MOV2(tmpLoc, RAX, 1) +
+            Code::MOV1_RCX(RAX, inLoc1, width) +
+            Code::MOV1(RCX, tmpLoc, 1) +
+            op + AX(width) + ", " + CX(1) + "\n" +
+            Code::MOV2(outLoc, RAX, width);
     }
     else if (expression->type == EXPR_IEQ ||
              expression->type == EXPR_INE ||
@@ -1100,13 +1310,14 @@ std::string TranslateExpression(FunctionContext * context,
         // mov rcx, 1
         // cmovXX rax, rcx
         // mov outLoc, rax
-        s += "mov " + AX(width) + ", " + X64LocationString(inLoc1, width) + "\n" +
-             "mov " + DX(width) + ", " + X64LocationString(inLoc2, width) + "\n" +
-             "cmp " + AX(width) + ", " + DX(width) + "\n" +
-             "mov " + AX(1) + ", " + IntegerToHexString(0) + "\n" +
-             "mov " + CX(2) + ", " + IntegerToHexString(1) + "\n" +
-             cmov   + AX(2) + ", " + CX(2) + "\n" +
-             "mov " + X64LocationString(outLoc, 1) + ", " + AX(1) + "\n";
+        s +=
+            Code::MOV1_RCX(RAX, inLoc1, width) +
+            Code::MOV1_RCX(RDX, inLoc2, width) +
+            "cmp " + AX(width) + ", " + DX(width) + "\n" +
+            "mov " + AX(1) + ", " + IntegerToHexString(0) + "\n" +
+            "mov " + CX(2) + ", " + IntegerToHexString(1) + "\n" +
+            cmov   + AX(2) + ", " + CX(2) + "\n" +
+            Code::MOV2(outLoc, RAX, 1);
     }
     else if (expression->type == EXPR_FNEG)
     {
@@ -1128,9 +1339,10 @@ std::string TranslateExpression(FunctionContext * context,
         // movss xmm0, inLoc
         // xorps xmm0, DWORD PTR __xmm@80000000
         // movss outLoc, xmm0
-        s += "movss " + XMM(0) + ", " + X64LocationString(inLoc, width) + "\n" +
-             "xorps " + XMM(0) + ", " + X64LocationString(LocateFloat(context->constantContext, 0x80000000), width) + "\n" +
-             "movss " + X64LocationString(outLoc, width) + ", " + XMM(0) + "\n";
+        s +=
+            Code::MOVSS1_RCX(XMM0, inLoc, width) +
+            "xorps " + XMM(0) + ", " + X64LocationString(LocateFloat(context->constantContext, 0x80000000), width) + "\n" +
+            Code::MOVSS2(outLoc, XMM0, width);
     }
     else if (expression->type == EXPR_FADD ||
              expression->type == EXPR_FSUB ||
@@ -1171,12 +1383,18 @@ std::string TranslateExpression(FunctionContext * context,
         // movss xmm1, inLoc2
         // op    xmm0, xmm1
         // movss outLoc, xmm0
-        s += "movss " + XMM(0) + ", " + X64LocationString(inLoc1, width) + "\n" +
-             "movss " + XMM(1) + ", " + X64LocationString(inLoc2, width) + "\n" +
-             op       + XMM(0) + ", " + XMM(1) + "\n" +
-             "movss " + X64LocationString(outLoc, width) + ", " + XMM(0) + "\n";
+        s +=
+            Code::MOVSS1_RCX(XMM0, inLoc1, width) +
+            Code::MOVSS1_RCX(XMM1, inLoc2, width) +
+            op + XMM(0) + ", " + XMM(1) + "\n" +
+            Code::MOVSS2(outLoc, XMM0, width);
     }
-    else if (expression->type == EXPR_FEQ)
+    else if (expression->type == EXPR_FEQ ||
+             expression->type == EXPR_FNE ||
+             expression->type == EXPR_FLT || 
+             expression->type == EXPR_FLE || 
+             expression->type == EXPR_FGE || 
+             expression->type == EXPR_FGT)
     {
         // visit children
         s += TranslateExpression(context, expression->down);
@@ -1210,28 +1428,25 @@ std::string TranslateExpression(FunctionContext * context,
             default: ASSERT(false); break;
         }
 
-        // movss xmm2, inLoc1 ; save left operand
         // movss xmm0, inLoc1
         // movss xmm1, inLoc2
         // op    xmm0, xmm1
-        // movss inLoc1, xmm0 ; use left operand space to compute result
-        // mov   rax, inLoc1
+        // movss <tmp>, xmm0
+        // mov   rax, <tmp>
         // cmp   rax, 0
         // mov   rcx, 1
         // cmovne rax, rcx
         // mov   outLoc, rax
-        // movss inLoc1, xmm2 ; restore left operand
-        s += "movss " + XMM(2) + ", " + X64LocationString(inLoc1, width) + "\n" + 
-             "movss " + XMM(0) + ", " + X64LocationString(inLoc1, width) + "\n" +
-             "movss " + XMM(1) + ", " + X64LocationString(inLoc2, width) + "\n" +
-             op       + XMM(0) + ", " + XMM(1) + "\n" +
-             "movss " + X64LocationString(inLoc1, width) + ", " + XMM(0) + "\n" +
-             "mov "   + AX(1) + ", " + X64LocationString(inLoc1, 1) + "\n" +
-             "cmp "   + AX(1) + ", " + IntegerToHexString(0) + "\n" +
-             "mov "   + CX(2) + ", " + IntegerToHexString(1) + "\n" +
-             "cmovne " + AX(2) + ", " + CX(2) + "\n" +             
-             "mov "   + X64LocationString(outLoc, 1) + ", " + AX(1) + "\n" +
-             "movss " + X64LocationString(inLoc1, width) + ", " + XMM(2) + "\n";
+        s +=
+            Code::MOVSS1_RCX(XMM0, inLoc1, width) +
+            Code::MOVSS1_RCX(XMM1, inLoc2, width) +
+            op + XMM(0) + ", " + XMM(1) + "\n" +
+            Code::MOVSS2(tmpLoc, XMM0, width) +
+            "mov "   + AX(1) + ", " + X64LocationString(tmpLoc, 1) + "\n" +
+            "cmp "   + AX(1) + ", " + IntegerToHexString(0) + "\n" +
+            "mov "   + CX(2) + ", " + IntegerToHexString(1) + "\n" +
+            "cmovne "+ AX(2) + ", " + CX(2) + "\n" +
+            "mov "   + X64LocationString(outLoc, 1) + ", " + AX(1) + "\n";
     }
     else if (expression->type == EXPR_PADD ||
              expression->type == EXPR_PSUB)
@@ -1265,11 +1480,12 @@ std::string TranslateExpression(FunctionContext * context,
         // imul rcx
         // add rax, inLoc1
         // mov outLoc, rax
-        s += "mov " + AX(width) + ", " + X64LocationString(inLoc2, width) + "\n" +
-             "mov " + CX(width) + ", " + IntegerToHexString(shiftStep) + "\n" +
-             "mul " + CX(width) + "\n" +
-             "add " + AX(width) + ", " + X64LocationString(inLoc1, width) + "\n" +
-             "mov " + X64LocationString(outLoc, width) + ", " + AX(width) + "\n";
+        s +=
+            Code::MOV1_RCX(RAX, inLoc2, width) +
+            "mov " + CX(width) + ", " + IntegerToHexString(shiftStep) + "\n" +
+            "imul " + CX(width) + "\n" +
+            Code::ADD_RCX(RAX, inLoc1, width) +
+            Code::MOV2(outLoc, RAX, width);
     }
     else if (expression->type == EXPR_PDIFF)
     {
@@ -1305,15 +1521,26 @@ std::string TranslateExpression(FunctionContext * context,
         // mov rcx, objSize
         // div rcx
         // mov outLoc, rax
-        s += "mov " + AX(width) + ", " + X64LocationString(inLoc1, width) + "\n" +
-             "sub " + AX(width) + ", " + X64LocationString(inLoc2, width) + "\n" +
-             "mov " + CX(width) + ", " + IntegerToHexString(objSize) + "\n" +
-             "div " + CX(width) + "\n" +
-             "mov " + X64LocationString(outLoc, width) + ", " + AX(width) + "\n";
+        s +=
+            Code::MOV1_RCX(RAX, inLoc1, width) +
+            Code::SUB_RCX(RAX, inLoc2, width) +
+            "mov " + CX(width) + ", " + IntegerToHexString(objSize) + "\n" +
+            "div " + CX(width) + "\n" +
+            Code::MOV2(outLoc, RAX, width);
     }
     else if (expression->type == EXPR_PVAL)
     {
-        // TODO: rewrite all outLoc/inLoc* code to handle REGISTER_INDIRECT
+        // visit children
+        s += TranslateExpression(context, expression->down);
+
+        Location    inLoc = expression->down->expr.loc;
+        Type *      inType = expression->down->expr.type;
+        size_t      inSize = TypeSize(inType);
+
+        ASSERT(IsPointer(inType));
+
+        // mov rcx, inLoc
+        s += Code::MOV1_RCX(RCX, inLoc, inSize);
     }
     else if (expression->type == EXPR_PEQ ||
              expression->type == EXPR_PNE ||
@@ -1361,13 +1588,14 @@ std::string TranslateExpression(FunctionContext * context,
         // mov rcx, 1
         // cmovXX rax, rcx
         // mov outLoc, rax
-        s += "mov " + AX(width) + ", " + X64LocationString(inLoc1, width) + "\n" +
-             "mov " + DX(width) + ", " + X64LocationString(inLoc2, width) + "\n" +
-             "cmp " + AX(width) + ", " + DX(width) + "\n" +
-             "mov " + AX(1) + ", " + IntegerToHexString(0) + "\n" +
-             "mov " + CX(2) + ", " + IntegerToHexString(1) + "\n" +
-             cmov   + AX(2) + ", " + CX(2) + "\n" +
-             "mov " + X64LocationString(outLoc, 1) + ", " + AX(1) + "\n";
+        s +=
+            Code::MOV1_RCX(RAX, inLoc1, width) +
+            Code::MOV1_RCX(RDX, inLoc2, width) +
+            "cmp " + AX(width) + ", " + DX(width) + "\n" +
+            "mov " + AX(1) + ", " + IntegerToHexString(0) + "\n" +
+            "mov " + CX(2) + ", " + IntegerToHexString(1) + "\n" +
+            cmov   + AX(2) + ", " + CX(2) + "\n" +
+            Code::MOV2(outLoc, RAX, 1);
     }
     else if (expression->type == EXPR_MADDR)
     {
@@ -1382,10 +1610,11 @@ std::string TranslateExpression(FunctionContext * context,
 
         size_t      width = outSize;
 
-        // lea rax, inLoc1
+        // lea rax, inLoc
         // mov outLoc, rax
-        s += "lea " + AX(width) + ", " + X64LocationString(inLoc, width) + "\n" +
-             "mov " + X64LocationString(outLoc, width) + ", " + AX(width) + "\n";
+        s +=
+            Code::LEA_RCX(RAX, inLoc) +
+            Code::MOV2(outLoc, RAX, width);
     }
     else if (expression->type == EXPR_MCOPY)
     {
@@ -1406,49 +1635,21 @@ std::string TranslateExpression(FunctionContext * context,
 
         int         objSize = static_cast<int>(inSize1);
 
+        // 1,2,4,8 -> rax
+        // *       -> rep movsb
+
         if (CountBits(objSize) == 1 && objSize <= 8)
         {
-            // 1,2,4,8 -> rax
             size_t      width = objSize;
 
             // mov rax, inLoc2
             // mov inLoc1, rax
-            if  (outLoc.type != REGISTER_INDIRECT)
-            {
-                s += "mov " + AX(width) + ", " + X64LocationString(inLoc2, width) + "\n" +
-                     "mov " + X64LocationString(outLoc, width) + ", " + AX(width) + "\n";
-            }
-            else
-            {
-                // mov rax, inLoc2
-                // mov rcx, pval
-                // *mov rcx, [rcx]
-                // mov [rcx], rax
-                ASSERT(expression->down->type == EXPR_PVAL);
-
-                Location origin;
-                int pvalCount = 0;
-
-                Node * pvalChain = expression->down;
-                while(pvalChain->type == EXPR_PVAL)
-                {
-                    ++pvalCount;
-                    pvalChain = pvalChain->down;
-                }
-                origin = pvalChain->expr.loc;
-
-                s += "mov " + AX(width) + ", " + X64LocationString(inLoc2, width) + "\n";
-                s += "mov " + CX(8) + ", " + X64LocationString(origin, 8) + "\n";
-                for (int i = 1; i < pvalCount; ++i)
-                {
-                    s += "mov " + CX(8) + ", " + SizeToX64TypeString(8) + " PTR [" + CX(8) + "]\n";
-                }
-                s += "mov " + SizeToX64TypeString(width) + " PTR [" + CX(8) + "], " + AX(width) + "\n";
-            }
+            s +=
+                Code::MOV1_RCX(RAX, inLoc2, width) +
+                Code::MOV3_RCX(inLoc1, RAX, width);
         }
         else
         {
-            // *       -> rep movsb
             size_t      width = 8;
 
             // lea rax, inLoc1
@@ -1457,12 +1658,13 @@ std::string TranslateExpression(FunctionContext * context,
             // mov rsi, rcx
             // mov rcx, objSize
             // rep movsb
-            s += "lea " + AX(width) + ", " + X64LocationString(inLoc1, width) + "\n" +
-                 "lea " + CX(width) + ", " + X64LocationString(inLoc2, width) + "\n" +
-                 "mov " + DI(width) + ", " + AX(width) + "\n" +
-                 "mov " + SI(width) + ", " + CX(width) + "\n" +
-                 "mov " + CX(width) + ", " + IntegerToHexString(objSize) + "\n" +
-                 "rep movsb" + "\n";
+            s +=
+                Code::LEA_RCX(RAX, inLoc1) +
+                Code::LEA_RCX(RCX, inLoc2) +
+                "mov " + DI(width) + ", " + AX(width) + "\n" +
+                "mov " + SI(width) + ", " + CX(width) + "\n" +
+                "mov " + CX(width) + ", " + IntegerToHexString(objSize) + "\n" +
+                "rep movsb" + "\n";
 
             AssertRegisterMask(context, RDI_MASK);
             AssertRegisterMask(context, RSI_MASK);
@@ -1480,32 +1682,24 @@ std::string TranslateExpression(FunctionContext * context,
         ASSERT(TypeEqual(outType, inType));
         ASSERT(outSize == inSize);
 
+        // 1,2,4,8 -> rax
+        // *       -> rep movsb
+
         if (CountBits(inSize) == 1 && inSize <= 8)
         {
-            // 1,2,4,8 -> rax
             size_t      width = inSize;
 
             // mov rax, inLoc
             // mov outLoc, rax
-            if (inLoc.type != REGISTER_INDIRECT)
-            {
-                s += "mov " + AX(width) + ", " + X64LocationString(inLoc, width) + "\n" +
-                     "mov " + X64LocationString(outLoc, width) + ", " + AX(width) + "\n";
-            }
-            else
-            {
-                ASSERT(outLoc.type != REGISTER_INDIRECT);
-                
-                // MDUP( out, MCOPY(PVAL(p), 2) )
-                // Convention: value is in rax
-                // mov outLoc, rax
-                s += "mov " + X64LocationString(outLoc, width) + ", " + AX(width) + "\n";
-            }
+            s +=
+                Code::MOV1_RCX(RAX, inLoc, width) +
+                Code::MOV2(outLoc, RAX, width);
         }
         else
         {
-            // *       -> rep movsb
             size_t      width = 8;
+
+            ASSERT(outLoc.type != REGISTER_INDIRECT);
 
             // lea rax, outLoc
             // lea rcx, inLoc
@@ -1513,8 +1707,9 @@ std::string TranslateExpression(FunctionContext * context,
             // mov rsi, rcx
             // mov rcx, objSize
             // rep movsb
-            s += "lea " + AX(width) + ", " + X64LocationString(outLoc, width) + "\n" +
-                "lea " + CX(width) + ", " + X64LocationString(inLoc, width) + "\n" +
+            s +=
+                Code::LEA(RAX, outLoc) +
+                Code::LEA_RCX(RCX, inLoc) +
                 "mov " + DI(width) + ", " + AX(width) + "\n" +
                 "mov " + SI(width) + ", " + CX(width) + "\n" +
                 "mov " + CX(width) + ", " + IntegerToHexString(inSize) + "\n" +
@@ -1549,12 +1744,16 @@ std::string TranslateExpression(FunctionContext * context,
         // mov rax, inLoc1
         // add rax, inLoc2
         // mov outLoc, rax
-        s += "mov " + AX(width) + ", " + X64LocationString(inLoc1, width) + "\n" +
-             "add " + AX(width) + ", " + X64LocationString(inLoc2, width) + "\n" +
-             "mov " + X64LocationString(outLoc, width) + ", " + AX(width) + "\n";
+        s +=
+            Code::MOV1_RCX(RAX, inLoc1, width) +
+            Code::ADD_RCX(RAX, inLoc2, width) +
+            Code::MOV2(outLoc, RAX, width);
     }
     else if (expression->type == EXPR_CONDITION)
     {
+        // TODO: impl condition expr
+        ASSERT(false);
+
         // visit children
         s += TranslateExpression(context, expression->down);
         s += TranslateExpression(context, expression->down->right);
@@ -1678,20 +1877,24 @@ std::string TranslateExpression(FunctionContext * context,
 
         // mdup outLoc, inLoc
         {
+            // 1,2,4,8 -> rax
+            // *       -> rep movsb
+
             if (CountBits(inSize) == 1 && inSize <= 8)
             {
-                // 1,2,4,8 -> rax
                 size_t      width = inSize;
 
                 // mov rax, inLoc
                 // mov outLoc, rax
-                s += "mov " + AX(width) + ", " + X64LocationString(inLoc, width) + "\n" +
-                     "mov " + X64LocationString(outLoc, width) + ", " + AX(width) + "\n";
+                s +=
+                    Code::MOV1_RCX(RAX, inLoc, width) +
+                    Code::MOV2(outLoc, RAX, width);
             }
             else
             {
-                // *       -> rep movsb
                 size_t      width = 8;
+
+                ASSERT(outLoc.type != REGISTER_INDIRECT);
 
                 // lea rax, outLoc
                 // lea rcx, inLoc
@@ -1699,12 +1902,13 @@ std::string TranslateExpression(FunctionContext * context,
                 // mov rsi, rcx
                 // mov rcx, objSize
                 // rep movsb
-                s += "lea " + AX(width) + ", " + X64LocationString(outLoc, width) + "\n" +
-                     "lea " + CX(width) + ", " + X64LocationString(inLoc, width) + "\n" +
-                     "mov " + DI(width) + ", " + AX(width) + "\n" +
-                     "mov " + SI(width) + ", " + CX(width) + "\n" +
-                     "mov " + CX(width) + ", " + IntegerToHexString(inSize) + "\n" +
-                     "rep movsb" + "\n";
+                s +=
+                    Code::LEA(RAX, outLoc) +
+                    Code::LEA_RCX(RCX, inLoc) +
+                    "mov " + DI(width) + ", " + AX(width) + "\n" +
+                    "mov " + SI(width) + ", " + CX(width) + "\n" +
+                    "mov " + CX(width) + ", " + IntegerToHexString(inSize) + "\n" +
+                    "rep movsb" + "\n";
 
                 AssertRegisterMask(context, RDI_MASK);
                 AssertRegisterMask(context, RSI_MASK);

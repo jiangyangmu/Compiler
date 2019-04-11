@@ -105,6 +105,13 @@ bool ParameterPassingCallerProtocol::IsParameterPassedByAddress(size_t index)
     return parameterPassedByAddress[index];
 }
 
+bool ParameterPassingCallerProtocol::IsParameterPassedByXMM(size_t index)
+{
+    ASSERT(index < parameterLocations.size());
+    return parameterLocations[index].type == REGISTER &&
+           (XMM0 <= parameterLocations[index].registerType && parameterLocations[index].registerType <= XMM3);
+}
+
 bool ParameterPassingCallerProtocol::IsReturnValueAddressAsFirstParameter()
 {
     return rvaAsFirstParameter;
@@ -190,6 +197,13 @@ bool ParameterPassingCalleeProtocol::IsParameterPassedByAddress(size_t index)
 {
     ASSERT(index < parameterLocations.size());
     return parameterPassedByAddress[index];
+}
+
+bool ParameterPassingCalleeProtocol::IsParameterPassedByXMM(size_t index)
+{
+    ASSERT(index < parameterLocations.size());
+    return parameterLocations[index].type == REGISTER &&
+        (XMM0 <= parameterLocations[index].registerType && parameterLocations[index].registerType <= XMM3);
 }
 
 bool ParameterPassingCalleeProtocol::IsReturnValueAddressAsFirstParameter()

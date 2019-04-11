@@ -14,6 +14,8 @@ public:
 
     bool IsParameterPassedByAddress(size_t index);
 
+    bool IsParameterPassedByXMM(size_t index);
+
     bool IsReturnValueAddressAsFirstParameter();
 
 private:
@@ -30,6 +32,8 @@ public:
     Location GetParameterLocation(size_t index);
 
     bool IsParameterPassedByAddress(size_t index);
+
+    bool IsParameterPassedByXMM(size_t index);
 
     bool IsReturnValueAddressAsFirstParameter();
 
