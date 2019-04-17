@@ -1,8 +1,10 @@
 int main()
 {
     int i;
+    int j;
     int * p;
     int ** pp;
+    int * q;
     
     p = &i;
     pp = &p;
@@ -14,7 +16,14 @@ int main()
     pp = pp - 1;
     p = p - 1;
 
-    *(*(pp + 1) + 1) = 4;
+    *(*(pp + 1) + 1) = 5;
 
-    return i;
+    pp = pp + 1;
+    p = p + 1;
+
+    j = 4;
+    q = &j;
+    *q = *p;
+
+    return j;
 }

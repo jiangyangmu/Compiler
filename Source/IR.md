@@ -6,13 +6,32 @@ USAGE
 
     Represent data and computation.
 
+CONSTRUCTION PROCESS
+
+    1. Build operator tree
+    2. Fill attributes
+
 TODO
 
     [ ] LARGE_BLOB: support me
     [ ] COND, ELIST: support me
 
 ------------------------------------------------------------------------------------
-IR Data Structure
+VM Interface/Runtime
+
+# program model
+
+program     = data + code
+
+# environment interface
+
+1. Basic: executable file format
+    * entry point, sections
+    * exceptions
+2. Interact with OS: calling convention, system call
+
+------------------------------------------------------------------------------------
+IR Operator Attributes
 
 Type
     VOID
@@ -46,6 +65,7 @@ Location (loc info & actual loc)
 IR Rules
 
 ASSERT: BOOL only exists as anon tmp value boolean expression
+ASSERT: BOOL won't use dynamic adress
 
 INFO: lvalue semantics (reuse location)
     REINTERP
@@ -64,9 +84,6 @@ INFO: full input location
     = {REG, REG_IND_MEM, SP_OFFSET_MEM, BP_OFFSET_MEM, LABEL, INLINE}
 INFO: full output location
     = {REG, REG_IND_MEM, SP_OFFSET_MEM}
-
-# Input: {REG, REG_IND_MEM, SP_OFFSET_MEM, BP_OFFSET_MEM, LABEL, INLINE}
-# Output: {REG, REG_IND_MEM, SP_OFFSET_MEM}
 
 ------------------------------------------------------------------------------------
 IR Operators
@@ -106,7 +123,7 @@ IR Operators
 # 3. calling
 
     EXPR_CALL
-        (in:PTRToPROC|PROC, [in:PTR], [in]*)
+        (in:PTRToPROC|PROC, [in]*)
         => Type     { ?INT, FLT, PTR, BLOB }
         => Location { REG }
 
@@ -181,34 +198,36 @@ IR Operators
         => Type     { BOOL }
         => Location { SP_OFFSET_MEM }
 
+# 8. dynamic address
+
     EXPR_PIND
         (in:PTR)
         => Type     { ?INT, FLT, PTR, BLOB, PROC }
         => Location { REG_IND_MEM }
 
     EXPR_PNEW
-        (in)
+        (in:*)
         => Type     PTR to { ?INT, FLT, PTR, BLOB, PROC }
         => Location { SP_OFFSET_MEM }
 
-# 8. memory operations (size)
+# 9. memory operations (size)
 
     EXPR_MCOPY
-        (in, in)
+        (in:*, in:*)
         => Type     { ?INT, FLT, PTR, BLOB }
         => Location in
 
     EXPR_MDUP
-        (in)
+        (in:*)
         => Type     { ?INT, FLT, PTR, BLOB }
         => Location { SP_OFFSET_MEM }
 
-    EXPR_MADD
+    EXPR_MADDSI EXPR_MADDUI
         (in:PTR, in:?INT)
         => Type     { ?INT, FLT, PTR, BLOB }
         => Location { SP_OFFSET_MEM }
 
-# 9. control flow operations
+# 10. control flow operations
 
 # TODO: support
 

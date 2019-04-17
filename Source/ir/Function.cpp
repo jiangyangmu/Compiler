@@ -75,13 +75,14 @@ FunctionContext * CreateFunctionContext(DefinitionContext * functionDefinitionCo
     functionContext->functionName = functionName.toString();
     functionContext->localZoneSize = 0;
     functionContext->maxTempZoneSize = 0;
+    functionContext->maxSpillZoneSize = 0;
     functionContext->maxCallZoneSize = 0;
     functionContext->stackAllocSize = 0;
     functionContext->stackFrameSize = 0;
     functionContext->registerZoneEndOffset = 0;
     functionContext->localZoneEndOffset = 0;
     functionContext->tempZoneBeginOffset = 0;
-    functionContext->swapZoneEndOffset = 0;
+    functionContext->spillZoneEndOffset = 0;
     functionContext->callZoneEndOffset = 0;
     functionContext->dirtyRegisters = 0;
     functionContext->functionBody = nullptr;
@@ -193,16 +194,16 @@ Node * WrapCastNode(Node * node, Type * toType)
     if (IsInt(fromType))
     {
         if (IsInt(toType))
-            castNode = MakeNode(EXPR_CVT_I2I);
+            castNode = MakeNode(EXPR_CVT_SI2SI);
         else if (IsFloating(toType))
-            castNode = MakeNode(EXPR_CVT_I2F);
+            castNode = MakeNode(EXPR_CVT_SI2F);
         else if (IsBool(toType))
             castNode = MakeNode(EXPR_CVT_I2B);
     }
     else if (IsFloating(fromType))
     {
         if (IsInt(toType))
-            castNode = MakeNode(EXPR_CVT_F2I);
+            castNode = MakeNode(EXPR_CVT_F2SI);
         else if (IsFloating(toType))
             castNode = MakeNode(EXPR_CVT_F2F);
         else if (IsBool(toType))
@@ -210,12 +211,12 @@ Node * WrapCastNode(Node * node, Type * toType)
     }
     else if (IsPointer(fromType) && IsPointer(toType))
     {
-        castNode = MakeNode(EXPR_CVT_NOOP);
+        castNode = MakeNode(EXPR_CVT_REINTERP);
     }
     ASSERT(castNode);
 
     castNode->expr.type = toType;
-    castNode->expr.loc.type = castNode->type == EXPR_CVT_NOOP
+    castNode->expr.loc.type = castNode->type == EXPR_CVT_REINTERP
                               ? SAME_AS_FIRST_CHILD
                               : NEED_ALLOC;
 
@@ -441,7 +442,7 @@ Node * IncExpression(FunctionContext * context, Node * expr)
     else
     {
         ASSERT(IsPointer(type));
-        node = MakeNode(EXPR_PADD);
+        node = MakeNode(EXPR_PADDUI);
         node->expr.type = type;
 
         AddChild(node, expr);
@@ -496,7 +497,7 @@ Node * PostIncExpression(FunctionContext * context, Node * expr)
     else
     {
         ASSERT(IsPointer(type));
-        Node * addNode = MakeNode(EXPR_PADD);
+        Node * addNode = MakeNode(EXPR_PADDUI);
         addNode->expr.type = type;
         addNode->expr.loc.type = SAME_AS_FIRST_GRANDCHILD;
 
@@ -541,11 +542,11 @@ Node * DecExpression(FunctionContext * context, Node * expr)
     else
     {
         ASSERT(IsPointer(type));
-        node = MakeNode(EXPR_PSUB);
+        node = MakeNode(EXPR_PSUBUI);
         node->expr.type = type;
 
         AddChild(node, expr);
-        AddChild(node, ConstantExpression(context, 1));
+        AddChild(node, ConstantExpression(context, 1ull));
     }
 
     node->expr.loc.type = SAME_AS_FIRST_CHILD;
@@ -594,12 +595,12 @@ Node * PostDecExpression(FunctionContext * context, Node * expr)
     else
     {
         ASSERT(IsPointer(type));
-        Node * subNode = MakeNode(EXPR_PSUB);
+        Node * subNode = MakeNode(EXPR_PSUBUI);
         subNode->expr.type = type;
         subNode->expr.loc.type = SAME_AS_FIRST_GRANDCHILD;
 
         AddChild(subNode, dupNode);
-        AddChild(subNode, ConstantExpression(context, 1));
+        AddChild(subNode, ConstantExpression(context, 1ull));
         node = subNode;
     }
 
@@ -616,12 +617,12 @@ Node * MemberOfExpression(FunctionContext * context,
     Type * memberType   = GetMemberType(structOrUnion->expr.type, memberName);
     size_t memberOffset = GetMemberOffset(structOrUnion->expr.type, memberName);
 
-    Node * addrNode = MakeNode(EXPR_MADDR);
+    Node * addrNode = MakeNode(EXPR_PNEW);
     addrNode->expr.type = &(MakePointer(context->typeContext, structOrUnion->expr.type)->type);
     addrNode->expr.loc.type = NEED_ALLOC;
     AddChild(addrNode, structOrUnion);
     
-    Node * addNode = MakeNode(EXPR_MADD);
+    Node * addNode = MakeNode(EXPR_MADDUI);
     addNode->expr.type = &(MakePointer(context->typeContext, memberType)->type);
     addNode->expr.loc.type = SAME_AS_FIRST_CHILD;
     AddChild(addNode, addrNode);
@@ -691,7 +692,7 @@ Node * GetAddressExpression(FunctionContext * context, Node * expr)
 {
     ASSERT(context->currentIntention.back() == WANT_VALUE);
 
-    Node * node = MakeNode(EXPR_MADDR);
+    Node * node = MakeNode(EXPR_PNEW);
     node->expr.type = &(MakePointer(context->typeContext, expr->expr.type)->type);
     node->expr.loc.type = NEED_ALLOC;
 
@@ -704,9 +705,10 @@ Node * IndirectExpression(FunctionContext * context, Node * expr)
 {
     ASSERT(IsPointer(expr->expr.type));
 
-    Node * node = MakeNode(EXPR_PVAL);
+    Node * node = MakeNode(EXPR_PIND);
     node->expr.type = AsPointer(expr->expr.type)->target;
     node->expr.loc.type = REGISTER_INDIRECT;
+    node->expr.loc.registerType = RCX;
 
     AddChild(node, expr);
 
@@ -731,7 +733,7 @@ Node * NegativeExpression(FunctionContext * context, Node * expr)
                      ? IntegralPromotion(context->typeContext, type)
                      : type;
 
-    Node * node    = MakeNode(IsIntegral(type) ? EXPR_INEG : EXPR_FNEG);
+    Node * node    = MakeNode(IsIntegral(type) ? EXPR_SINEG : EXPR_FNEG);
 
     node->expr.type = newType;
     node->expr.loc.type = NEED_ALLOC;
@@ -771,7 +773,7 @@ Node * CastExpression(Node * expr, Type * type)
 
     if (IsVoid(toType))
     {
-        node = MakeNode(EXPR_CVT_NOOP);
+        node = MakeNode(EXPR_CVT_REINTERP);
         node->expr.loc.type = SAME_AS_FIRST_CHILD;
     }
     else
@@ -780,15 +782,15 @@ Node * CastExpression(Node * expr, Type * type)
         // TODO: integer signed-ness
         if (IsPointer(fromType) && IsPointer(toType))
         {
-            node = MakeNode(EXPR_CVT_NOOP);
+            node = MakeNode(EXPR_CVT_REINTERP);
             node->expr.loc.type = SAME_AS_FIRST_CHILD;
         }
         else if (IsIntegral(fromType))
         {
             if (IsIntegral(toType))
-                node = MakeNode(EXPR_CVT_I2I);
+                node = MakeNode(EXPR_CVT_SI2SI);
             else if (IsFloating(toType))
-                node = MakeNode(EXPR_CVT_I2F);
+                node = MakeNode(EXPR_CVT_SI2F);
             else if (IsBool(toType))
                 node = MakeNode(EXPR_CVT_I2B);
             node->expr.loc.type = NEED_ALLOC;
@@ -796,7 +798,7 @@ Node * CastExpression(Node * expr, Type * type)
         else if (IsFloating(fromType))
         {
             if (IsIntegral(toType))
-                node = MakeNode(EXPR_CVT_F2I);
+                node = MakeNode(EXPR_CVT_F2SI);
             else if (IsFloating(toType))
                 node = MakeNode(EXPR_CVT_F2F);
             else if (IsBool(toType))
@@ -857,7 +859,7 @@ Node * AddExpression(FunctionContext * context, Node * a, Node * b)
             b = WrapCastNode(b, type);
         }
 
-        node = MakeNode(EXPR_PADD);
+        node = MakeNode(EXPR_PADDSI);
         node->expr.type = a->expr.type;
         node->expr.loc.type = NEED_ALLOC;
 
@@ -896,7 +898,7 @@ Node * SubExpression(FunctionContext * context, Node * a, Node * b)
             b = WrapCastNode(b, type);
         }
 
-        node = MakeNode(EXPR_PSUB);
+        node = MakeNode(EXPR_PSUBSI);
         node->expr.type = a->expr.type;
         node->expr.loc.type = NEED_ALLOC;
 
@@ -1700,10 +1702,19 @@ void ForExpressionTreeInFunctionBody(FunctionContext * context,
     }
 }
 
-void UpdateMaxTempAndCallZone(FunctionContext * context, Node * exprTree)
+bool IsRegisterNode(Node * node)
+{
+    ASSERT(node);
+    return node->type == EXPR_PIND ||
+           node->type == EXPR_CALL ||
+           node->type == EXPR_CVT_REINTERP;
+}
+
+void UpdateMaxTempZoneSpillZoneCallZone(FunctionContext * context, Node * exprTree)
 {
     size_t tempZoneSize = 0;
     size_t callZoneSize = 0;
+    size_t maxSpillRegisters = 0;
 
     // post-order
     std::vector<std::pair<Node *, bool>> st = { { exprTree, false } };
@@ -1745,12 +1756,25 @@ void UpdateMaxTempAndCallZone(FunctionContext * context, Node * exprTree)
                     ? newCallZoneSize
                     : callZoneSize;
             }
+            // compute maxSpillRegisters
+            {
+                size_t spillRegisters = 0;
+                for (Node * child = node->down;
+                     child;
+                     child = child->right)
+                {
+                    if (IsRegisterNode(child))
+                        ++spillRegisters;
+                }
+                maxSpillRegisters = Max(maxSpillRegisters, spillRegisters);
+            }
 
             st.pop_back();
         }
     }
 
     context->maxTempZoneSize = Max(context->maxTempZoneSize, tempZoneSize);
+    context->maxSpillZoneSize = Max(context->maxSpillZoneSize, maxSpillRegisters * 8);
     context->maxCallZoneSize = Max(context->maxCallZoneSize, callZoneSize);
 }
 
@@ -1814,12 +1838,13 @@ void FillLocalAndTempLocationInExpressionTree(FunctionContext * context,
     ASSERT(offset <= (context->tempZoneBeginOffset + context->maxTempZoneSize));
 }
 
-Location GetSwapLocation(FunctionContext * functionContext)
+Location GetSpillLocation(FunctionContext * functionContext, size_t i)
 {
     ASSERT(functionContext->stackFrameSize != 0);
+    ASSERT((i * 8) < functionContext->maxSpillZoneSize);
     Location location;
     location.type = ESP_OFFSET;
-    location.offsetValue = functionContext->stackFrameSize - functionContext->swapZoneEndOffset;
+    location.offsetValue = functionContext->stackFrameSize - functionContext->spillZoneEndOffset + i * 8;
     return location;
 }
 
@@ -1829,15 +1854,17 @@ void    PrepareStack(FunctionContext * context)
     //      1. scan for non-volatile registers, fill {dirtyRegisters, registerZoneEndOffset}
     //      2. scan for local objects, fill {localZoneSize, localZoneEndOffset, localObjectOffsets}
     //      3. scan for temp objects, fill {maxTempZoneSize, tempZoneBeginOffset}
-    //      4. scan for call nodes, fill {maxCallZoneSize, callZoneEndOffset}
-    //      5. fill {swapZoneEndOffset}
-    //      6. fill {stackFrameSize, stackAllocSize}
-    //      7. fill {local location in expression tree, temp location in expression tree}
+    //      4. scan for spill nodes, fill {maxSpillZoneSize, spillZoneEndOffset}
+    //      5. scan for call nodes, fill {maxCallZoneSize, callZoneEndOffset}
+    //      6. fill {spillZoneEndOffset}
+    //      7. fill {stackFrameSize, stackAllocSize}
+    //      8. fill {local location in expression tree, temp location in expression tree}
     //          * both depends on stackFrameSize
 
     // "offset to previous stack frame"
     size_t offset = 8;
 
+    // saved rbp, non-volatile registers
     context->dirtyRegisters = RBP_MASK | RSI_MASK | RDI_MASK;
     offset = context->registerZoneEndOffset = offset + 8 * CountBits(context->dirtyRegisters);
 
@@ -1853,19 +1880,29 @@ void    PrepareStack(FunctionContext * context)
     }
     offset = context->localZoneEndOffset = offset + context->localZoneSize;
 
-    // temp zone
-    ForExpressionTreeInFunctionBody(context,
-                                    context->functionBody,
-                                    UpdateMaxTempAndCallZone);
-    context->tempZoneBeginOffset = (offset + 7) / 8 * 8;
-    offset = context->tempZoneBeginOffset + context->maxTempZoneSize;
+    // gap
     offset = (offset + 7) / 8 * 8;
 
-    // swap zone
-    offset = context->swapZoneEndOffset = offset + 8;
+    ForExpressionTreeInFunctionBody(context,
+                                    context->functionBody,
+                                    UpdateMaxTempZoneSpillZoneCallZone);
+
+    // temp zone
+    context->tempZoneBeginOffset = offset;
+    offset += context->maxTempZoneSize;
+
+    // gap
+    offset = (offset + 7) / 8 * 8;
+
+    // spill zone
+    context->maxSpillZoneSize += 8; // for tmpLoc
+    offset = context->spillZoneEndOffset = offset + context->maxSpillZoneSize;
+
+    // gap
+    offset = (offset + 15) / 16 * 16;
 
     // call zone
-    offset = context->callZoneEndOffset = (offset + 15) / 16 * 16;
+    offset = context->callZoneEndOffset = offset + context->maxCallZoneSize;
 
     // stack layout
     context->stackFrameSize = offset;
@@ -1899,22 +1936,22 @@ std::string NodeDebugString(Node * node)
         case EXPR_ID:           s = "id"; break;
         case EXPR_CONSTANT:     s = "constant"; break;
         case EXPR_CALL:         s = "call"; break;
-        case EXPR_CVT_I2I:      s = "cvt_i2i"; break;
-        case EXPR_CVT_I2UI:     s = "cvt_i2ui"; break;
-        case EXPR_CVT_UI2I:     s = "cvt_ui2i"; break;
+        case EXPR_CVT_SI2SI:    s = "cvt_si2si"; break;
+        case EXPR_CVT_SI2UI:    s = "cvt_si2ui"; break;
+        case EXPR_CVT_UI2SI:    s = "cvt_ui2si"; break;
         case EXPR_CVT_UI2UI:    s = "cvt_ui2ui"; break;
         case EXPR_CVT_F2F:      s = "cvt_f2f"; break;
-        case EXPR_CVT_I2F:      s = "cvt_i2f"; break;
-        case EXPR_CVT_F2I:      s = "cvt_f2i"; break;
+        case EXPR_CVT_SI2F:     s = "cvt_si2f"; break;
+        case EXPR_CVT_F2SI:     s = "cvt_f2si"; break;
         case EXPR_CVT_I2B:      s = "cvt_i2b"; break;
         case EXPR_CVT_B2I:      s = "cvt_b2i"; break;
         case EXPR_CVT_F2B:      s = "cvt_f2b"; break;
         case EXPR_CVT_B2F:      s = "cvt_b2f"; break;
-        case EXPR_CVT_NOOP:     s = "cvt_noop"; break;
+        case EXPR_CVT_REINTERP: s = "cvt_reinterp"; break;
         case EXPR_BOOL_NOT:     s = "bool_not"; break;
         case EXPR_BOOL_AND:     s = "bool_and"; break;
         case EXPR_BOOL_OR:      s = "bool_or"; break;
-        case EXPR_INEG:         s = "ineg"; break;
+        case EXPR_SINEG:        s = "sineg"; break;
         case EXPR_IINC:         s = "iinc"; break;
         case EXPR_IDEC:         s = "idec"; break;
         case EXPR_IADD:         s = "iadd"; break;
@@ -1945,20 +1982,23 @@ std::string NodeDebugString(Node * node)
         case EXPR_FLE:          s = "fle"; break;
         case EXPR_FGE:          s = "fge"; break;
         case EXPR_FGT:          s = "fgt"; break;
-        case EXPR_PADD:         s = "padd"; break;
-        case EXPR_PSUB:         s = "psub"; break;
+        case EXPR_PADDSI:       s = "paddsi"; break;
+        case EXPR_PADDUI:       s = "paddui"; break;
+        case EXPR_PSUBSI:       s = "psubsi"; break;
+        case EXPR_PSUBUI:       s = "psubui"; break;
         case EXPR_PDIFF:        s = "pdiff"; break;
-        case EXPR_PVAL:         s = "pval"; break;
         case EXPR_PEQ:          s = "peq"; break;
         case EXPR_PNE:          s = "pne"; break;
         case EXPR_PLT:          s = "plt"; break;
         case EXPR_PLE:          s = "ple"; break;
         case EXPR_PGE:          s = "pge"; break;
         case EXPR_PGT:          s = "pgt"; break;
-        case EXPR_MADDR:        s = "maddr"; break;
+        case EXPR_PIND:         s = "pind"; break;
+        case EXPR_PNEW:         s = "pnew"; break;
         case EXPR_MCOPY:        s = "mcopy"; break;
         case EXPR_MDUP:         s = "mdup"; break;
-        case EXPR_MADD:         s = "madd"; break;
+        case EXPR_MADDUI:       s = "maddui"; break;
+        case EXPR_MADDSI:       s = "maddsi"; break;
         case EXPR_CONDITION:    s = "condition"; break;
         case EXPR_ELIST:        s = "elist"; break;
         case EMPTY_EXPRESSION:  s = "empty_expr"; break;
@@ -1981,17 +2021,36 @@ void PrintNodeTree(Node * root, std::string indent)
         PrintNodeTree(root->right, indent);
 }
 
-void PrintStackAllocation(FunctionContext * context)
+std::string StackLayoutDebugString(FunctionContext * context)
 {
-    std::cout << "return address:        8" << std::endl
-              << "non-volatile register: " << CountBits(context->dirtyRegisters) * 8 << std::endl
-              << "local zone:            " << context->localZoneSize << std::endl;
+    ASSERT(context->stackFrameSize > 0);
+    
+    std::string s;
+
+    s = std::string() +
+        "; return address:        [rbp + 8]\n" +
+        "; non-volatile register: [rsp + " + std::to_string(context->stackFrameSize - context->registerZoneEndOffset) + ", rbp + 8)\n" +
+        "; local zone:            [rsp + " + std::to_string(context->stackFrameSize - context->localZoneEndOffset) + ", rsp + " + std::to_string(context->stackFrameSize - context->localZoneEndOffset + context->localZoneSize) + ")\n" +
+        "; temp  zone:            [rsp + " + std::to_string(context->stackFrameSize - context->tempZoneBeginOffset - context->maxTempZoneSize) + ", rsp + " + std::to_string(context->stackFrameSize - context->tempZoneBeginOffset) + ")\n" +
+        "; spill zone:            [rsp + " + std::to_string(context->stackFrameSize - context->spillZoneEndOffset) + ", rsp + " + std::to_string(context->stackFrameSize - context->spillZoneEndOffset + context->maxSpillZoneSize) + ")\n" +
+        "; call  zone:            [rsp + " + std::to_string(context->stackFrameSize - context->callZoneEndOffset) + ", rsp + " + std::to_string(context->stackFrameSize - context->callZoneEndOffset + context->maxCallZoneSize) + ")\n";
+
+    std::map<size_t, StringRef> localVariables;
+    for (auto kv : context->localObjectOffsets)
+    {
+        localVariables.emplace(kv.second, kv.first->name);
+    }
+    for (auto it = localVariables.rbegin(); it != localVariables.rend(); ++it)
+    {
+        s += "; " + it->second.toString() + ": [rsp + " + std::to_string(context->stackFrameSize - it->first) + "]\n";
+    }
+
+    return s;
 }
 
 void PrintFunctionContext(FunctionContext * context)
 {
     PrintNodeTree(context->functionBody, "");
-    PrintStackAllocation(context);
 }
 
 }

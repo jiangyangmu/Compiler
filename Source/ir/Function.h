@@ -36,41 +36,57 @@ enum NodeType
     // function call
     EXPR_CALL,
 
-    // type casting operations
-    EXPR_CVT_I2I, EXPR_CVT_I2UI, EXPR_CVT_UI2I, EXPR_CVT_UI2UI, // integer
-    EXPR_CVT_F2F, // float
-    EXPR_CVT_I2F, EXPR_CVT_F2I, // integer x float
-    EXPR_CVT_I2B, EXPR_CVT_B2I, EXPR_CVT_F2B, EXPR_CVT_B2F, // bool x {integer, float}
-    EXPR_CVT_NOOP, // reinterpret
+    // type casting operators (change type, size, sign)
+    EXPR_CVT_SI2SI, EXPR_CVT_SI2UI, EXPR_CVT_UI2SI, EXPR_CVT_UI2UI,
+    EXPR_CVT_F2F,
+    EXPR_CVT_SI2F, EXPR_CVT_F2SI,
+    EXPR_CVT_I2B, EXPR_CVT_B2I, EXPR_CVT_F2B, EXPR_CVT_B2F,
 
-    // bool operations
+    EXPR_CVT_REINTERP,
+    EXPR_CVT_DECAY,
+
+    // bool operators (bool x bool)
     EXPR_BOOL_NOT, EXPR_BOOL_AND, EXPR_BOOL_OR,
 
-    // integer operations (signed-ness, width) (TODO: divide by sign)
-    EXPR_INEG, EXPR_IINC, EXPR_IDEC, EXPR_IADD, EXPR_ISUB, EXPR_IMUL, EXPR_IDIV, EXPR_IMOD,
-    EXPR_INOT, EXPR_IAND, EXPR_IOR, EXPR_IXOR, EXPR_ISHL, EXPR_ISHR,
+    // integer operators (int x int, same size, same sign)
+    EXPR_SINEG,
+
+    EXPR_IINC, EXPR_IDEC,
+
+    EXPR_IADD, EXPR_ISUB,
+    EXPR_IMUL, EXPR_IDIV, EXPR_IMOD,
+
+    EXPR_INOT,
+    EXPR_IAND, EXPR_IOR, EXPR_IXOR,
+    
+    EXPR_ISHL, EXPR_ISHR,
+    
     EXPR_IEQ, EXPR_INE, EXPR_ILT, EXPR_ILE, EXPR_IGE, EXPR_IGT,
 
-    // float operations (width)
+    // float operators (float x float, same size)
     EXPR_FNEG, EXPR_FADD, EXPR_FSUB, EXPR_FMUL, EXPR_FDIV,
     EXPR_FEQ, EXPR_FNE, EXPR_FLT, EXPR_FLE, EXPR_FGE, EXPR_FGT,
 
-    // pointer x integer operations
-    EXPR_PADD, EXPR_PSUB,
+    // pointer arith operators (pointer x integer, same size)
+    EXPR_PADDSI, EXPR_PSUBSI,
+    EXPR_PADDUI, EXPR_PSUBUI,
 
-    // pointer operations
-    EXPR_PDIFF, EXPR_PVAL,
+    // pointer operators (pointer x pointer, same size)
+    EXPR_PDIFF,
+
     EXPR_PEQ, EXPR_PNE, EXPR_PLT, EXPR_PLE, EXPR_PGE, EXPR_PGT,
 
-    // memory operations (size)
-    EXPR_MADDR,
-    EXPR_MCOPY, // two children
-    EXPR_MDUP, // one child
-    EXPR_MADD,
+    EXPR_PIND,
+    EXPR_PNEW,
+
+    // memory operators (size)
+    EXPR_MCOPY,
+    EXPR_MDUP,
+
+    EXPR_MADDSI, EXPR_MADDUI,
 
     // TODO: divide
     EXPR_CONDITION,
-
     // expression list (TODO: divide)
     EXPR_ELIST,
 
@@ -209,25 +225,21 @@ struct FunctionContext
     //      gap                             (8-byte aligned)
     //      maxTempZoneSize
     //      gap                             (8-byte aligned)
-    //      swapZoneSize                    (8-byte aligned)
+    //      maxSpillZoneSize                (8-byte aligned)
     //      gap
     //      maxCallZoneSize                 (16-byte aligned) <-- rsp
-    // step:
-    //      1. scan for non-volatile registers, fill {dirtyRegisters, registerZoneEndOffset}
-    //      2. scan for local objects, fill {localZoneSize, localZoneEndOffset, localObjectOffsets, local location in expression tree}
-    //      3. scan for temp objects, fill {maxTempZoneSize, tempZoneBeginOffset, temp location in expression tree}
-    //      4. scan for call nodes, fill {maxCallZoneSize, callZoneEndOffset}
     // allocation zone
     size_t localZoneSize;
     size_t maxTempZoneSize;
+    size_t maxSpillZoneSize;
     size_t maxCallZoneSize;
-    size_t stackAllocSize; // local zone + temp zone + swap zone + call zone + gaps
+    size_t stackAllocSize; // local zone + temp zone + spill zone + call zone + gaps
     size_t stackFrameSize;
     // allocation offset - "offset to previous stack frame"
-    size_t registerZoneEndOffset;
-    size_t localZoneEndOffset;
-    size_t tempZoneBeginOffset;
-    size_t swapZoneEndOffset; // needed by some expression node (e.g. EXPR_PVAL, EXPR_CVT_F2B)
+    size_t registerZoneEndOffset;   // for debug
+    size_t localZoneEndOffset;      // for debug
+    size_t tempZoneBeginOffset;     // for temp var location computation
+    size_t spillZoneEndOffset;      // needed by some expression node (e.g. EXPR_PVAL, EXPR_CVT_F2B)
     size_t callZoneEndOffset;
     std::map<Definition *, size_t> localObjectOffsets;
 
@@ -245,19 +257,24 @@ FunctionContext * CreateFunctionContext(DefinitionContext * functionDefinitionCo
                                         TypeContext * typeContext,
                                         StringRef functionName);
 
-Location GetSwapLocation(FunctionContext * functionContext);
+Location GetSpillLocation(FunctionContext * functionContext, size_t i);
+
+// allocate stack, fill locals/temps
+void    PrepareStack(FunctionContext * context);
+
+bool    IsRegisterNode(Node * node);
 
 // Debug
 
+std::string NodeDebugString(Node * node);
+// after PrepareStack
+std::string StackLayoutDebugString(FunctionContext * context);
 void PrintFunctionContext(FunctionContext * context);
 
 // Build
 
 void    AddChild(Node * parent, Node * child);
 Node *  LastChild(Node * parent);
-
-// allocate stack, fill locals/temps
-void    PrepareStack(FunctionContext * context);
 
 // Expression construction front end, fit C syntax
 // Construct tree base on intention, check children type, refer self type, insert cast node.
@@ -321,6 +338,7 @@ Node * AssignExpression(FunctionContext * context, Node * a, Node * b);
 Node * ConditionExpression(FunctionContext * context, Node * a, Node * b, Node * c);
 Node * CommaExpression(std::vector<Node *> & exprs);
 
+// Statement construction front end, fit C syntax
 // Construct flow-control tree, check and create labels (goto label defined, break/continue has target, case/default in switch).
 
 void   Function_Begin(FunctionContext * context);

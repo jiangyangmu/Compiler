@@ -6,6 +6,9 @@
 namespace Language
 {
 
+std::string RegisterTypeToString(RegisterType type, size_t width);
+std::string X64LocationString(Location loc, size_t width);
+
 struct Code
 {
     x64Program * program;
@@ -205,16 +208,23 @@ std::string ByteToHexString(unsigned char i)
 
 std::string IntegerToHexString(size_t i)
 {
-    char hex[18];
+    char hex[19];
     sprintf_s(hex, 19, "0%0.16llxh", i);
     return std::string(hex, hex + 18);
 }
 
 std::string IntegerToHexString(int i)
 {
-    char hex[10];
+    char hex[11];
     sprintf_s(hex, 11, "0%0.8xh", i);
     return std::string(hex, hex + 10);
+}
+
+std::string IntegerToHexString(int64_t i)
+{
+    char hex[19];
+    sprintf_s(hex, 19, "0%0.16llxh", i);
+    return std::string(hex, hex + 18);
 }
 
 std::string IntegerToHexString(void * data, size_t size)
@@ -349,7 +359,7 @@ std::string RegisterTypeToString(RegisterType type, size_t width)
 
 std::string X64LocationString(Location loc, size_t width)
 {
-    ASSERT(loc.type >= REGISTER && loc.type <= INLINE);
+    ASSERT(loc.type >= REGISTER && loc.type <= REGISTER_INDIRECT);
     std::string s;
     switch (loc.type)
     {
@@ -359,7 +369,7 @@ std::string X64LocationString(Location loc, size_t width)
         case LABEL:         s = SizeToX64TypeString(width) + " PTR " + loc.labelValue->toString(); break;
         case INLINE:        s = IntegerToHexString(loc.inlineValue); break;
         case REGISTER_INDIRECT:
-                            s = SizeToX64TypeString(width) + " PTR [" + RegisterTypeToString(loc.registerType, width) + "]"; break;
+                            s = SizeToX64TypeString(width) + " PTR [" + RegisterTypeToString(loc.registerType, 8) + "]"; break;
         default:            break;
     }
     return s;
@@ -524,11 +534,75 @@ void TranslateConstantContext(x64Program * program,
     }
 }
 
-std::string TranslateCallExpression(Type * pointerToFuncType,
-                                    Location funcLoc,
-                                    std::vector<Type*> paramTypes,
-                                    std::vector<Location> paramLocations,
+std::string TranslateExpression(FunctionContext * context,
+                                Node * expression);
+// save child (spillIndex)
+std::string TranslateChildrenExpressionAndSaveSpill(FunctionContext * context,
+                                                    Node * expression)
+{
+    // handle eval order, shortcut effect, save register value to spill zone
+    std::string s;
+
+    size_t spillIndex = 1; // 0 for tmpLoc
+    for (Node * child = expression->down;
+         child;
+         child = child->right)
+    {
+        s += TranslateExpression(context, child);
+        if (IsRegisterNode(child))
+        {
+            // mov spillSlot, rcx
+            s += "mov " + X64LocationString(GetSpillLocation(context, spillIndex++), 8) + ", " + CX(8) + " ; save spill\n";
+        }
+    }
+
+    return s;
+}
+// load child (spillIndex)
+std::string LoadSpillAndGetLocation(FunctionContext * context,
+                                    Node * expression,
+                                    size_t childIndex,
+                                    Location * childLocation)
+{
+    size_t spillIndex = 0;
+
+    size_t i = 0;
+    Node * child = expression->down;
+    while (true)
+    {
+        ASSERT(child);
+
+        if (IsRegisterNode(child))
+            ++spillIndex;
+
+        if (i == childIndex)
+            break;
+
+        ++i;
+        child = child->right;
+    }
+
+    if (IsRegisterNode(child))
+    {
+        ASSERT(spillIndex > 0); // 0 for tmpLoc
+
+        childLocation->type = REGISTER_INDIRECT;
+        childLocation->registerType = RCX;
+        // mov rcx, spillSlot
+        return "mov " + CX(8) + ", " + X64LocationString(GetSpillLocation(context, spillIndex), 8) + " ; load spill\n";
+    }
+    else
+    {
+        *childLocation = child->expr.loc;
+        ASSERT(childLocation->type != NO_WHERE);
+        return "";
+    }
+}
+
+std::string TranslateCallExpression(FunctionContext * context,
+                                    Node * expression,
                                     Type * outType,
+                                    size_t outSize,
                                     Location outLoc)
 {
     // Assume function and arguments are matched, and argument conversion already applied.
@@ -540,9 +614,12 @@ std::string TranslateCallExpression(Type * pointerToFuncType,
 
     std::string s;
 
-    ASSERT(IsPointerToFunction(pointerToFuncType));
-
-    FunctionType * functionType = AsFunction(AsPointer(pointerToFuncType)->target);
+    FunctionType * functionType = nullptr;
+    {
+        Type * pointerToFuncType = expression->down->expr.type;
+        ASSERT(IsPointerToFunction(pointerToFuncType));
+        functionType = AsFunction(AsPointer(pointerToFuncType)->target);
+    }
 
     ParameterPassingCallerProtocol callerProtocol(functionType);
     size_t argumentIndex = 0;
@@ -560,11 +637,17 @@ std::string TranslateCallExpression(Type * pointerToFuncType,
         argumentIndex += 1;
     }
 
-    for (size_t i = 0; i < paramTypes.size(); ++i)
+    // 1 to skip function node
+    size_t childIndex = 1;
+    for (Node * child = expression->down->right;
+         child;
+         child = child->right)
     {
-        Location &  paramLoc = paramLocations[i];
-        Type *      paramType = paramTypes[i];
+        Location    paramLoc;
+        Type *      paramType = child->expr.type;
         size_t      paramSize = TypeSize(paramType);
+
+        s += LoadSpillAndGetLocation(context, expression, childIndex, &paramLoc);
 
         if (callerProtocol.IsParameterPassedByAddress(argumentIndex))
         {
@@ -600,21 +683,24 @@ std::string TranslateCallExpression(Type * pointerToFuncType,
         argumentIndex += 1;
     }
 
-    if (funcLoc.type == LocationType::LABEL)
+    Location funcLocation;
+
+    s += LoadSpillAndGetLocation(context, expression, 0, &funcLocation);
+
+    if (funcLocation.type == LocationType::LABEL)
     {
         // call label
-        s += Code::CALL(funcLoc);
+        s += Code::CALL(funcLocation);
     }
     else
     {
         // mov r11, inLoc
         // call r11
         s +=
-            Code::MOV1_RCX(R11, funcLoc, 8) +
-            Code::CALL(funcLoc);
+            Code::MOV1_RCX(R11, funcLocation, 8) +
+            Code::CALL(funcLocation);
     }
 
-    size_t outSize = TypeSize(outType);
     if (IsIntegral(outType))
     {
         // mov outLoc, rax
@@ -642,17 +728,17 @@ std::string TranslateExpression(FunctionContext * context,
     // side effect: use stack/reg to compute value, store in stack/reg
 
     ASSERT(expression && expression->type > BEGIN_EXPRESSION && expression->type < END_EXPRESSION);
-    std::string s;
+    std::string s = "; " + NodeDebugString(expression) + "\n";
 
     ExpressionIntention intent = context->currentIntention.back();
     Type *      outType = expression->expr.type;
     size_t      outSize = TypeSize(outType);
     Location    outLoc = expression->expr.loc;
 
-    Location    tmpLoc = GetSwapLocation(context);
+    Location    tmpLoc = GetSpillLocation(context, 0);
 
     // Each expression code block should
-    // 1. visit children (eval order, shortcut effect)
+    // 1. visit children (eval order, shortcut effect, save register value to spill zone)
     // 2. get and check children loc/type/size
     // 3. generate code
     // 4. mask non-volatile registers
@@ -668,45 +754,23 @@ std::string TranslateExpression(FunctionContext * context,
     }
     else if (expression->type == EXPR_CALL)
     {
-        // visit children
-        for (Node * child = expression->down;
-                child;
-                child = child->right)
-        {
-            s += TranslateExpression(context, child);
-        }
+        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
 
-        Type * functionType = expression->down->expr.type;
-        Location functionLoc = expression->down->expr.loc;
-        std::vector<Type *> argumentTypes;
-        std::vector<Location> argumentLocations;
-
-        for (Node * argumentNode = expression->down->right;
-             argumentNode;
-             argumentNode = argumentNode->right)
-        {
-            argumentTypes.push_back(argumentNode->expr.type);
-            argumentLocations.push_back(argumentNode->expr.loc);
-        }
-
-        s += TranslateCallExpression(functionType,
-                                     functionLoc,
-                                     argumentTypes,
-                                     argumentLocations,
+        s += TranslateCallExpression(context,
+                                     expression,
                                      outType,
+                                     outSize,
                                      outLoc);
     }
-    else if (expression->type == EXPR_CVT_NOOP)
+    else if (expression->type == EXPR_CVT_REINTERP)
     {
-        // visit children
-        s += TranslateExpression(context, expression->down);
+        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
 
         // do nothing
     }
-    else if (expression->type == EXPR_CVT_I2I)
+    else if (expression->type == EXPR_CVT_SI2SI)
     {
-        // visit children
-        s += TranslateExpression(context, expression->down);
+        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
 
         ASSERT(IsInt(outType));
 
@@ -740,10 +804,9 @@ std::string TranslateExpression(FunctionContext * context,
                 Code::MOV2(outLoc, RAX, outSize);
         }
     }
-    else if (expression->type == EXPR_CVT_F2I)
+    else if (expression->type == EXPR_CVT_F2SI)
     {
-        // visit children
-        s += TranslateExpression(context, expression->down);
+        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
 
         ASSERT(IsInt(outType));
 
@@ -795,8 +858,7 @@ std::string TranslateExpression(FunctionContext * context,
     }
     else if (expression->type == EXPR_CVT_B2I)
     {
-        // visit children
-        s += TranslateExpression(context, expression->down);
+        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
 
         ASSERT(IsInt(outType));
 
@@ -831,8 +893,7 @@ std::string TranslateExpression(FunctionContext * context,
     }
     else if (expression->type == EXPR_CVT_F2F)
     {
-        // visit children
-        s += TranslateExpression(context, expression->down);
+        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
 
         ASSERT(IsFloating(outType));
 
@@ -873,10 +934,9 @@ std::string TranslateExpression(FunctionContext * context,
             ASSERT(false);
         }
     }
-    else if (expression->type == EXPR_CVT_I2F)
+    else if (expression->type == EXPR_CVT_SI2F)
     {
-        // visit children
-        s += TranslateExpression(context, expression->down);
+        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
 
         ASSERT(IsFloating(outType));
 
@@ -934,8 +994,7 @@ std::string TranslateExpression(FunctionContext * context,
     }
     else if (expression->type == EXPR_CVT_B2F)
     {
-        // visit children
-        s += TranslateExpression(context, expression->down);
+        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
 
         ASSERT(IsFloating(outType));
 
@@ -981,8 +1040,7 @@ std::string TranslateExpression(FunctionContext * context,
     }
     else if (expression->type == EXPR_CVT_I2B)
     {
-        // visit children
-        s += TranslateExpression(context, expression->down);
+        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
 
         ASSERT(IsBool(outType));
 
@@ -1006,8 +1064,7 @@ std::string TranslateExpression(FunctionContext * context,
     }
     else if (expression->type == EXPR_CVT_F2B)
     {
-        // visit children
-        s += TranslateExpression(context, expression->down);
+        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
 
         ASSERT(IsBool(outType));
 
@@ -1033,8 +1090,8 @@ std::string TranslateExpression(FunctionContext * context,
                 Code::MOVSS1_RCX(XMM0, inLoc, inSize) +
                 "movss " + XMM(1) + ", " + X64LocationString(LocateFloat(context->constantContext, 0.0f), inSize) + "\n" +
                 "cmpness " + XMM(0) + ", " + XMM(1) + "\n" +
-                "movss " + X64LocationString(GetSwapLocation(context), inSize) + ", " + XMM(0) + "\n" +
-                "mov " + AX(inSize) + ", " + X64LocationString(GetSwapLocation(context), inSize) + "\n" +
+                "movss " + X64LocationString(tmpLoc, inSize) + ", " + XMM(0) + "\n" +
+                "mov " + AX(inSize) + ", " + X64LocationString(tmpLoc, inSize) + "\n" +
                 Code::MOV2(outLoc, RAX, outSize);
         }
         else if (inSize == 8)
@@ -1043,8 +1100,8 @@ std::string TranslateExpression(FunctionContext * context,
                 Code::MOVSS1_RCX(XMM0, inLoc, inSize) +
                 "movsd " + XMM(1) + ", " + X64LocationString(LocateFloat(context->constantContext, 0.0f), inSize) + "\n" +
                 "cmpnesd " + XMM(0) + ", " + XMM(1) + "\n" +
-                "movsd " + X64LocationString(GetSwapLocation(context), inSize) + ", " + XMM(0) + "\n" +
-                "mov " + AX(inSize) + ", " + X64LocationString(GetSwapLocation(context), inSize) + "\n" +
+                "movsd " + X64LocationString(tmpLoc, inSize) + ", " + XMM(0) + "\n" +
+                "mov " + AX(inSize) + ", " + X64LocationString(tmpLoc, inSize) + "\n" +
                 Code::MOV2(outLoc, RAX, outSize);
         }
         else
@@ -1055,8 +1112,7 @@ std::string TranslateExpression(FunctionContext * context,
     }
     else if (expression->type == EXPR_BOOL_NOT)
     {
-        // visit children
-        s += TranslateExpression(context, expression->down);
+        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
 
         ASSERT(IsBool(outType));
 
@@ -1077,9 +1133,7 @@ std::string TranslateExpression(FunctionContext * context,
     else if (expression->type == EXPR_BOOL_AND ||
              expression->type == EXPR_BOOL_OR)
     {
-        // visit children
-        s += TranslateExpression(context, expression->down);
-        s += TranslateExpression(context, expression->down->right);
+        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
 
         ASSERT(IsBool(outType));
 
@@ -1090,6 +1144,8 @@ std::string TranslateExpression(FunctionContext * context,
         Location    inLoc2 = expression->down->right->expr.loc;
         Type *      inType2 = expression->down->right->expr.type;
         size_t      inSize2 = TypeSize(inType2);
+
+        // No need to load spill
 
         ASSERT(IsBool(inType1) && IsBool(inType2));
 
@@ -1111,13 +1167,12 @@ std::string TranslateExpression(FunctionContext * context,
              op     + AX(1) + ", " + X64LocationString(inLoc2, 1) + "\n" +
              "mov " + X64LocationString(outLoc, 1) + ", " + AX(1) + "\n";
     }
-    else if (expression->type == EXPR_INEG ||
+    else if (expression->type == EXPR_SINEG ||
              expression->type == EXPR_INOT ||
              expression->type == EXPR_IINC ||
              expression->type == EXPR_IDEC)
     {
-        // visit children
-        s += TranslateExpression(context, expression->down);
+        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
 
         ASSERT(IsInt(outType) && outSize >= 4);
 
@@ -1134,7 +1189,7 @@ std::string TranslateExpression(FunctionContext * context,
         std::string op;
         switch (expression->type)
         {
-            case EXPR_INEG: op = "neg "; break;
+            case EXPR_SINEG: op = "neg "; break;
             case EXPR_INOT: op = "not "; break;
             case EXPR_IINC: op = "inc "; break;
             case EXPR_IDEC: op = "dec "; break;
@@ -1158,17 +1213,15 @@ std::string TranslateExpression(FunctionContext * context,
              expression->type == EXPR_IXOR ||
              expression->type == EXPR_IOR)
     {
-        // visit children
-        s += TranslateExpression(context, expression->down);
-        s += TranslateExpression(context, expression->down->right);
+        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
 
         ASSERT(IsInt(outType));
 
-        Location    inLoc1 = expression->down->expr.loc;
+        Location    inLoc1 = {NO_WHERE}; // may spill, set later
         Type *      inType1 = expression->down->expr.type;
         size_t      inSize1 = TypeSize(inType1);
 
-        Location    inLoc2 = expression->down->right->expr.loc;
+        Location    inLoc2 = {NO_WHERE}; // may spill, set later
         Type *      inType2 = expression->down->right->expr.type;
         size_t      inSize2 = TypeSize(inType2);
 
@@ -1202,8 +1255,10 @@ std::string TranslateExpression(FunctionContext * context,
             // mov rax, inLoc1
             // op  inLoc2
             // mov outLoc, result
+            s += LoadSpillAndGetLocation(context, expression, 0, &inLoc1);
+            s += Code::MOV1_RCX(RAX, inLoc1, width);
+            s += LoadSpillAndGetLocation(context, expression, 1, &inLoc2);
             s +=
-                Code::MOV1_RCX(RAX, inLoc1, width) +
                 op + X64LocationString(inLoc2, width) + "\n" +
                 Code::MOV2(outLoc, resultReg, width);
         }
@@ -1212,8 +1267,10 @@ std::string TranslateExpression(FunctionContext * context,
             // mov rax, inLoc1
             // op  rax, inLoc2
             // mov outLoc, rax
+            s += LoadSpillAndGetLocation(context, expression, 0, &inLoc1);
+            s += Code::MOV1_RCX(RAX, inLoc1, width);
+            s += LoadSpillAndGetLocation(context, expression, 1, &inLoc2);
             s +=
-                Code::MOV1_RCX(RAX, inLoc1, width) +
                 op + AX(width) + ", " + X64LocationString(inLoc2, width) + "\n" +
                 Code::MOV2(outLoc, RAX, width);
         }
@@ -1221,17 +1278,15 @@ std::string TranslateExpression(FunctionContext * context,
     else if (expression->type == EXPR_ISHL ||
              expression->type == EXPR_ISHR)
     {
-        // visit children
-        s += TranslateExpression(context, expression->down);
-        s += TranslateExpression(context, expression->down->right);
+        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
 
         ASSERT(IsInt(outType));
 
-        Location    inLoc1 = expression->down->expr.loc;
+        Location    inLoc1 = {NO_WHERE}; // may spill, set later
         Type *      inType1 = expression->down->expr.type;
         size_t      inSize1 = TypeSize(inType1);
 
-        Location    inLoc2 = expression->down->right->expr.loc;
+        Location    inLoc2 = {NO_WHERE}; // may spill, set later
         Type *      inType2 = expression->down->right->expr.type;
         size_t      inSize2 = TypeSize(inType2);
 
@@ -1256,9 +1311,12 @@ std::string TranslateExpression(FunctionContext * context,
         // mov cl, <tmp>
         // op  rax, cl
         // mov outLoc, rax
+        s += LoadSpillAndGetLocation(context, expression, 1, &inLoc2);
         s +=
             Code::MOV1_RCX(RAX, inLoc2, 1) +
-            Code::MOV2(tmpLoc, RAX, 1) +
+            Code::MOV2(tmpLoc, RAX, 1);
+        s += LoadSpillAndGetLocation(context, expression, 0, &inLoc1);
+        s +=
             Code::MOV1_RCX(RAX, inLoc1, width) +
             Code::MOV1(RCX, tmpLoc, 1) +
             op + AX(width) + ", " + CX(1) + "\n" +
@@ -1271,17 +1329,15 @@ std::string TranslateExpression(FunctionContext * context,
              expression->type == EXPR_IGE ||
              expression->type == EXPR_IGT)
     {
-        // visit children
-        s += TranslateExpression(context, expression->down);
-        s += TranslateExpression(context, expression->down->right);
+        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
 
         ASSERT(IsBool(outType));
 
-        Location    inLoc1 = expression->down->expr.loc;
+        Location    inLoc1 = {NO_WHERE}; // may spill, set later
         Type *      inType1 = expression->down->expr.type;
         size_t      inSize1 = TypeSize(inType1);
 
-        Location    inLoc2 = expression->down->right->expr.loc;
+        Location    inLoc2 = {NO_WHERE}; // may spill, set later
         Type *      inType2 = expression->down->right->expr.type;
         size_t      inSize2 = TypeSize(inType2);
 
@@ -1310,8 +1366,10 @@ std::string TranslateExpression(FunctionContext * context,
         // mov rcx, 1
         // cmovXX rax, rcx
         // mov outLoc, rax
+        s += LoadSpillAndGetLocation(context, expression, 0, &inLoc1);
+        s += Code::MOV1_RCX(RAX, inLoc1, width);
+        s += LoadSpillAndGetLocation(context, expression, 1, &inLoc2);
         s +=
-            Code::MOV1_RCX(RAX, inLoc1, width) +
             Code::MOV1_RCX(RDX, inLoc2, width) +
             "cmp " + AX(width) + ", " + DX(width) + "\n" +
             "mov " + AX(1) + ", " + IntegerToHexString(0) + "\n" +
@@ -1321,8 +1379,7 @@ std::string TranslateExpression(FunctionContext * context,
     }
     else if (expression->type == EXPR_FNEG)
     {
-        // visit children
-        s += TranslateExpression(context, expression->down);
+        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
 
         ASSERT(IsFloating(outType) && outSize == 4);
 
@@ -1349,18 +1406,16 @@ std::string TranslateExpression(FunctionContext * context,
              expression->type == EXPR_FMUL ||
              expression->type == EXPR_FDIV)
     {
-        // visit children
-        s += TranslateExpression(context, expression->down);
-        s += TranslateExpression(context, expression->down->right);
+        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
 
         ASSERT(IsFloating(outType) && outSize == 4);
 
-        Location    inLoc1 = expression->down->expr.loc;
+        Location    inLoc1 = {NO_WHERE}; // may spill, set later
         Type *      inType1 = expression->down->expr.type;
         size_t      inSize1 = TypeSize(inType1);
 
-        Location    inLoc2 = expression->down->expr.loc;
-        Type *      inType2 = expression->down->expr.type;
+        Location    inLoc2 = {NO_WHERE}; // may spill, set later
+        Type *      inType2 = expression->down->right->expr.type;
         size_t      inSize2 = TypeSize(inType2);
 
         ASSERT(IsFloating(inType1) && IsFloating(inType2));
@@ -1383,8 +1438,10 @@ std::string TranslateExpression(FunctionContext * context,
         // movss xmm1, inLoc2
         // op    xmm0, xmm1
         // movss outLoc, xmm0
+        s += LoadSpillAndGetLocation(context, expression, 0, &inLoc1);
+        s += Code::MOVSS1_RCX(XMM0, inLoc1, width);
+        s += LoadSpillAndGetLocation(context, expression, 1, &inLoc2);
         s +=
-            Code::MOVSS1_RCX(XMM0, inLoc1, width) +
             Code::MOVSS1_RCX(XMM1, inLoc2, width) +
             op + XMM(0) + ", " + XMM(1) + "\n" +
             Code::MOVSS2(outLoc, XMM0, width);
@@ -1396,17 +1453,15 @@ std::string TranslateExpression(FunctionContext * context,
              expression->type == EXPR_FGE || 
              expression->type == EXPR_FGT)
     {
-        // visit children
-        s += TranslateExpression(context, expression->down);
-        s += TranslateExpression(context, expression->down->right);
+        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
 
         ASSERT(IsBool(outType));
 
-        Location    inLoc1 = expression->down->expr.loc;
+        Location    inLoc1 = {NO_WHERE}; // may spill, set later
         Type *      inType1 = expression->down->expr.type;
         size_t      inSize1 = TypeSize(inType1);
 
-        Location    inLoc2 = expression->down->right->expr.loc;
+        Location    inLoc2 = {NO_WHERE}; // may spill, set later
         Type *      inType2 = expression->down->right->expr.type;
         size_t      inSize2 = TypeSize(inType2);
 
@@ -1437,8 +1492,10 @@ std::string TranslateExpression(FunctionContext * context,
         // mov   rcx, 1
         // cmovne rax, rcx
         // mov   outLoc, rax
+        s += LoadSpillAndGetLocation(context, expression, 0, &inLoc1);
+        s += Code::MOVSS1_RCX(XMM0, inLoc1, width);
+        s += LoadSpillAndGetLocation(context, expression, 1, &inLoc2);
         s +=
-            Code::MOVSS1_RCX(XMM0, inLoc1, width) +
             Code::MOVSS1_RCX(XMM1, inLoc2, width) +
             op + XMM(0) + ", " + XMM(1) + "\n" +
             Code::MOVSS2(tmpLoc, XMM0, width) +
@@ -1448,20 +1505,20 @@ std::string TranslateExpression(FunctionContext * context,
             "cmovne "+ AX(2) + ", " + CX(2) + "\n" +
             "mov "   + X64LocationString(outLoc, 1) + ", " + AX(1) + "\n";
     }
-    else if (expression->type == EXPR_PADD ||
-             expression->type == EXPR_PSUB)
+    else if (expression->type == EXPR_PADDSI ||
+             expression->type == EXPR_PADDUI ||
+             expression->type == EXPR_PSUBSI ||
+             expression->type == EXPR_PSUBUI)
     {
-        // visit children
-        s += TranslateExpression(context, expression->down);
-        s += TranslateExpression(context, expression->down->right);
+        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
 
         ASSERT(IsPointerToObject(outType));
 
-        Location    inLoc1 = expression->down->expr.loc;
+        Location    inLoc1 = {NO_WHERE}; // may spill, set later
         Type *      inType1 = expression->down->expr.type;
         size_t      inSize1 = TypeSize(inType1);
 
-        Location    inLoc2 = expression->down->right->expr.loc;
+        Location    inLoc2 = {NO_WHERE}; // may spill, set later
         Type *      inType2 = expression->down->right->expr.type;
         size_t      inSize2 = TypeSize(inType2);
 
@@ -1471,35 +1528,36 @@ std::string TranslateExpression(FunctionContext * context,
 
         ASSERT(width == inSize1 && width == inSize2);
 
-        int         shiftStep = (expression->type == EXPR_PADD)
-                                ? static_cast<int>(TypeSize(AsPointer(outType)->target))
-                                : -static_cast<int>(TypeSize(AsPointer(outType)->target));
+        int64_t     shiftStep = (expression->type == EXPR_PADDSI)
+                                ? static_cast<int64_t>(TypeSize(AsPointer(outType)->target))
+                                : -static_cast<int64_t>(TypeSize(AsPointer(outType)->target));
 
         // mov rax, inLoc2
         // mov rcx, shiftStep
         // imul rcx
         // add rax, inLoc1
         // mov outLoc, rax
+        s += LoadSpillAndGetLocation(context, expression, 1, &inLoc2);
         s +=
             Code::MOV1_RCX(RAX, inLoc2, width) +
             "mov " + CX(width) + ", " + IntegerToHexString(shiftStep) + "\n" +
-            "imul " + CX(width) + "\n" +
+            "imul " + CX(width) + "\n";
+        s += LoadSpillAndGetLocation(context, expression, 0, &inLoc1);
+        s +=
             Code::ADD_RCX(RAX, inLoc1, width) +
             Code::MOV2(outLoc, RAX, width);
     }
     else if (expression->type == EXPR_PDIFF)
     {
-        // visit children
-        s += TranslateExpression(context, expression->down);
-        s += TranslateExpression(context, expression->down->right);
+        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
 
         ASSERT(IsPtrDiffType(outType));
 
-        Location    inLoc1 = expression->down->expr.loc;
+        Location    inLoc1 = {NO_WHERE}; // may spill, set later
         Type *      inType1 = expression->down->expr.type;
         size_t      inSize1 = TypeSize(inType1);
 
-        Location    inLoc2 = expression->down->right->expr.loc;
+        Location    inLoc2 = {NO_WHERE}; // may spill, set later
         Type *      inType2 = expression->down->right->expr.type;
         size_t      inSize2 = TypeSize(inType2);
 
@@ -1521,17 +1579,18 @@ std::string TranslateExpression(FunctionContext * context,
         // mov rcx, objSize
         // div rcx
         // mov outLoc, rax
+        s += LoadSpillAndGetLocation(context, expression, 0, &inLoc1);
+        s += Code::MOV1_RCX(RAX, inLoc1, width);
+        s += LoadSpillAndGetLocation(context, expression, 1, &inLoc2);
         s +=
-            Code::MOV1_RCX(RAX, inLoc1, width) +
             Code::SUB_RCX(RAX, inLoc2, width) +
             "mov " + CX(width) + ", " + IntegerToHexString(objSize) + "\n" +
             "div " + CX(width) + "\n" +
             Code::MOV2(outLoc, RAX, width);
     }
-    else if (expression->type == EXPR_PVAL)
+    else if (expression->type == EXPR_PIND)
     {
-        // visit children
-        s += TranslateExpression(context, expression->down);
+        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
 
         Location    inLoc = expression->down->expr.loc;
         Type *      inType = expression->down->expr.type;
@@ -1549,9 +1608,7 @@ std::string TranslateExpression(FunctionContext * context,
              expression->type == EXPR_PGE ||
              expression->type == EXPR_PGT)
     {
-        // visit children
-        s += TranslateExpression(context, expression->down);
-        s += TranslateExpression(context, expression->down->right);
+        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
 
         ASSERT(IsBool(outType));
 
@@ -1588,8 +1645,10 @@ std::string TranslateExpression(FunctionContext * context,
         // mov rcx, 1
         // cmovXX rax, rcx
         // mov outLoc, rax
+        s += LoadSpillAndGetLocation(context, expression, 0, &inLoc1);
+        s += Code::MOV1_RCX(RAX, inLoc1, width);
+        s += LoadSpillAndGetLocation(context, expression, 1, &inLoc2);
         s +=
-            Code::MOV1_RCX(RAX, inLoc1, width) +
             Code::MOV1_RCX(RDX, inLoc2, width) +
             "cmp " + AX(width) + ", " + DX(width) + "\n" +
             "mov " + AX(1) + ", " + IntegerToHexString(0) + "\n" +
@@ -1597,10 +1656,9 @@ std::string TranslateExpression(FunctionContext * context,
             cmov   + AX(2) + ", " + CX(2) + "\n" +
             Code::MOV2(outLoc, RAX, 1);
     }
-    else if (expression->type == EXPR_MADDR)
+    else if (expression->type == EXPR_PNEW)
     {
-        // visit children
-        s += TranslateExpression(context, expression->down);
+        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
 
         ASSERT(IsPointer(outType));
 
@@ -1618,15 +1676,13 @@ std::string TranslateExpression(FunctionContext * context,
     }
     else if (expression->type == EXPR_MCOPY)
     {
-        // visit children
-        s += TranslateExpression(context, expression->down);
-        s += TranslateExpression(context, expression->down->right);
+        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
 
-        Location    inLoc1 = expression->down->expr.loc;
+        Location    inLoc1 = {NO_WHERE}; // may spill, set later
         Type *      inType1 = expression->down->expr.type;
         size_t      inSize1 = TypeSize(inType1);
 
-        Location    inLoc2 = expression->down->right->expr.loc;
+        Location    inLoc2 = {NO_WHERE}; // may spill, set later
         Type *      inType2 = expression->down->right->expr.type;
         size_t      inSize2 = TypeSize(inType2);
 
@@ -1644,9 +1700,10 @@ std::string TranslateExpression(FunctionContext * context,
 
             // mov rax, inLoc2
             // mov inLoc1, rax
-            s +=
-                Code::MOV1_RCX(RAX, inLoc2, width) +
-                Code::MOV3_RCX(inLoc1, RAX, width);
+            s += LoadSpillAndGetLocation(context, expression, 1, &inLoc2);
+            s += Code::MOV1_RCX(RAX, inLoc2, width);
+            s += LoadSpillAndGetLocation(context, expression, 0, &inLoc1);
+            s += Code::MOV3_RCX(inLoc1, RAX, width);
         }
         else
         {
@@ -1658,9 +1715,11 @@ std::string TranslateExpression(FunctionContext * context,
             // mov rsi, rcx
             // mov rcx, objSize
             // rep movsb
+            s += LoadSpillAndGetLocation(context, expression, 0, &inLoc1);
+            s += Code::LEA_RCX(RAX, inLoc1);
+            s += LoadSpillAndGetLocation(context, expression, 1, &inLoc2);
+            s += Code::LEA_RCX(RCX, inLoc2);
             s +=
-                Code::LEA_RCX(RAX, inLoc1) +
-                Code::LEA_RCX(RCX, inLoc2) +
                 "mov " + DI(width) + ", " + AX(width) + "\n" +
                 "mov " + SI(width) + ", " + CX(width) + "\n" +
                 "mov " + CX(width) + ", " + IntegerToHexString(objSize) + "\n" +
@@ -1672,8 +1731,7 @@ std::string TranslateExpression(FunctionContext * context,
     }
     else if (expression->type == EXPR_MDUP)
     {
-        // visit children
-        s += TranslateExpression(context, expression->down);
+        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
 
         Location    inLoc = expression->down->expr.loc;
         Type *      inType = expression->down->expr.type;
@@ -1719,19 +1777,18 @@ std::string TranslateExpression(FunctionContext * context,
             AssertRegisterMask(context, RSI_MASK);
         }
     }
-    else if (expression->type == EXPR_MADD)
+    else if (expression->type == EXPR_MADDSI ||
+             expression->type == EXPR_MADDUI)
     {
-        // visit children
-        s += TranslateExpression(context, expression->down);
-        s += TranslateExpression(context, expression->down->right);
+        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
 
         ASSERT(IsPointer(outType));
 
-        Location    inLoc1 = expression->down->expr.loc;
+        Location    inLoc1 = {NO_WHERE}; // may spill, set later
         Type *      inType1 = expression->down->expr.type;
         size_t      inSize1 = TypeSize(inType1);
 
-        Location    inLoc2 = expression->down->right->expr.loc;
+        Location    inLoc2 = {NO_WHERE}; // may spill, set later
         Type *      inType2 = expression->down->right->expr.type;
         size_t      inSize2 = TypeSize(inType2);
 
@@ -1744,8 +1801,10 @@ std::string TranslateExpression(FunctionContext * context,
         // mov rax, inLoc1
         // add rax, inLoc2
         // mov outLoc, rax
+        s += LoadSpillAndGetLocation(context, expression, 0, &inLoc1);
+        s += Code::MOV1_RCX(RAX, inLoc1, width);
+        s += LoadSpillAndGetLocation(context, expression, 1, &inLoc2);
         s +=
-            Code::MOV1_RCX(RAX, inLoc1, width) +
             Code::ADD_RCX(RAX, inLoc2, width) +
             Code::MOV2(outLoc, RAX, width);
     }
@@ -1754,10 +1813,7 @@ std::string TranslateExpression(FunctionContext * context,
         // TODO: impl condition expr
         ASSERT(false);
 
-        // visit children
-        s += TranslateExpression(context, expression->down);
-        s += TranslateExpression(context, expression->down->right);
-        s += TranslateExpression(context, expression->down->right->right);
+        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
 
         Location    condLoc = expression->down->expr.loc;
         Type *      condType = expression->down->expr.type;
@@ -1859,13 +1915,7 @@ std::string TranslateExpression(FunctionContext * context,
     }
     else if (expression->type == EXPR_ELIST)
     {
-        // visit children
-        for (Node * child = expression->down;
-             child;
-             child = child->right)
-        {
-            s += TranslateExpression(context, child);
-        }
+        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
 
         Node *      lastChild = LastChild(expression);
         Location    inLoc = lastChild->expr.loc;
@@ -1915,10 +1965,10 @@ std::string TranslateExpression(FunctionContext * context,
             }
         }
     }
-    //else
-    //{
-    //    ASSERT(false);
-    //}
+    else
+    {
+        std::cout << "Translation: Skip expr " << NodeDebugString(expression) << std::endl;
+    }
 
     return s;
 }
@@ -2200,6 +2250,7 @@ void TranslateFunctionContext(x64Program * program,
 
     // prolog: save arg, save reg, alloc stack
     PrepareStack(context);
+    text += StackLayoutDebugString(context);
     text += "push rbp\n";
     text += "mov rbp, rsp\n";
     text += "push rsi\n";

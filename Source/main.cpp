@@ -98,6 +98,8 @@ int main(int argc, char *argv[])
     {
         for (int i = 1; i < argc; ++i)
         {
+            std::cout << "Input: " << argv[i] << std::endl;
+
             std::string sourceCode = GetFileContent(argv[i]);
             std::string destCode = Compile(sourceCode);
 
@@ -108,6 +110,7 @@ int main(int argc, char *argv[])
     }
     else
     {
+        std::cout << "Input: " << "C:\\Users\\celsi\\Documents\\Github\\jcc\\Test\\Simple.txt" << std::endl;
         std::string sourceCode = GetFileContent("C:\\Users\\celsi\\Documents\\Github\\jcc\\Test\\Simple.txt");
         (void)Compile(sourceCode);
     }
