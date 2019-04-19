@@ -2253,6 +2253,26 @@ void TranslateFunctionContext(x64Program * program,
     text += StackLayoutDebugString(context);
     text += "push rbp\n";
     text += "mov rbp, rsp\n";
+    {
+        ParameterPassingCalleeProtocol calleeProtocol(context->functionType);
+        bool isRVA = calleeProtocol.IsReturnValueAddressAsFirstParameter();
+        size_t begin = isRVA ? 1 : 0;
+        size_t end = Min(4ull, calleeProtocol.ParameterCount());
+        for (size_t callstackIndex = begin, argumentIndex = 0;
+             callstackIndex < end;
+             ++callstackIndex, ++argumentIndex)
+        {
+            Location argumentLoc = calleeProtocol.GetParameterLocation(callstackIndex);
+            if (argumentLoc.type == REGISTER)
+            {
+                Location argumentSaveLoc;
+                argumentSaveLoc.type = BP_OFFSET;
+                argumentSaveLoc.offsetValue = 16 + 8 * callstackIndex;
+                size_t width = TypeSize(context->functionType->memberType[argumentIndex]);
+                text += "mov " + X64LocationString(argumentSaveLoc, width) + ", " + X64LocationString(argumentLoc, width) + " ; copy register argument\n";
+            }
+        }
+    }
     text += "push rsi\n";
     text += "push rdi\n";
     text += "sub rsp, " + IntegerToHexString(context->stackAllocSize) + "\n";

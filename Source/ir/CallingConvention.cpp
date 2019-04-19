@@ -211,6 +211,10 @@ bool ParameterPassingCalleeProtocol::IsReturnValueAddressAsFirstParameter()
     return rvaAsFirstParameter;
 }
 
+size_t ParameterPassingCalleeProtocol::ParameterCount()
+{
+    return parameterLocations.size();
+}
 
 Location GetReturnValueLocation(Type * type)
 {

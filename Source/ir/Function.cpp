@@ -288,7 +288,11 @@ Location GetArgumentLocation(FunctionType * functionType,
             ++argumentIndex;
     }
 
-    return calleeProtocol.GetParameterLocation(argumentIndex);
+    Location loc;
+    loc.type = BP_OFFSET;
+    loc.offsetValue = 16 + argumentIndex * 8;
+    return loc;
+    //return calleeProtocol.GetParameterLocation(argumentIndex);
 }
 
 Node * IdExpression(FunctionContext * context,
@@ -1659,7 +1663,8 @@ Node * DefaultStatement(FunctionContext * context)
 }
 
 void GetAllLocalObjectsInDefinitionContext(DefinitionContext * context,
-                                           std::vector<ObjectDefinition *> & objects)
+                                           std::vector<ObjectDefinition *> & objects,
+                                           bool isTopLevel = true)
 {
     ASSERT(context);
 
@@ -1676,10 +1681,10 @@ void GetAllLocalObjectsInDefinitionContext(DefinitionContext * context,
     }
 
     if (context->firstChild)
-        GetAllLocalObjectsInDefinitionContext(context->firstChild, objects);
+        GetAllLocalObjectsInDefinitionContext(context->firstChild, objects, false);
 
-    if (context->next)
-        GetAllLocalObjectsInDefinitionContext(context->next, objects);
+    if (!isTopLevel && context->next)
+        GetAllLocalObjectsInDefinitionContext(context->next, objects, false);
 }
 
 void ForExpressionTreeInFunctionBody(FunctionContext * context,

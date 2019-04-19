@@ -37,6 +37,8 @@ public:
 
     bool IsReturnValueAddressAsFirstParameter();
 
+    size_t ParameterCount();
+
 private:
     std::vector<Location> parameterLocations;
     std::vector<bool> parameterPassedByAddress;
