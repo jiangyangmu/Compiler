@@ -1,0 +1,283 @@
+
+* 程序生成 layer model
+
+	--- Definition & IR---
+
+	code generation
+
+	--- x64 ---
+
+	Scalar: cast, logical-op, inc/dec
+
+	Pointer: sub, array-subscripting [], func-call (), member-access ->, indirection *, rel-op, eq-op, simple-assign
+	Pointer X Integral: add/sub
+
+		Arithmetic: sign-op, add/sub, mul, div, rel-op, eq-op, simple-assign
+			Integral: bitwise-op, mod, repr-pure-binary-number-system
+			Floating: repr-unspecified
+
+	Function: func-call (), get-address &, sizeof
+	Array: array-subscripting [], get-address &, sizeof
+
+
+【 】 Stack Layout 的构建与使用
+
+	构建：
+		1. 局部空间
+			* 数据临时空间
+				> non-volatile 寄存器
+				> 局部变量、匿名临时变量、大返回值
+			* 调用临时空间
+				> 所有表达式的调用。
+
+	【 】 收集局部空间使用数据，计算 分配大小 + 数据位置映射。
+	begin function
+
+		begin expr
+
+		end expr
+
+	end function
+
+
+【 】 指令生成的输入数据、生成算法
+		* [x] 定义 存储位置 结构
+
+		* [-] 实现 汇编菜单
+
+		* [-] 实现 常量表 ConstantLocator
+
+		* [-] 实现 静态变量表 StaticObjectLocator
+
+		* [x] 实现 调用约定 ParameterLocator
+
+		* 实现 语句IR，表达式IR
+
+		* 实现 语句IR - 跳转链接
+
+		* 实现 表达式IR - 转换节点插入，汇编菜单校准
+
+		* 实现 PROC 存储分配器
+
+		* 实现 表达式IR - 数据存储位置
+
+		* 常量表、静态变量		=> 全局数据
+		* 语句IR、表达式IR	=> 指令
+
+	【 】 翻译过程
+		0. 数据
+
+			输入
+				AST，定义表树，类型表，x64汇编生成器
+				汇编菜单：把 {操作，类型*，位置*} 转换成汇编
+						 把 语句 转换成汇编
+			中间数据
+				PROC 存储分配器：分配栈空间、寄存器 => 存储位置（可能是 寄存器 或者 内存偏移）
+				
+				常量表：字符串常量，浮点数常量 => 唯一 Label
+				调用约定：{函数接口，参数位置，参数类型} => 存储位置（可能是 寄存器 或者 内存偏移）
+				静态变量表：{内部静态变量, ???} => 唯一 Label
+				
+				语句表达式树：语句 作为 流程控制机制，可能附带各种绕线信息，表达式 作为 数值计算机制，附带 操作、数据类型、数据位置 等信息。
+
+		1. 为翻译作准备
+
+			// 构建 语句 树
+			# 简单的从 AST 到 语句树
+
+			// 构建 表达式 树
+			# 从 AST 到 表达式树
+			# 叶子节点 的构建比较麻烦
+		
+		2. 为翻译语句做准备
+
+			// 收集 compound-stmt 里定义信息，完善 定义表 和 类型表
+
+			// 链接 流程控制 各种跳转
+			# 构建 break/continue/case/default/label 和 while*/switch/goto 的对应关系
+				switch -> case/default
+				goto -> label
+				break -> while*/switch
+				continue -> while*
+
+		
+		3. 为翻译表达式做准备
+
+			// 校准表达式，让其使用精确的 汇编菜单 语义
+			# 根据类型系统规则（隐式转换、UAC转换 等），插入转换节点
+			# 检验所有表达式节点都有 汇编菜单
+
+			// 确定 所有数据 的 存储位置
+			# 收集
+				1. 从 定义表 收集 外部变量、参数变量，内部静态变量、局部变量
+				2. 从 表达式 收集 临时变量、普通常量、字符串常量、浮点数常量、#使用到的变量#
+			# 用 常量表 管理 字符串常量、浮点数常量 并分配 Label。
+			# 用 静态变量表 管理 静态变量 并分配 Label。
+			# 用 PROC存储分配器 给 局部变量、临时变量 分配空间（计算偏移）。
+			# 确定位置
+				> 外部变量（直接 Label）
+				> 参数变量（查询 调用约定）
+				> 内部静态变量（用 特殊编码Label）
+				> 普通常量（直接嵌入指令）
+				> 字符串常量、浮点数常量（查 常量表Label）
+				> 局部变量（已分配好，通过偏移计算）
+				> 临时变量（已分配好，通过偏移计算）
+
+			// 此时	每个 内部节点 包含信息：操作，输出类型，输出位置
+			//     	每个 叶子节点 包含信息：输出类型，输出位置
+			// 每个 内部节点 的计算过程是，根据 {操作，叶子节点1输出类型，叶子节点1输出位置，叶子节点2输出类型，叶子节点2输出位置}，EMIT 汇编
+
+		4. 顺序执行翻译
+
+			// 语句的翻译非常直接，和表达式交互的地方也很简单，只有一种情况：根据数值决定是否跳转，跳到哪，而且这里的数值只能是整数或者浮点数，可以统一成只有整数，所以必然通过 RAX 传递。
+			// 表达式的翻译就是个 后序遍历 并调用对应的 汇编菜单 的过程。
+
+	【x】 输入
+		* 函数接口描述
+			# 返回类型，每个参数位置、类型
+		
+		* 语句表达式 IR
+			# 需要记录 语句 和 表达式 的结构
+			# 需要记录 break/continue/case/default/label 和 while*/switch/goto 的对应关系
+		
+		* 定义表
+		* 类型系统
+
+		执行环境
+		* 栈的状态
+		* 寄存器的状态
+
+		实现
+		* 用 存储管理器 记录/分配 栈和寄存器
+		* 用 字符串表 管理 字符常量（用 label 标记位置）
+		* 用 Label分配器 分配 label
+
+	【x】 语句翻译中的难点
+		需要什么输入数据，会输出什么数据，对应什么指令，怎么影响执行环境。
+
+		？为了支持 break/continue 的目标位置，需要管理 while*/switch 的起始位置，结束位置。
+			# Label 管理器：分配
+			# 上下文：当前是被 哪个 while*/switch 包着，它们的 Label 是什么
+		？为了支持 switch 的头部跳转代码，需要管理 switch 和 case/default 的对应关系，还导致代码不能顺序生成。
+			# Label 管理器：分配
+			# 上下文：当前是被 哪个 switch 包着，遇到 case/default 就关联。生成代码时，给每个 case/default 分配 Label，switch 头部代码根据和每个 case 值的比较结果，跳转到对应 Label。没有 default 默认跳出。
+
+		？语句结构需要存储的数据
+			# 子节点
+			# 定义表
+			# break/continue 目标节点
+			# switch 目标节点们
+
+		* expr-stmt
+		* expr-stmt X stmt-list
+		* expr-stmt X stmt-list X compound-stmt
+			> compound-stmt 会修改 定义表 和 类型信息。
+		* expr-stmt X stmt-list X compound-stmt X if*-stmt
+			> if 只是加一些 expr 和 test/jump 代码，包住内层代码。
+		* expr-stmt X stmt-list X compound-stmt X if*-stmt X while*-stmt
+			> while 只是加一些 expr 和 test/jump 代码，包住内层代码。
+			> for 只是一个多执行了些语句的 while。
+		* expr-stmt X stmt-list X compound-stmt X if*-stmt X while*-stmt X break/continue
+			> break/continue 要求 while 记住 起始点 和 结束点。这可以通过 labeling 机制解决。
+		* expr-stmt X stmt-list X compound-stmt X if*-stmt X while*-stmt X break/continue X return
+			> return 需要处理堆栈回收、寄存器复原的问题。
+		* expr-stmt X stmt-list X compound-stmt X if*-stmt X while*-stmt X break/continue X return X goto/label
+			> goto/label 可以利用 labeling 机制解决。
+			> goto 跳进跳出 if*，接着执行就好。
+			> goto 跳进跳出 while*，接着执行就好。
+			> goto 在各种嵌套层次中上蹿下跳，接着执行就好。
+		* expr-stmt X stmt-list X compound-stmt X if*-stmt X while*-stmt X break/continue X return X goto/label X switch/case/default
+			> case/default 会创建跳转点，switch 有些代码要计算然后跳转到这些位置。这可能是 while* 的中间，但没关系。
+			> case/default 和 switch 要关联起来。
+			> break 要求 switch 记住 结束点。
+			> goto 跳进跳出 switch，接着执行就好。
+
+	【x】 表达式翻译中的难点
+		需要什么输入数据，会输出什么数据（是否需要管理），对应什么指令，怎么影响执行环境。
+		# 输入数据：表达式树，类型信息，存储信息。
+
+		？局部变量的位置 是否应该让 定义表 管理
+		？临时变量的位置，返回值的位置 如何管理
+		？参数的位置信息 是否应该让 定义表 管理
+			# 各种变量的位置信息，由 寄栈存储管理器 单独管理
+		？字符串常量 如何管理
+			# 用一个全局的字符串表
+		！将参数根据调用约定放到指定位置 的代码
+		？如何处理 取值 和 取地址 语义（所有左值都有这个问题）
+			# 通过 build 过程的 DSL
+
+		？表达式结构需要存储的数据
+			# 子节点
+			# 操作
+			# 类型
+			# 位置
+
+		* id/const(int,float,string)
+			> 输入：查定义表获取数据位置
+			> 指令：常数直接嵌入指令
+			> 字符常量其实是个指针。
+			> 输出：字符串本身的内容要加入定义表？
+		* a[b]
+			> 指令：指针运算，根据元素大小，有个乘法
+		* a(p0, p1, ...)
+			> 指令：参数计算过程中，各个参数要临时放到栈上，所以还有个把 参数 复制到 对应位置的过程
+			> 指令：如果 a 不直接是名字，还要计算好放进寄存器
+			> 输出/指令：对于大的返回值，还需要预留空间，并把指针当成参数传递
+			> 指令：要把参数放到对应的 寄存器 和 栈上
+		* a.id
+			> 指令：地址计算
+		* a++, a--, ++a, --a
+			> 指令：对于指针、整数、浮点数，底层指令不一样
+		* &a
+			> 输入：对于外部变量，查定义表，直接用 label。
+			> 输入：对于全局变量，查定义表，直接用 label。
+			> 输入：对于参数，查定义表，参考调用约定，可能需要把寄存器参数先存入栈。
+			> 输入：对于局部变量，查定义表
+		* *a
+			> 解引用：根据上下文，可能是 赋值 或 取值。
+			> 赋值 则 返回地址。
+			> 取值 则 返回值。
+		* +a, -a
+			> 根据整数或者浮点数，执行不同的指令
+		* ~a
+			> 整数位操作
+		* !a
+			> 结果是布尔值
+		* sizeof a
+			> 常数，需要查类型系统，直接嵌入指令
+		* (type) a
+			> 最复杂的是 整数 与 浮点数 之间的转换
+		* a*b, a/b, a%b
+			> 乘除可以是整数，也可以是浮点数
+			> 取余一定是整数
+		* ...
+		* a?b:c
+			> 一个有返回值的 if
+		* a,b,c
+			> 一个有返回值的 stmt-list
+
+	【 】 表达式：构建 DSL
+
+	【 】 表达式：类型过滤与调整 DSL - 确保 OP 和 TYPE 的匹配合法，部分情况自动插入 CAST 节点
+
+		输入: TypeContext, ExpressionTree
+		过程：后序遍历节点，验证 OP 和 TYPE 的匹配，根据规则插入 CAST 节点。
+
+		bool	IsPointerToObject(Type *);
+		bool	IsIntegral(Type *);
+		bool	IsCallableObject(Type *); // function, pointer to function
+		size_t	OffsetOf(Type *, StringRef);
+		bool	IsScalar(Type *);
+		bool	IsAssignable(Type *);
+		bool	IsConst(Type *);
+		bool	IsAddressable(Type *);
+		bool	IsPointer(Type *);
+		Type *	MakeSizeof();
+		bool	IsArithmetic(Type *);
+
+		Node *	WrapperCastNode(Node *);
+
+	【 】 x64 recipe 验证 - 确保 OP 和 TYPE 的组合有对应汇编
+
+		struct Recipe { op, type, loc, ... }
+		FindRecipe(Recipe)

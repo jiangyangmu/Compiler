@@ -1,4 +1,4 @@
-C Grammar
+C Grammer
 
 ================ Translation Unit ===============
 
@@ -121,7 +121,7 @@ struct-declarator-list  := struct-declarator
                         || struct-declarator-list ',' struct-declarator
 
 struct-declarator       := declarator
-                        || [declarator] ':' constant-exprression            # bit-field! why declarator is optional?
+                        || [declarator] ':' constant-exprression
 
 enum-specifier          := 'enum' [identifier] '{' enumerator-list '}'
                         || 'enum' identifier
@@ -154,9 +154,6 @@ assign-expr             := cond-expr
 # IF E is unary-expr AND next() is assign-op -> [1]
 # ELSE -> [0]
 
-# a ? b1 : b2 ? c1 : c2;
-# C 里 cond-expr 是 rvalue，C++ 里是 lvalue
-# tricky here, why 'expr' and 'cond-expr' ??
 cond-expr               := OR-expr
                         || OR-expr '?' expr ':' cond-expr
 
@@ -205,7 +202,7 @@ cast-expr               := unary-expr
 # '(' type-name ')' => '(' typedef-name ')' => '(' identifer ')'
 # see namespace and name-bindings
 
-
+# unary-op := & * + - ~ !
 unary-expr              := postfix-expr
                         || '++' unary-expr
                         || '--' unary-expr
@@ -230,7 +227,6 @@ argument-expr-list      := assign-expr
                         || argument-expr-list ',' assign-expr
 
 constant-expr           := cond-expr
-# attr: const
 
 =============== Statement ===============
 
@@ -244,10 +240,6 @@ stmt                    := labeled-stmt
 stmt-list               := stmt
                         || stmt-list stmt
 
-                           # 注意这里，Label 是一个 identifier，不仅仅词法上符合，
-                           # 语法行为也符合，比如有 function-wise scope。
-                           # 而且，由于 Label: stmt 是一条语句，
-                           # 所以 Label 无法在全局域出现，只能在某个函数体内。
 labeled-stmt            := identifier ':' stmt
                         || 'case' constant-expr ':' stmt
                         || 'default' ':' stmt

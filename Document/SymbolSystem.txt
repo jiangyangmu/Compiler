@@ -1,0 +1,376 @@
+---------------------------------------------------------------------------------------------------
+Concepts
+
+[Symbol]
+
+	namespace	for disambiguate
+	scope		for restrict places a symbol can be used
+	linkage		multiple symble refer to the same object
+
+[Object]
+
+	storage		static/auto
+
+---------------------------------------------------------------------------------------------------
+Symbol building, type building, object building
+
+[side effects]
+1. type building, symbol building
+2. env creation, add symbol to env
+
+**3. symbol linking
+
+declaration-specifiers
+
+	storage-specifier	typedef			change symbol type: id => type-alias
+				extern/static		change symbol linkage
+				auto/register		<error>
+
+	type-qualifier		const			change type: can't modify
+				volatile			<error>
+
+	type-specifier		void/char/short/int/long/float/double/signed/unsigned
+							change type
+
+				struct/union		change type
+							change env: add tag
+							* query env
+
+				inner struct/union	change type
+							change env: add tag to the same env as outer struct/union
+							* query env
+
+				enum			change type
+							change env: add tag
+							change env: add enum constant
+							* query env
+
+declarator
+
+				pointer			change type
+
+				array			change type
+
+				id			change symbol
+							* query env
+
+				parameter-list		change type
+
+
+---------------------------------------------------------------------------------------------------
+Decide scope
+
+[generate/capture scopes]
+in file
+in struct/union body
+in parameter list
+in component statement
+
+[usage scope]
+to file end
+to block end
+in struct/union object space
+in function body	param/label
+
+---------------------------------------------------------------------------------------------------
+Decide symbol type, generate symbol, capture symbol
+* scope - Env tree
+* label/struct member id is not managed by Env
+
+// symbol types
+object id		obj/func/enum-constant
+type alias		typedef
+type tag		struct/union/enum
+member id		struct/union
+jump label		goto
+
+[in file]
+allowed storage:	ALL
+allowed qualifier:	ALL
+allowed specifier:	ALL
+generate
+	tag		struct/union/enum
+	id		obj/func
+	alias		typedef
+capture by environment
+	tag		struct/union/enum, inner struct/union/enum
+	id		obj/func
+	alias		typedef
+
+[in struct body]
+allowed storage:	NONE
+allowed qualifier:	ALL
+allowed specifier:	ALL
+generate
+	tag		inner struct/union/enum
+	member_id
+capture by struct/union definition
+	member_id
+
+[in parameter list]
+allowed storage:	register
+allowed qualifier:	ALL
+allowed specifier:	ALL
+generate
+	tag		struct/union/enum
+	id		obj/func
+capture by function environment
+	tag		struct/union/enum, inner struct/union/enum
+	id		obj/func
+
+[in compound statement]
+allowed storage:	ALL
+allowed qualifier:	ALL
+allowed specifier:	ALL
+generate
+	tag		struct/union/enum
+	id		obj/func
+	alias		typedef
+	label		goto
+capture by current environment
+	tag		struct/union/enum, inner struct/union/enum
+	id		obj/func
+	alias		typedef
+capture by function definition
+	label		goto
+
+
+Q: unique function declaration?
+
+void foo(struct bar { int i; } b);
+void foo(struct bar { int i; } b); // error: redefine foo
+
+---------------------------------------------------------------------------------------------------
+Linking multiple symbols, decide symbol storage, export symbol, x64
+
+[unique per translation unit]
+static	int foo;
+static	int bar();
+static	int barbar() { return 1; }
+void f() {
+	static	int foo;		// file scope 'foo' is hidden here
+	{
+		static	int foo;	// outer scope 'foo' is hidden here
+	}
+}
+
+[unique per program]
+// declaration
+extern	int foo;			// same as file scope 'foo', or external
+extern	int bar();			// same as file scope 'bar', or external
+	int bar();			// same as 'extern int bar();'
+void f() {
+	extern	int foo;		// same as file scope 'foo'
+	extern	int bar();		// same as file scope 'bar'
+		int bar();		// same as 'extern int bar();'
+}
+// declaration + definition
+	int foo;			// actually create the object, and export symbol
+extern	int barbar() { return 1; }	// actually create the object, and export symbol
+	int barbar() { return 1; }	// same as 'extern int barbar() {...}'
+* XXX: if there is definition, it must appears before use
+
+[unique per scope]
+// non-object
+typedef		int Foo;		// unique in current env
+FOO:		goto FOO;		// unique in function object
+struct		FOO {...}		// unique in current env (nested struct can NOT override/redefine)
+struct _	{ int foo; }		// unique in current struct member space (nested struct can still use)
+// function parameter
+void _		(int foo) {...}		// unique in function environment (nested block environment can override)
+// function local object
+void _()	{ int foo; }		// unique in current env
+void _()	{ {int bar;} }		// unique in current env
+
+Q: syntax tree to storage?
+
+ComputeStorage(scope, storage-token, obj/func-decl/func-defi)
+// in file
+'static' 				=> global, not export
+'extern' object				=> external
+'' object				=> global, export
+'extern'/'' func-decl			=> external
+'extern'/'' func-defi			=> global, export
+typedef *				=> none
+// in component statement
+'static' object				=> global, not export
+'extern' object				=> same as outer layer (not in parameter list), otherwise external
+'' object				=> local
+'extern'/'' func-decl			=> same as outer layer, otherwise external
+typedef *				=> none
+// in struct/union body
+*					=> none
+// in parameter list
+*					=> local
+
+Q: unique-per-translation-unit to x64?
+
+Allocate data, but no 'PUBLIC'
+
+Q: unique-per-program to x64?
+
+declaration		=>	EXTERN foo:DWORD
+				EXTERN bar:PROC
+declaration + definition=>	PUBLIC foo:DWORD
+				...allocate data... // in BSS or DATA, never COMM !!!
+				PUBLIC bar:PROC
+				...function...
+
+Q: how to access extern object defined in other files in x64?
+EXTERN foo:DWORD
+mov eax, DWORD PTR foo
+
+Q: how to access extern function defined in other files in x64?
+EXTERN bar:PROC
+call bar
+
+Q: unique-per-scope to x64?
+
+All on stack.
+
+Q: How to link symbols?
+
+Linking only happens on "extern" symbols, to find where they actually are.
+There are only two results:
+
+	A. link to a translation unit object
+
+	int foo;
+	extern int foo;
+	void f() {
+		extern int foo;
+		{
+			extern int foo;
+		}
+	}
+
+	B. link to an external object
+
+	extern int foo;
+	void f()  {
+		extern int foo;
+		{
+			extern int foo;
+		}
+	}
+
+	There is NO "link to a local object"
+
+	void f() {
+		int foo;
+		extern int foo; // same as file scope foo
+		{
+			extern int foo;  // same as file scope foo
+		}
+	}
+
+---------------------------------------------------------------------------------------------------
+Object to x64
+
+[Uninitialized Objects] _BSS + PUBLIC
+
+char		c;			c	BYTE	01H	DUP
+short		s;			s	WORD	01H	DUP
+int		i;			i	DWORD	01H	DUP
+long		l;			l	DWORD	01H	DUP
+long long	ll;			l	QWORD	01H	DUP
+float		f;			f	DWORD	01H	DUP
+double		d;			d	QWORD	01H	DUP
+void *		p;			p	QWORD	01H	DUP
+
+struct ST { int a; char b; }
+		st;			st	QWORD	01H	DUP
+struct ST2 { int a; long b; char c; }
+		st2;			st2	BYTE	0cH	DUP
+
+union UN { int a; char b; }
+		un;			un	DWORD	01H	DUP
+union UN2 { int a; long b; char c; }
+		un2;			un2	DWORD	01H	DUP
+
+int		arr_i[3];		arr_i	DWORD	03H	DUP
+struct ST	arr_st[3];		arr_st	QWORD	03H	DUP
+struct ST2	arr_st2[3];		arr_st2	BYTE	024H	DUP
+
+[Zero-Initialized Objects, Nonzero-Initialized Objects]
+
+int 		bss_i = 0;		PUBLIC bss_i
+					_BSS SEGMENT
+					init_i	DWORD	01H	DUP
+					_BSS ENDS
+
+int 		init_i = 3;		PUBLIC init_i
+					_DATA SEGMENT
+					init_i	DWORD	03H
+					_DATA ENDS
+
+struct ST { int a; char b; }
+		bss_st = { 0 };		PUBLIC bss_st
+					_BSS SEGMENT
+					bss_st	QWORD	01H	DUP
+					_BSS ENDS
+
+struct ST { int a; char b; }
+		bss_st = { 0, 0 };		PUBLIC bss_st
+					_BSS SEGMENT
+					bss_st	QWORD	01H	DUP
+					_BSS ENDS
+
+struct ST { int a; char b; }
+		init_st = { 0, 1 };		PUBLIC init_st
+					_DATA SEGMENT
+					init_st	DWORD	00H
+						BYTE	01H
+						ORG	$+3
+					_DATA ENDS
+
+struct ST2 { int a; char c; long b; }
+		init_st2 = { 0, 1, 2 }	PUBLIC init_st2
+					_DATA SEGMENT
+					init_st2	DWORD	00H
+						BYTE		01H
+						ORG		$+3
+						DWORD	02H
+						ORG		$+4		// 8 byte alignment
+					_DATA ENDS
+
+int		bss_arr_i[3] = { 0 };	PUBLIC bss_arr_i
+					_BSS SEGMENT
+					init_arr_i	DWORD	03H	DUP
+					_BSS ENDS
+
+int		bss_arr_i2[3] = { 0, 0 };	PUBLIC bss_arr_i2
+					_BSS SEGMENT
+					bss_arr_i2	DWORD	03H	DUP
+					_BSS ENDS
+
+int		init_arr_i[3] = { 0, 1 };	PUBLIC init_arr_i
+					_DATA SEGMENT
+					init_arr_i	DWORD	00H
+							DWORD	01H
+							ORG		$+4
+					_DATA ENDS
+
+struct ST	bss_arr_st[3] = { 0 };	PUBLIC bss_arr_st
+					_BSS SEGMENT
+					bss_arr_st	QWORD	03H	DUP
+					_BSS ENDS
+
+struct ST2	bss_arr_st2[3] = { 0 };	PUBLIC bss_arr_st2
+					_BSS SEGMENT
+					bss_arr_st2	BYTE		024H	DUP
+					_BSS ENDS
+
+struct ST2	init_arr_st2[3] = { 0,1,2,3 };
+					PUBLIC init_arr_st2
+					_DATA SEGMENT
+					init_arr_st2	DWORD	00H
+							BYTE		01H
+							ORG		$+3
+							DWORD	02H
+							DWORD	03H
+							ORG		$+8
+							ORG		$+12
+					_DATA ENDS
+
+

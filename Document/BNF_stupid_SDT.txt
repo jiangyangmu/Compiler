@@ -87,7 +87,7 @@ declarator-initializer	:=
 ================== Declarator ==================
 
 declarator		:=
-						{ new_type(); }
+							{ new_type(); }
 		[
 			pointer-list			{ type_merge(); }
 		]
@@ -96,46 +96,46 @@ declarator		:=
 		||	'(' declarator ')'
 		)
 		(
-						{ new_array(); }
+							{ new_array(); }
 			'['
 			[
 				constant-expr		{ array_set_size(int); }
 			]
 			']'
-						{ type_merge(); }
+							{ type_merge(); }
 		||
-						{ new_function(); }
+							{ new_function(); }
 			'(' [parameter-list] ')'
-						{ type_merge(); }
+							{ type_merge(); }
 		)*
-						{ type_merge(); // merge pointer }
+							{ type_merge(); // merge pointer }
 
 abstract-declarator	:=
-						{ new_type(); }
+							{ new_type(); }
 		[
 			pointer-list			{ type_merge(); }
 		]
-						{ new_type(); }
+							{ new_type(); }
 		[
-			'(' abstract-declarator ')'		{ type_merge(); }
+			'(' abstract-declarator ')'	{ type_merge(); }
 		]
 		(
-						{ new_array(); }
+							{ new_array(); }
 			'['
 			[
 				constant-expr		{ array_set_size(int); }
 			]
 			']'
-						{ type_merge(); }
+							{ type_merge(); }
 		||
-						{ new_function(); }
+							{ new_function(); }
 			'(' [parameter-list] ')'
-						{ type_merge(); }
+							{ type_merge(); }
 		)*
-						{ type_merge(); // merge pointer }
+							{ type_merge(); // merge pointer }
 
 parameter-list		:=
-						{ scope_begin(IN_PARAMETER_LIST); }
+							{ scope_begin(IN_PARAMETER_LIST); }
 		parameter-declaration
 		(
 			',' parameter-declaration
@@ -143,19 +143,19 @@ parameter-list		:=
 		(
 			',' '...'			{ function_set_varlist(); }
 		)?
-						{ scope_end(); }
+							{ scope_end(); }
 
 parameter-declaration	:=
-						{ specifier_qualifier_begin();
-						  storage_begin(); }
+							{ specifier_qualifier_begin();
+							  storage_begin(); }
 		declaration-specifiers
 		(
 			declarator
-						{ type_set_specifier_qualifier(specifier_qualifier_get());
-						  specifier_qualifier_end();
-						  // expect auto/register storage
-						  storage_end();
-						  function_add_parameter(id_pop(), type_pop()); }
+							{ type_set_specifier_qualifier(specifier_qualifier_get());
+							  specifier_qualifier_end();
+							  // expect auto/register storage
+							  storage_end();
+							  function_add_parameter(id_pop(), type_pop()); }
 		||
 			[abstract-declarator]		{// todo}
 		)
@@ -163,16 +163,16 @@ parameter-declaration	:=
 pointer-list		:=
 		pointer
 		(
-			pointer			{ type_merge(); }
+			pointer				{ type_merge(); }
 		)*
 
 pointer		:=
-		'*'				{ qualifier_begin(); }
+		'*'					{ qualifier_begin(); }
 		(type-qualifier)+
-						{ new_pointer();
-						  pointer_set_qualifier(qualifier_get());
-						  qualifier_end();
-						}
+							{ new_pointer();
+							  pointer_set_qualifier(qualifier_get());
+							  qualifier_end();
+							}
 
 // todo
 type-name		:=
@@ -200,10 +200,10 @@ type-qualifier		:=
 
 type-specifier		:=
 		   'void' || 'char' || 'short' || 'int' || 'long' || 'float' || 'double' || 'signed' || 'unsigned'
-						{ specifier_add(token); }
-		|| struct-or-union-specifier			{ specifier_add(struct, type); }
+							{ specifier_add(token); }
+		|| struct-or-union-specifier		{ specifier_add(struct, type); }
 		|| enum-specifier			{ specifier_add(enum, type); }
-		|| typedef-name			{ specifier_add(typedef, type); }
+		|| typedef-name				{ specifier_add(typedef, type); }
 
 
 struct-or-union-specifier
@@ -213,31 +213,31 @@ struct-or-union-specifier
 		identifier				{ struct_set_name(identifier); }
 		]
 		[
-			'{' (struct-declaration)+ '}'		{ struct_complete(); }
+			'{' (struct-declaration)+ '}'	{ struct_complete(); }
 		]
-						{ new_symbol();
-						  symbol_set_id(struct_get_name());
-						  symbol_set_symbol_type(tag);
-						  symbol_set_storage_type(none);
-						  symbol_set_object_type(type_top());
-						  env_add_symbol(symbol_pop());
-						}
+							{ new_symbol();
+							  symbol_set_id(struct_get_name());
+							  symbol_set_symbol_type(tag);
+							  symbol_set_storage_type(none);
+							  symbol_set_object_type(type_top());
+							  env_add_symbol(symbol_pop());
+							}
 
 struct-declaration	:=
-						{ specifier_qualifier_begin(); }
+							{ specifier_qualifier_begin(); }
 		(
 		type-specifier
 		||
 		type-qualifier
 		)+
 		struct-declarator
-						{ type_set_specifier_qualifier(specifier_qualifier_get());
-						  struct_add_member(id_pop(), type_pop()); }
+							{ type_set_specifier_qualifier(specifier_qualifier_get());
+							  struct_add_member(id_pop(), type_pop()); }
 		(
 			','
 			struct-declarator		{ ...same... }
 		)*
-		';'				{ specifier_qualifier_end(); }
+		';'					{ specifier_qualifier_end(); }
 
 struct-declarator	:=
 		[
@@ -248,20 +248,20 @@ struct-declarator	:=
 		]
 
 enum-specifier		:=
-		'enum'				{ new_enum(); }
+		'enum'					{ new_enum(); }
 		[
 		identifier				{ enum_set_name(identifier); }
 		]
 		[
 			'{'
 			enumeration-constant		{ enum_add_const(enum-constant);
-						  new_symbol();
-						  symbol_set_id(enum-constant);
-						  symbol_set_symbol_type(id);
-						  symbol_set_storage_type(none);
-						  symbol_set_object_type(type_top());
-						  env_add_symbol(symbol_pop());
-						}
+							  new_symbol();
+							  symbol_set_id(enum-constant);
+							  symbol_set_symbol_type(id);
+							  symbol_set_storage_type(none);
+							  symbol_set_object_type(type_top());
+							  env_add_symbol(symbol_pop());
+							}
 			[
 			'='
 			constant-expr			{ enum_set_const_value(...); } // TODO: const engine
@@ -271,18 +271,18 @@ enum-specifier		:=
 				enumeration-constant	{ ...same... }
 				[
 				'='
-				constant-expr	{ ...same... }
+				constant-expr		{ ...same... }
 				]
 			)*
-			'}'			{ enum_complete(); }
+			'}'				{ enum_complete(); }
 		]
-						{ new_symbol();
-						  symbol_set_id(enum_get_name());
-						  symbol_set_symbol_type(tag);
-						  symbol_set_storage_type(none);
-						  symbol_set_object_type(type_top());
-						  env_add_symbol(symbol_pop());
-						}
+							{ new_symbol();
+							  symbol_set_id(enum_get_name());
+							  symbol_set_symbol_type(tag);
+							  symbol_set_storage_type(none);
+							  symbol_set_object_type(type_top());
+							  env_add_symbol(symbol_pop());
+							}
 
 typedef-name		:=
 		identifier				{ type_push(env_find(identifier, type_alias)); }
@@ -304,14 +304,14 @@ expr		:=
 comma-expr		:=
 		assign-expr
 		(
-			',' assign-expr			{ expr_comma(expr_pop(), expr_pop()); }
+			',' assign-expr
 		)*
 
 assign-expr		:=
 		cond-expr
 		[
 			assign-op
-			assign-expr			{ expr_assign(op_pop(), expr_pop(), expr_pop()); }
+			assign-expr
 		]
 
 cond-expr		:=
