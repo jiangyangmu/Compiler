@@ -1,0 +1,42 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Include">
+      <UniqueIdentifier>{93c969f6-13e7-4a00-9b48-dd1f8fd8fbbe}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Test_Tokenizer">
+      <UniqueIdentifier>{a4a75548-9e8f-40ff-af7f-2c41358ad8c4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Test_Ast">
+      <UniqueIdentifier>{d6757d8c-10ff-43a3-9602-ad791a088361}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\Test\lex_test.cpp">
+      <Filter>Test_Tokenizer</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\testing\testing_main.cpp">
+      <Filter>Include</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\lex\tokenizer.cpp">
+      <Filter>Test_Tokenizer</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\ir\Ast.cpp">
+      <Filter>Test_Ast</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Test\AstUnitTest.cpp">
+      <Filter>Test_Ast</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\Source\testing\tester.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\lex\tokenizer.h">
+      <Filter>Test_Tokenizer</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\ir\Ast.h">
+      <Filter>Test_Ast</Filter>
+    </ClInclude>
+  </ItemGroup>
+</Project>

@@ -1,0 +1,111 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClInclude Include="..\..\Source\lex\tokenizer.h">
+      <Filter>Token</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\logging\logging.h">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\common.h">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\util\String.h">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\util\Integer.h">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\ir\Ast.h">
+      <Filter>IR</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\type\Type.h">
+      <Filter>IR</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\ir\Definition.h">
+      <Filter>IR</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\ir\Function.h">
+      <Filter>IR</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\ir\Location.h">
+      <Filter>IR</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\codegen\AstCompiler.h">
+      <Filter>CodeGeneration</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\util\Bit.h">
+      <Filter>Util</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\ir\CallingConvention.h">
+      <Filter>IR</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\codegen\Translation.h">
+      <Filter>CodeGeneration</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\Source\lex\tokenizer.cpp">
+      <Filter>Token</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\main.cpp" />
+    <ClCompile Include="..\..\Source\logging\logging.cpp">
+      <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\ir\Ast.cpp">
+      <Filter>IR</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\type\Type.cpp">
+      <Filter>IR</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\ir\Definition.cpp">
+      <Filter>IR</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\ir\Function.cpp">
+      <Filter>IR</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\codegen\AstCompiler.cpp">
+      <Filter>CodeGeneration</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\codegen\Translation.cpp">
+      <Filter>CodeGeneration</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\ir\CallingConvention.cpp">
+      <Filter>IR</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\Source\TODO.md" />
+    <None Include="..\..\Source\MOD.md" />
+    <None Include="..\..\Test\PROG.md" />
+    <None Include="..\..\Source\IR.md" />
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="IR">
+      <UniqueIdentifier>{8b8e8160-1629-4c9a-a5de-b396ac59f285}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Asm">
+      <UniqueIdentifier>{140725f9-8ead-4fc0-900d-0daf52fb4f59}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CodeGeneration">
+      <UniqueIdentifier>{4493f16a-2ae3-43d5-a0f7-bdd44a5a117c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Util">
+      <UniqueIdentifier>{6f481897-d87c-4b8c-8723-169db4bcf41b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="TestProgram">
+      <UniqueIdentifier>{59b13598-559f-4567-9a35-1ee130d76635}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Token">
+      <UniqueIdentifier>{30426051-969a-4ee3-a4dc-fe32df8f5f11}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="..\..\Test\Simple.txt">
+      <Filter>TestProgram</Filter>
+    </Text>
+    <Text Include="..\..\Source\ir\BNF.txt">
+      <Filter>IR</Filter>
+    </Text>
+  </ItemGroup>
+</Project>

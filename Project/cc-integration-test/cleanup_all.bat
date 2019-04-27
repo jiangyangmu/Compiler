@@ -1,0 +1,1 @@
+del *.exe *.log *.asm *.obj *.pdb *.ilk mllink*

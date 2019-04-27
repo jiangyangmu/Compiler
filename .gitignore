@@ -28,17 +28,9 @@
 *.app
 
 *.sdf
-*.sln
-*.vcxproj
-*.filters
-msvc/
 
-tags
 .*
 
-compiler
-*.sublime-project
-*.sublime-workspace
-tmp/
-build/
-old/
+*.ilk
+*.log
+*.pdb

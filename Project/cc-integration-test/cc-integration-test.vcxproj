@@ -1,0 +1,188 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" ToolsVersion="15.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>15.0</VCProjectVersion>
+    <ProjectGuid>{EE1B38DD-C91C-4BF7-9232-016DDA0E540E}</ProjectGuid>
+    <RootNamespace>ccintegrationtest</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0.16299.0</WindowsTargetPlatformVersion>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v141</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v141</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v141</PlatformToolset>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v141</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>MultiByte</CharacterSet>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\masm.props" />
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <SDLCheck>true</SDLCheck>
+      <ConformanceMode>true</ConformanceMode>
+      <RuntimeLibrary>MultiThreadedDebug</RuntimeLibrary>
+    </ClCompile>
+    <Link>
+      <SubSystem>Console</SubSystem>
+      <EntryPointSymbol>main</EntryPointSymbol>
+      <AdditionalDependencies>msvcrtd.lib;vcruntimed.lib;ucrtd.lib;%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalOptions>
+      </AdditionalOptions>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>Disabled</Optimization>
+      <SDLCheck>true</SDLCheck>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <WarningLevel>Level3</WarningLevel>
+      <Optimization>MaxSpeed</Optimization>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <ConformanceMode>true</ConformanceMode>
+    </ClCompile>
+    <Link>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup>
+    <CC_CSource>
+      <LogFileName>%(FileName).log</LogFileName>
+    </CC_CSource>
+    <CC_AsmSource>
+      <ExecutableFileName>%(FileName).exe</ExecutableFileName>
+      <PDBFileName>%(FileName).pdb</PDBFileName>
+    </CC_AsmSource>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <CC_IncludedSourceFile Include="IncludedSource.txt" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="IncludedSource.txt" />
+    <None Include="io.c">
+      <FileType>CppCode</FileType>
+    </None>
+    <None Include="fibonacci.c">
+      <FileType>CppCode</FileType>
+    </None>
+    <None Include="linked_list.c">
+      <FileType>CppCode</FileType>
+    </None>
+    <None Include="main.c">
+      <FileType>CppCode</FileType>
+    </None>
+    <None Include="pointer.c">
+      <FileType>CppCode</FileType>
+    </None>
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <Target Name="CC_ComputeInputOutputFiles">
+    <ReadLinesFromFile File="@(CC_IncludedSourceFile)">
+      <Output TaskParameter="Lines" ItemName="CC_IncludedSourceRegex" />
+    </ReadLinesFromFile>
+    <ItemGroup>
+      <CC_CSource Include="*.c" Condition="'@(CC_IncludedSourceRegex)' == '*.c'" />
+      <CC_CSource Include="@(CC_IncludedSourceRegex)" Condition="'@(CC_IncludedSourceRegex)' != '*.c'" />
+      <CC_AsmSource Include="@(CC_CSource-&gt;Replace('.c', '.asm'))" />
+      <CC_Executable Include="@(CC_CSource-&gt;Replace('.c', '.exe'))" />
+    </ItemGroup>
+  </Target>
+  <Target Name="CC_Compile" DependsOnTargets="PreBuildEvent;CC_ComputeInputOutputFiles">
+    <Exec Command="echo  Compiling: %(CC_CSource.Identity) &amp; ..\..\Build\cc.exe %(CC_CSource.Identity) &gt; %(CC_CSource.LogFileName)" />
+  </Target>
+  <Target Name="CC_Link" DependsOnTargets="CC_Compile" BeforeTargets="PostBuildEvent">
+    <Exec Command="ml64.exe /nologo /Zi /W3 /errorReport:prompt %(CC_AsmSource.Identity) /link /OUT:%(CC_AsmSource.ExecutableFileName) /NXCOMPAT /PDB:%(CC_AsmSource.PDBFileName) /DYNAMICBASE legacy_stdio_definitions.lib msvcrtd.lib vcruntimed.lib ucrtd.lib kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /DEBUG:FASTLINK /MACHINE:X64 /INCREMENTAL /ERRORREPORT:PROMPT /NOLOGO /TLBID:1" />
+  </Target>
+  <Target Name="CC_Run" AfterTargets="CC_Link">
+    <Exec Command="echo  Running %(CC_Executable.Identity)... &amp; cmd /V /C %(CC_Executable.Identity) ^&amp; echo  Exit code = !errorlevel!" IgnoreExitCode="true" EchoOff="true">
+    </Exec>
+  </Target>
+  <Target Name="PrintVar">
+    <Message Text="masm prop = $(VCTargetsPath)\BuildCustomizations\masm.props" />
+    <Message Text="masm target = $(VCTargetsPath)\BuildCustomizations\masm.targets" />
+    <Message Text="Int dir = $(IntDir)" />
+    <Message Text="echo  Compiling: %(CC_CSource.Identity) =&gt; %(CC_CSource.Identity), %(CC_CSource.LogFileName)" />
+    <Message Text="echo  Linking: %(CC_AsmSource.Identity) =&gt; %(CC_AsmSource.ExecutableFileName), %(CC_AsmSource.PDBFileName)" />
+    <Message Text="echo  Running %(CC_Executable.Identity)" />
+  </Target>
+  <ImportGroup Label="ExtensionTargets">
+    <Import Project="$(VCTargetsPath)\BuildCustomizations\masm.targets" />
+  </ImportGroup>
+</Project>
