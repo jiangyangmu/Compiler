@@ -1,7 +1,7 @@
 #include "Translation.h"
 
-#include "../ir/CallingConvention.h"
-#include "../util/Bit.h"
+#include "../IR/CallingConvention.h"
+#include "../Util/Bit.h"
 
 namespace Language
 {
@@ -772,13 +772,13 @@ std::string TranslateExpression(FunctionContext * context,
     {
         s += TranslateChildrenExpressionAndSaveSpill(context, expression);
 
-        ASSERT(IsInt(outType));
+        ASSERT(IsIntegral(outType));
 
         Location    inLoc = expression->down->expr.loc;
         Type *      inType = expression->down->expr.type;
         size_t      inSize = TypeSize(inType);
 
-        ASSERT(IsInt(inType));
+        ASSERT(IsIntegral(inType));
         ASSERT(outSize != inSize);
 
         // large from small -> movsx
@@ -808,7 +808,7 @@ std::string TranslateExpression(FunctionContext * context,
     {
         s += TranslateChildrenExpressionAndSaveSpill(context, expression);
 
-        ASSERT(IsInt(outType));
+        ASSERT(IsIntegral(outType));
 
         Location    inLoc = expression->down->expr.loc;
         Type *      inType = expression->down->expr.type;
@@ -860,7 +860,7 @@ std::string TranslateExpression(FunctionContext * context,
     {
         s += TranslateChildrenExpressionAndSaveSpill(context, expression);
 
-        ASSERT(IsInt(outType));
+        ASSERT(IsIntegral(outType));
 
         Location    inLoc = expression->down->expr.loc;
         Type *      inType = expression->down->expr.type;
@@ -944,7 +944,7 @@ std::string TranslateExpression(FunctionContext * context,
         Type *      inType = expression->down->expr.type;
         size_t      inSize = TypeSize(inType);
 
-        ASSERT(IsInt(inType));
+        ASSERT(IsIntegral(inType));
 
         // int-* -> float-4         = cvt_i2i(i-4/i-8) + cvtsi2ss
         // int-* -> float-8         = cvt_i2i(i-8) + cvtsi2sd
@@ -1048,7 +1048,7 @@ std::string TranslateExpression(FunctionContext * context,
         Type *      inType = expression->down->expr.type;
         size_t      inSize = TypeSize(inType);
 
-        ASSERT(IsInt(inType));
+        ASSERT(IsIntegral(inType));
 
         // mov rax, inLoc
         // cmp rax, 0
@@ -1252,9 +1252,11 @@ std::string TranslateExpression(FunctionContext * context,
         {
             RegisterType resultReg = expression->type == EXPR_IMOD ? RDX : RAX;
 
+            // mov rdx, 0
             // mov rax, inLoc1
             // op  inLoc2
             // mov outLoc, result
+            s += "mov " + DX(8) + ", " + IntegerToHexString(0) + "\n";
             s += LoadSpillAndGetLocation(context, expression, 0, &inLoc1);
             s += Code::MOV1_RCX(RAX, inLoc1, width);
             s += LoadSpillAndGetLocation(context, expression, 1, &inLoc2);

@@ -2,7 +2,7 @@
 
 #include <vector>
 
-#include "../common.h"
+#include "../Util/Common.h"
 
 class Token {
 public:

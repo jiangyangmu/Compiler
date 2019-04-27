@@ -453,8 +453,8 @@ static inline int EvalInt(StringRef text) {
 
 static inline int EvalChar(StringRef text) {
     // TODO implement EvalChar()
-    assert(text == "'a'");
-    return 'a';
+    assert(text.size() == 3 && text[0] == '\'' && text[2] == '\'');
+    return text[1];
 }
 
 static inline Token RecognizeToken(const char * start,
@@ -653,5 +653,8 @@ std::vector<Token> Tokenize(StringRef source) {
             tokens_.push_back(token);
         } while (true);
     }
+    Token token;
+    token.type = Token::FILE_END;
+    tokens_.push_back(token);
     return tokens_;
 }

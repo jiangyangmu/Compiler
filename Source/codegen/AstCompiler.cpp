@@ -4,11 +4,11 @@
 #include <deque>
 
 #include "AstCompiler.h"
-#include "../logging/logging.h"
-#include "../ir/Ast.h"
-#include "../ir/Definition.h"
-#include "../ir/Function.h"
-#include "../type/Type.h"
+#include "../Logging/Logging.h"
+#include "../IR/Ast.h"
+#include "../IR/Definition.h"
+#include "../IR/Function.h"
+#include "../IR/Type.h"
 
 AstCompileContext * CreateAstCompileContext()
 {

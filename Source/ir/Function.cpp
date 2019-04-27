@@ -191,9 +191,9 @@ Node * WrapCastNode(Node * node, Type * toType)
     // *        -> bool     = 0/1
     // pointer  -> pointer  = interpret change
 
-    if (IsInt(fromType))
+    if (IsIntegral(fromType))
     {
-        if (IsInt(toType))
+        if (IsIntegral(toType))
             castNode = MakeNode(EXPR_CVT_SI2SI);
         else if (IsFloating(toType))
             castNode = MakeNode(EXPR_CVT_SI2F);
@@ -202,7 +202,7 @@ Node * WrapCastNode(Node * node, Type * toType)
     }
     else if (IsFloating(fromType))
     {
-        if (IsInt(toType))
+        if (IsIntegral(toType))
             castNode = MakeNode(EXPR_CVT_F2SI);
         else if (IsFloating(toType))
             castNode = MakeNode(EXPR_CVT_F2F);
@@ -1247,7 +1247,8 @@ Node * GtExpression(FunctionContext * context, Node * a, Node * b)
 Node * AssignExpression(FunctionContext * context, Node * a, Node * b)
 {
     // arithmetic/struct/union/pointer
-    ASSERT(TypeEqual(a->expr.type, b->expr.type));
+    ASSERT(TypeEqual(a->expr.type, b->expr.type) ||
+           (IsIntegral(a->expr.type) && IsIntegral(b->expr.type)));
     ASSERT(IsAssignable(a->expr.type));
     
     Node * node = MakeNode(EXPR_MCOPY);

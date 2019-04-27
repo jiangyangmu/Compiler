@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../util/String.h"
-#include "../util/Integer.h"
+#include "../Util/String.h"
+#include "../Util/Integer.h"
 
 #include <vector>
 #include <map>
@@ -122,6 +122,7 @@ struct UnionType
 
     StringRef   memberName[10];
     Type *      memberType[10];
+    size_t      memberOffset[10];
 };
 
 u64             TypeId(Type * type);

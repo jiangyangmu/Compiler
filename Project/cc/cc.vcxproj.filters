@@ -19,9 +19,6 @@
     <ClInclude Include="..\..\Source\ir\Ast.h">
       <Filter>IR</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Source\type\Type.h">
-      <Filter>IR</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\Source\ir\Definition.h">
       <Filter>IR</Filter>
     </ClInclude>
@@ -43,6 +40,9 @@
     <ClInclude Include="..\..\Source\codegen\Translation.h">
       <Filter>CodeGeneration</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\Source\ir\Type.h">
+      <Filter>IR</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\Source\lex\tokenizer.cpp">
@@ -53,9 +53,6 @@
       <Filter>Util</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Source\ir\Ast.cpp">
-      <Filter>IR</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Source\type\Type.cpp">
       <Filter>IR</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Source\ir\Definition.cpp">
@@ -73,6 +70,9 @@
     <ClCompile Include="..\..\Source\ir\CallingConvention.cpp">
       <Filter>IR</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\Source\ir\Type.cpp">
+      <Filter>IR</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\Source\TODO.md" />
@@ -83,9 +83,6 @@
   <ItemGroup>
     <Filter Include="IR">
       <UniqueIdentifier>{8b8e8160-1629-4c9a-a5de-b396ac59f285}</UniqueIdentifier>
-    </Filter>
-    <Filter Include="Asm">
-      <UniqueIdentifier>{140725f9-8ead-4fc0-900d-0daf52fb4f59}</UniqueIdentifier>
     </Filter>
     <Filter Include="CodeGeneration">
       <UniqueIdentifier>{4493f16a-2ae3-43d5-a0f7-bdd44a5a117c}</UniqueIdentifier>

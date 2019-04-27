@@ -1,6 +1,6 @@
 #include "Type.h"
-#include "../common.h"
-#include "../util/Bit.h"
+#include "../Util/Common.h"
+#include "../Util/Bit.h"
 
 namespace Language {
 
@@ -369,7 +369,10 @@ void StructAddMember(StructType * type, StringRef mname, Type * mtype)
     while (type->memberType[i] != nullptr) { ++i; ASSERT(i < 10); }
     type->memberName[i] = mname;
     type->memberType[i] = mtype;
-    type->memberOffset[i] = ((type->memberOffset[i - 1] + mtype->size) + mtype->align - 1) / mtype->align * mtype->align;
+    type->memberOffset[i] =
+        (i == 0)
+        ? 0
+        : (((type->memberOffset[i - 1] + mtype->size) + mtype->align - 1) / mtype->align * mtype->align);
     type->type.align = Max(type->type.align, mtype->align);
     type->type.size = ((type->memberOffset[i] + mtype->size) + type->type.align - 1) / type->type.align * type->type.align;
 }
@@ -774,6 +777,9 @@ size_t GetMemberOffset(Type * type, StringRef memberName)
                 break;
             }
         }
+
+        ASSERT(offset != 10);
+        return structType->memberOffset[offset];
     }
     else
     {
@@ -787,11 +793,10 @@ size_t GetMemberOffset(Type * type, StringRef memberName)
                 break;
             }
         }
+
+        ASSERT(offset != 10);
+        return unionType->memberOffset[offset];
     }
-
-    ASSERT(offset != 10);
-
-    return offset;
 }
 
 Type * GetTargetType(Type * type)

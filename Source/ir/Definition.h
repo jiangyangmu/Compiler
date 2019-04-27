@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../common.h"
-#include "../type/Type.h"
+#include "../Util/Common.h"
+#include "../IR/Type.h"
 
 namespace Language {
 

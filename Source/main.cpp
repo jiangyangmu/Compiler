@@ -7,10 +7,10 @@
 #include <streambuf>
 using namespace std;
 
-#include "common.h"
-#include "ir/Ast.h"
-#include "codegen/AstCompiler.h"
-#include "codegen/Translation.h"
+#include "Util/Common.h"
+#include "IR/Ast.h"
+#include "CodeGen/AstCompiler.h"
+#include "CodeGen/Translation.h"
 
 std::string GetFileContent(const char * fileName)
 {

@@ -48,6 +48,7 @@ private:
     static CaseName CaseName##_instance;      \
     void CaseName::run()
 
+// TesterClassName is defined by user.
 #define TEST_F(TesterClassName, TestCaseName)                    \
     class TesterClassName##TestCaseName : public TesterClassName \
     {                                                            \
@@ -133,6 +134,7 @@ private:
             }                                                         \
             std::cerr << '}' << " at " << __FILE__ << ":" << __LINE__ \
                       << std::endl;                                   \
+            TestRunner::Get().SetError(true);                         \
         }                                                             \
     } while (false)
 

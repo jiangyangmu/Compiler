@@ -11,7 +11,7 @@
 
 #define ELEMENT_COUNT(a) (sizeof(a) / sizeof((a)[0]))
 
-#include "util/String.h"
+#include "String.h"
 
 template <typename T>
 class TreeLike

@@ -27,9 +27,9 @@
     <ClInclude Include="..\..\Source\ir\Definition.h" />
     <ClInclude Include="..\..\Source\ir\Function.h" />
     <ClInclude Include="..\..\Source\ir\Location.h" />
+    <ClInclude Include="..\..\Source\ir\Type.h" />
     <ClInclude Include="..\..\Source\lex\tokenizer.h" />
     <ClInclude Include="..\..\Source\logging\logging.h" />
-    <ClInclude Include="..\..\Source\type\Type.h" />
     <ClInclude Include="..\..\Source\util\Bit.h" />
     <ClInclude Include="..\..\Source\util\Integer.h" />
     <ClInclude Include="..\..\Source\util\String.h" />
@@ -41,10 +41,10 @@
     <ClCompile Include="..\..\Source\ir\CallingConvention.cpp" />
     <ClCompile Include="..\..\Source\ir\Definition.cpp" />
     <ClCompile Include="..\..\Source\ir\Function.cpp" />
+    <ClCompile Include="..\..\Source\ir\Type.cpp" />
     <ClCompile Include="..\..\Source\lex\tokenizer.cpp" />
     <ClCompile Include="..\..\Source\logging\logging.cpp" />
     <ClCompile Include="..\..\Source\main.cpp" />
-    <ClCompile Include="..\..\Source\type\Type.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\Source\IR.md" />
