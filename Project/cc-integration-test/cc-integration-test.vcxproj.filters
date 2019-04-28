@@ -17,13 +17,19 @@
     <None Include="linked_list.c">
       <Filter>Source Files</Filter>
     </None>
+    <None Include="pointer.c">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="io.c">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="linked_list.c">
+      <Filter>Source Files</Filter>
+    </None>
     <None Include="main.c">
       <Filter>Source Files</Filter>
     </None>
     <None Include="pointer.c">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="*.c">
       <Filter>Source Files</Filter>
     </None>
     <None Include="*.c">
@@ -59,10 +65,18 @@
     <None Include="pointer.c">
       <Filter>Source Files</Filter>
     </None>
+    <None Include="debug.c">
+      <Filter>Source Files</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <Text Include="IncludedSource.txt">
       <Filter>Source Files</Filter>
     </Text>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="array.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

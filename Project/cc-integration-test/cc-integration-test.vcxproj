@@ -145,10 +145,15 @@
     <None Include="linked_list.c">
       <FileType>CppCode</FileType>
     </None>
-    <None Include="main.c">
+    <None Include="debug.c">
       <FileType>CppCode</FileType>
     </None>
     <None Include="pointer.c">
+      <FileType>CppCode</FileType>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="array.c">
       <FileType>CppCode</FileType>
     </None>
   </ItemGroup>

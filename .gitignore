@@ -34,3 +34,8 @@
 *.ilk
 *.log
 *.pdb
+*.lnk
+Test/
+Debug/
+Release/
+cc-integration-test/*.asm

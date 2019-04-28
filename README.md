@@ -1,4 +1,4 @@
-J's C89 Compiler
+C Compiler
 ---
 
-Yet another implementation of C89 compiler.
+.
