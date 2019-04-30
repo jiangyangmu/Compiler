@@ -512,6 +512,30 @@ void TranslateDefinitionContext(x64Program * program,
         TranslateDefinitionContext(program, context->next);
 }
 
+std::string X64StringLiteral(const StringRef & stringValue)
+{
+    std::string s;
+    s.reserve(stringValue.size());
+
+    for (size_t i = 1; i + 1 < stringValue.size();)
+    {
+        char c = stringValue[i];
+        if (c == '\\')
+        {
+            ASSERT(stringValue[i + 1] == 'n');
+            s.push_back('\n');
+            i += 2;
+        }
+        else
+        {
+            s.push_back(c);
+            i += 1;
+        }
+    }
+
+    return ByteArrayToHexString((void *)s.data(), s.size() + 1);
+}
+
 void TranslateConstantContext(x64Program * program,
                               ConstantContext * context)
 {
@@ -521,7 +545,7 @@ void TranslateConstantContext(x64Program * program,
         const StringRef & label = kv.second.label;
         const StringRef & stringLabel = kv.second.stringLabel;
         const StringRef & stringValue = kv.second.stringValue;
-        program->constSegment += stringLabel.toString() + " DB '" + stringValue.toString() + "',00H\n";
+        program->constSegment += stringLabel.toString() + " DB " + X64StringLiteral(stringValue) + " ; " + stringValue.toString() + "\n";
         program->dataSegment += label.toString() + " DQ " + stringLabel.toString() + "\n";
     }
 
@@ -615,6 +639,11 @@ std::string TranslateCallExpression(FunctionContext * context,
     std::string s;
 
     FunctionType * functionType = nullptr;
+    if (expression->down->down && IsFunction(expression->down->down->expr.type))
+    {
+        functionType = AsFunction(expression->down->down->expr.type);
+    }
+    else
     {
         Type * pointerToFuncType = expression->down->expr.type;
         ASSERT(IsPointerToFunction(pointerToFuncType));
@@ -681,11 +710,19 @@ std::string TranslateCallExpression(FunctionContext * context,
         }
 
         argumentIndex += 1;
+        childIndex += 1;
     }
 
     Location funcLocation;
 
-    s += LoadSpillAndGetLocation(context, expression, 0, &funcLocation);
+    if (expression->down->down && IsFunction(expression->down->down->expr.type))
+    {
+        funcLocation = expression->down->down->expr.loc;
+    }
+    else
+    {
+        s += LoadSpillAndGetLocation(context, expression, 0, &funcLocation);
+    }
 
     if (funcLocation.type == LocationType::LABEL)
     {
@@ -729,6 +766,12 @@ std::string TranslateExpression(FunctionContext * context,
 
     ASSERT(expression && expression->type > BEGIN_EXPRESSION && expression->type < END_EXPRESSION);
     std::string s = "; " + NodeDebugString(expression) + "\n";
+
+    if (IsArray(expression->expr.type) || IsFunction(expression->expr.type))
+    {
+        ASSERT(expression->down == nullptr);
+        return s;
+    }
 
     ExpressionIntention intent = context->currentIntention.back();
     Type *      outType = expression->expr.type;
@@ -1666,7 +1709,7 @@ std::string TranslateExpression(FunctionContext * context,
 
         Location    inLoc = expression->down->expr.loc;
         Type *      inType = expression->down->expr.type;
-        size_t      inSize = TypeSize(inType);
+        size_t      inSize = (IsArray(inType) || IsFunction(inType)) ? 0 : TypeSize(inType);
 
         size_t      width = outSize;
 

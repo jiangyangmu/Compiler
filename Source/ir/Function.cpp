@@ -311,11 +311,7 @@ Node * IdExpression(FunctionContext * context,
                definition->type == FUNCTION_DEFINITION
             ));
 
-    Type * definitionType = ExtractDefinitionCType(definition);
-
     Node * node = MakeNode(EXPR_ID);
-
-    node->expr.type = DecayType(context->typeContext, definitionType);
 
     // function                 -> label
     // import object            -> label
@@ -323,6 +319,7 @@ Node * IdExpression(FunctionContext * context,
     // function static object   -> label
     // argument object          -> GetArgumentLocation(functionType, argumentIndex)
     // local object             -> delay (search localObjectOffsets, not ready yet)
+    // EX: array object         -> alloc for pointer
     if (definition->type == FUNCTION_DEFINITION)
     {
         node->expr.loc.type = LocationType::LABEL;
@@ -351,6 +348,22 @@ Node * IdExpression(FunctionContext * context,
                 ASSERT(false);
                 break;
         }
+    }
+
+    Type * definitionType = ExtractDefinitionCType(definition);
+
+    node->expr.type = definitionType;
+
+    Type * decayedType = DecayType(context->typeContext, definitionType);
+
+    if (!TypeEqual(decayedType, definitionType))
+    {
+        Node * addrNode = MakeNode(EXPR_PNEW);
+        addrNode->expr.type = decayedType;
+        addrNode->expr.loc.type = NEED_ALLOC;
+        AddChild(addrNode, node);
+
+        node = addrNode;
     }
 
     return node;

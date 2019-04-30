@@ -216,5 +216,57 @@ private:
 
 using String = std::string;
 
+void SetBytes(char * bytes, char value, size_t count);
+
+void CopyBytes(const char * from, char * to, size_t count);
+
+class ByteArray
+{
+public:
+    // create, destroy
+    ByteArray();
+    ByteArray(const ByteArray & other);
+    ByteArray(ByteArray && other);
+    ByteArray(const char * data, size_t size);
+    ~ByteArray();
+
+    // read, write
+    void            PushBack(char c);
+    char            PopBack();
+    char            First() const;
+    char            Last() const;
+
+    // size, capacity
+    bool            Empty() const { return size_ == 0; }
+    size_t          Size() const { return size_; }
+    void            Reserve(size_t capacity);
+
+    // raw
+    char *          RawData() { return data_; }
+    const char *    RawData() const { return data_; }
+    // size <= capacity
+    void            SetSize(size_t size);
+
+    // copy, move
+    ByteArray &     operator=(const ByteArray & other);
+    ByteArray &     operator=(ByteArray && other);
+
+    // STL interface
+    const char *    begin() const { return data_; }
+    const char *    end() const { return data_ ? (data_ + size_) : data_; }
+    char *          begin() { return data_; }
+    char *          end() { return data_ ? (data_ + size_) : data_; }
+    friend std::ostream &operator<<(std::ostream & o, const ByteArray & byteArray)
+    {
+        std::copy(byteArray.data_, byteArray.data_ + byteArray.size_, std::ostream_iterator<char>(o));
+        return o;
+    }
+
+private:
+    char * data_;
+    size_t size_;
+    size_t capacity_;
+};
+
 // StrCat
 // int->str

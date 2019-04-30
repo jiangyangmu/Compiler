@@ -21,7 +21,6 @@
   <ItemGroup>
     <ClInclude Include="..\..\Source\codegen\AstCompiler.h" />
     <ClInclude Include="..\..\Source\codegen\Translation.h" />
-    <ClInclude Include="..\..\Source\common.h" />
     <ClInclude Include="..\..\Source\ir\Ast.h" />
     <ClInclude Include="..\..\Source\ir\CallingConvention.h" />
     <ClInclude Include="..\..\Source\ir\Definition.h" />
@@ -30,7 +29,10 @@
     <ClInclude Include="..\..\Source\ir\Type.h" />
     <ClInclude Include="..\..\Source\lex\tokenizer.h" />
     <ClInclude Include="..\..\Source\logging\logging.h" />
+    <ClInclude Include="..\..\Source\Preprocess\Preprocess.h" />
     <ClInclude Include="..\..\Source\util\Bit.h" />
+    <ClInclude Include="..\..\Source\util\Charset.h" />
+    <ClInclude Include="..\..\Source\util\common.h" />
     <ClInclude Include="..\..\Source\util\Integer.h" />
     <ClInclude Include="..\..\Source\util\String.h" />
   </ItemGroup>
@@ -45,6 +47,9 @@
     <ClCompile Include="..\..\Source\lex\tokenizer.cpp" />
     <ClCompile Include="..\..\Source\logging\logging.cpp" />
     <ClCompile Include="..\..\Source\main.cpp" />
+    <ClCompile Include="..\..\Source\Preprocess\Preprocess.cpp" />
+    <ClCompile Include="..\..\Source\util\Charset.cpp" />
+    <ClCompile Include="..\..\Source\util\String.cpp" />
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\Source\IR.md" />

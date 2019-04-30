@@ -5,12 +5,15 @@
 #include <string>
 #include <vector>
 #include <streambuf>
-using namespace std;
 
 #include "Util/Common.h"
+#include "Util/String.h"
+#include "Preprocess/Preprocess.h"
 #include "IR/Ast.h"
 #include "CodeGen/AstCompiler.h"
 #include "CodeGen/Translation.h"
+
+using namespace std;
 
 std::string GetFileContent(const char * fileName)
 {
@@ -53,13 +56,21 @@ std::string GetLineInput()
     return line;
 }
 
-std::string Compile(std::string sourceCode)
+std::string Compile(std::string fileContent)
 {
+    // 0. Preprocess
+    ByteArray sourceCode(fileContent.data(), fileContent.size());
+
+    Preprocess::SourceContext sourceContext = Preprocess::Preprocess(sourceCode);
+    std::cout << "SourceContext:" << std::endl;
+    for (const ByteArray & sourceLine : sourceContext.lines)
+    {
+        std::cout << sourceLine;
+    }
+
     // 1. Token
-    SourceScanner scanner(StringRef(sourceCode.data(), sourceCode.length()));
-    Tokenizer tokenizer;
-    tokenizer.compile(scanner);
-    TokenIterator ti = tokenizer.getIterator();
+    std::vector<Token> tokens = Tokenize(sourceContext);
+    TokenIterator ti(tokens);
 
     // 2. Ast
     Ast * ast = ParseTranslationUnit(ti);
@@ -110,8 +121,8 @@ int main(int argc, char *argv[])
     }
     else
     {
-        std::cout << "Input: " << "C:\\Users\\celsi\\Documents\\Github\\jcc\\Test\\Simple.txt" << std::endl;
-        std::string sourceCode = GetFileContent("C:\\Users\\celsi\\Documents\\Github\\jcc\\Test\\Simple.txt");
+        std::cout << "Input: " << "C:\\Users\\celsi\\Documents\\Github\\cc\\Test\\Simple.txt" << std::endl;
+        std::string sourceCode = GetFileContent("C:\\Users\\celsi\\Documents\\Github\\cc\\Test\\Simple.txt");
         (void)Compile(sourceCode);
     }
     return 0;

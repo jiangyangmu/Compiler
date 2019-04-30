@@ -4,31 +4,6 @@
 #include <unordered_map>
 #include <xutility>
 
-SourceScanner::SourceScanner(StringRef source)
-    : source_(std::move(source.toString()))
-    , i_(0) {
-    if (source_.empty() || source_.back() != EOL)
-        source_.push_back(EOL);
-}
-
-StringRef SourceScanner::readLine() {
-    assert(i_ < source_.size());
-
-    size_t start = i_;
-    size_t end = i_;
-    while (source_[end] != EOL)
-        ++end;
-    ++end;
-
-    i_ = end;
-
-    return StringRef(source_.data() + start, end - start);
-}
-
-bool SourceScanner::eof() const {
-    return i_ == source_.size();
-}
-
 static inline bool isoctdigit(int c) {
     return c >= '0' && c <= '7';
 }
@@ -453,8 +428,12 @@ static inline int EvalInt(StringRef text) {
 
 static inline int EvalChar(StringRef text) {
     // TODO implement EvalChar()
-    assert(text.size() == 3 && text[0] == '\'' && text[2] == '\'');
-    return text[1];
+    assert((text.size() == 3 && text[0] == '\'' && text[2] == '\'') ||
+           (text == "'\\n'"));
+    if (text.size() == 3 && text[0] == '\'' && text[2] == '\'')
+        return text[1];
+    else
+        return '\n';
 }
 
 static inline Token RecognizeToken(const char * start,
@@ -522,72 +501,16 @@ Token TokenIterator::peekN(int n) const {
     return tokens_[i_ + n];
 }
 
-TokenMatcher::TokenMatcher() {
-    token_.type = Token::UNKNOWN;
-}
+std::vector<Token> Tokenize(Preprocess::SourceContext & sourceContext)
+{
+    std::vector<Token> tokens;
 
-TokenMatcher::TokenMatcher(Token token)
-    : token_(token) {
-}
-
-bool TokenMatcher::match(const Token & token) const {
-    return token_.type == token.type;
-}
-
-std::string TokenMatcher::toString() const {
-    return token_.text.toString();
-}
-
-bool TokenMatcher::operator==(const TokenMatcher & other) const {
-    return token_.type == other.token_.type;
-}
-
-void TokenMatcherSet::addMatcher(TokenMatcher m) {
-    for (auto & matcher : matchers_)
+    for (const ByteArray & sourceLine : sourceContext.lines)
     {
-        if (m == matcher)
-            return;
-    }
-    matchers_.emplace_back(m);
-}
-
-void TokenMatcherSet::addMatchers(const TokenMatcherSet & ms) {
-    for (auto & matcher : ms.matchers_)
-    {
-        addMatcher(matcher);
-    }
-}
-
-bool TokenMatcherSet::match(const Token & token) const {
-    for (auto & matcher : matchers_)
-    {
-        if (matcher.match(token))
-            return true;
-    }
-    return false;
-}
-
-size_t TokenMatcherSet::size() const {
-    return matchers_.size();
-}
-
-bool TokenMatcherSet::empty() const {
-    return matchers_.empty();
-}
-
-const std::vector<TokenMatcher> & TokenMatcherSet::matchers() const {
-    return matchers_;
-}
-
-void Tokenizer::compile(SourceScanner & scanner) {
-    tokens_.clear();
-    while (!scanner.eof())
-    {
-        StringRef line = scanner.readLine();
-        assert(!line.empty() && line.back() == EOL);
+        ASSERT(!sourceLine.Empty() && sourceLine.Last() == EOL);
 
         const char * start;
-        const char * end = line.data();
+        const char * end = sourceLine.RawData();
         do
         {
             TokenRecog::Info info;
@@ -597,64 +520,18 @@ void Tokenizer::compile(SourceScanner & scanner) {
             if (*start == EOL)
                 break;
             end = TokenEnd(start, &info);
-            assert(end > start); // ERROR: invalid character sequence if fail.
-
+            // ERROR: invalid character sequence if fail.
+            assert(end > start);
+            
             // Recognize.
             Token token = RecognizeToken(start, end, info);
-            tokens_.push_back(token);
+            tokens.push_back(token);
         } while (true);
     }
+
     Token token;
     token.type = Token::FILE_END;
-    tokens_.push_back(token);
-}
+    tokens.push_back(token);
 
-TokenIterator Tokenizer::getIterator() {
-    return TokenIterator(tokens_);
-}
-
-Token TokenFromString(const char *s) {
-    const char * start;
-    const char * end;
-    TokenRecog::Info info;
-
-    start = TokenStart(s);
-    end = TokenEnd(start, &info);
-    assert(end > start); // ERROR: invalid character sequence if fail.
-
-    Token token = RecognizeToken(start, end, info);
-    return token;
-}
-
-std::vector<Token> Tokenize(StringRef source) {
-    SourceScanner scanner(source);
-    std::vector<Token> tokens_;
-    tokens_.clear();
-    while (!scanner.eof())
-    {
-        StringRef line = scanner.readLine();
-        assert(!line.empty() && line.back() == EOL);
-
-        const char * start;
-        const char * end = line.data();
-        do
-        {
-            TokenRecog::Info info;
-
-            // Tokenize.
-            start = TokenStart(end);
-            if (*start == EOL)
-                break;
-            end = TokenEnd(start, &info);
-            assert(end > start); // ERROR: invalid character sequence if fail.
-
-            // Recognize.
-            Token token = RecognizeToken(start, end, info);
-            tokens_.push_back(token);
-        } while (true);
-    }
-    Token token;
-    token.type = Token::FILE_END;
-    tokens_.push_back(token);
-    return tokens_;
+    return tokens;
 }

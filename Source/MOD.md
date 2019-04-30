@@ -1,5 +1,17 @@
+Preprocessor
+* Input: ByteArray
+* Do
+    > Charset check
+    > Remove comments /**/
+    ? Expand #include, macro
+* Output: SourceContext
+
 Lexer
-* Input: string
+* Input: SourceContext
+* Do
+    > Tokenize source line
+    > Unescape char constant ex. '\n'
+    > Unescape string constant ex. "\n"
 * Output: vector<Token>
 
 Ast

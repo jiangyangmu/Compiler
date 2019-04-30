@@ -372,7 +372,7 @@ void StructAddMember(StructType * type, StringRef mname, Type * mtype)
     type->memberOffset[i] =
         (i == 0)
         ? 0
-        : (((type->memberOffset[i - 1] + mtype->size) + mtype->align - 1) / mtype->align * mtype->align);
+        : (((type->memberOffset[i - 1] + type->memberType[i - 1]->size) + type->memberType[i - 1]->align - 1) / type->memberType[i - 1]->align * type->memberType[i - 1]->align);
     type->type.align = Max(type->type.align, mtype->align);
     type->type.size = ((type->memberOffset[i] + mtype->size) + type->type.align - 1) / type->type.align * type->type.align;
 }
@@ -682,6 +682,11 @@ bool IsStructOrUnion(Type * type)
     return type->name == STRUCT || type->name == UNION;
 }
 
+bool IsArray(Type * type)
+{
+    return type->name == ARRAY;
+}
+
 bool IsPointer(Type * type)
 {
     return type->name == POINTER;
@@ -695,6 +700,11 @@ bool IsPointerToObject(Type * type)
 bool IsPointerToFunction(Type * type)
 {
     return IsPointer(type) && (AsPointer(type)->target->name == FUNCTION);
+}
+
+bool IsFunction(Type * type)
+{
+    return type->name == FUNCTION;
 }
 
 bool IsCallableObject(Type * type)

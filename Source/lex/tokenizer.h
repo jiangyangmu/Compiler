@@ -3,6 +3,8 @@
 #include <vector>
 
 #include "../Util/Common.h"
+#include "../Util/String.h"
+#include "../Preprocess/Preprocess.h"
 
 class Token {
 public:
@@ -83,60 +85,6 @@ private:
     size_t i_;
 };
 
-// Maybe just use Token::Type
-class TokenMatcher {
-public:
-    TokenMatcher();
-    TokenMatcher(Token token);
-
-    bool match(const Token & token) const;
-
-    std::string toString() const;
-
-    bool operator==(const TokenMatcher & other) const;
-
-private:
-    Token token_;
-};
-
-// Maybe just use std::set<Token::Type>
-class TokenMatcherSet {
-public:
-    void addMatcher(TokenMatcher matcher);
-    void addMatchers(const TokenMatcherSet & matchers);
-
-    bool match(const Token & token) const;
-
-    size_t size() const;
-    bool empty() const;
-    const std::vector<TokenMatcher> & matchers() const;
-
-private:
-    std::vector<TokenMatcher> matchers_;
-};
-
-class SourceScanner {
-public:
-    SourceScanner() = default;
-    explicit SourceScanner(StringRef source);
-    StringRef readLine();
-    bool eof() const;
-
-private:
-    std::string source_;
-    size_t i_;
-};
-
-class Tokenizer {
-public:
-    void compile(SourceScanner & scanner);
-    TokenIterator getIterator();
-
-private:
-    std::vector<Token> tokens_;
-};
-
-Token TokenFromString(const char *s);
-std::vector<Token> Tokenize(StringRef source);
+std::vector<Token> Tokenize(Preprocess::SourceContext & sourceContext);
 
 #define EOL ('\n')

@@ -231,10 +231,12 @@ bool            IsVoid(Type * type);
 bool            IsBool(Type * type);
 bool            IsInt(Type * type);
 bool            IsStructOrUnion(Type * type);
+bool            IsArray(Type * type);
 bool            IsPointer(Type * type);
 //bool            IsNullPointer();
 bool            IsPointerToObject(Type * type);
 bool            IsPointerToFunction(Type * type);
+bool            IsFunction(Type * type);
 bool            IsCallableObject(Type * type); // function, pointer to function
 
 // TODO: remove these, use specific type test is more clear.

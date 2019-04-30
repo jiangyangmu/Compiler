@@ -236,7 +236,7 @@ Ast * ParseTranslationUnit(TokenIterator & ti)
                                                   : ParseDeclaration(ti, declarationSpecifiers, declarator);
         pNextChild                              = &(*pNextChild)->rightSibling;
     }
-    ASSERT(translationUnit->leftChild);
+    //ASSERT(translationUnit->leftChild);
 
     return translationUnit;
 }
@@ -1140,6 +1140,25 @@ Ast * ParseParameterList(TokenIterator & ti)
 
 
     return parameterList;
+}
+
+bool IsEqualAst(Ast * a1, Ast * a2)
+{
+    if (a1 && a2)
+    {
+        return
+            (a1->type == a2->type) &&
+            IsEqualAst(a1->leftChild, a2->leftChild) &&
+            IsEqualAst(a1->rightSibling, a2->rightSibling);
+    }
+    else if (!a1 && !a2)
+    {
+        return true;
+    }
+    else
+    {
+        return false;
+    }
 }
 
 void DebugPrintAstImpl(Ast * ast, size_t indent)

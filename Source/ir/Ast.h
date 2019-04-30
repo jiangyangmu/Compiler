@@ -9,7 +9,6 @@ enum AstType
     FUNCTION_DEFINITION,
     DECLARATION,
     DECLARATOR_INITIALIZER,
-    DECLARATION_LIST,
     DECLARATOR,
     DIRECT_DECLARATOR,
     ABSTRACT_DECLARATOR,
@@ -82,8 +81,6 @@ enum AstType
     RETURN_STMT,
 };
 
-class Environment;
-
 struct Ast
 {
     Ast *parent;
@@ -92,7 +89,6 @@ struct Ast
 
     AstType type;
     Token token;
-    Environment * env;
 };
 
 // Build
@@ -104,4 +100,6 @@ bool    IsAstTypeQualifier(AstType type);
 
 // Debug
 
+// TODO: compare token
+bool    IsEqualAst(Ast * a1, Ast * a2);
 void    DebugPrintAst(Ast * ast);
