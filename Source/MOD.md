@@ -14,11 +14,11 @@ Lexer
     > Unescape string constant ex. "\n"
 * Output: vector<Token>
 
-Ast
+Ast Parser
 * Input: vector<Token>
 * Output: Ast tree
 
-IR - Type
+IR - Type Context
 * Construct type object
 * Support "incomplete" concept - hole in type object
     * For type struct/union
@@ -30,7 +30,7 @@ IR - Type
 * Manage type object, query type object prop
     * Build type context (a global struct)
 
-IR - Definition
+IR - Definition Context
 * Construct definition object
 * Manage definition object
     * Organize definition objects as tree of definition object table
@@ -42,11 +42,11 @@ IR - Definition
     * 
 * LIMIT: function definition and declaration only occurs in global scope
 
-IR - Constant
+IR - Constant Context
 * Manage constants in source code (string literal, number)
 * Assign unique label to constant
 
-IR - Function
+IR - Function Context
 * Construct statement tree
     * Create & bind labels
 * Construct expression tree
@@ -62,14 +62,20 @@ IR - CallingConvention
 
 IR - Location
 
-AstCompiler
+Ast Compiler
 * Input: Ast tree
+* Do
+    > Build 1 Definition Context
+    > Build 1 Type Context
+    > Build 1 Constant Context
+    > Build N Function Context
 * Output: Ast compile context
     * 1 Definition, 1 Type, 1 Constant, N Function
 
 Translation
-* Input: Ast coompile context
+* Input: Ast compile context
+* Do
+    > Save/load non-volatile register
+    > Function calling
+    > Boolean expression shortcut
 * Output: x64 program
-* Save/load non-volatile register
-* Function calling
-* Boolean expression shortcut

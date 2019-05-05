@@ -16,9 +16,6 @@
     <ClInclude Include="..\..\Source\ir\Ast.h">
       <Filter>IR</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Source\ir\Definition.h">
-      <Filter>IR</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\Source\ir\Location.h">
       <Filter>IR</Filter>
     </ClInclude>
@@ -34,9 +31,6 @@
     <ClInclude Include="..\..\Source\codegen\Translation.h">
       <Filter>CodeGeneration</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Source\ir\Type.h">
-      <Filter>IR</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\Source\Preprocess\Preprocess.h">
       <Filter>Preproc</Filter>
     </ClInclude>
@@ -46,10 +40,16 @@
     <ClInclude Include="..\..\Source\util\Charset.h">
       <Filter>Util</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Source\codegen\FunctionCompiler.h">
-      <Filter>CodeGeneration</Filter>
+    <ClInclude Include="..\..\Source\ir\TypeContext.h">
+      <Filter>IR</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Source\ir\IR.h">
+    <ClInclude Include="..\..\Source\ir\DefinitionContext.h">
+      <Filter>IR</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\ir\ConstantContext.h">
+      <Filter>IR</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\ir\FunctionContext.h">
       <Filter>IR</Filter>
     </ClInclude>
   </ItemGroup>
@@ -64,9 +64,6 @@
     <ClCompile Include="..\..\Source\ir\Ast.cpp">
       <Filter>IR</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Source\ir\Definition.cpp">
-      <Filter>IR</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\Source\codegen\AstCompiler.cpp">
       <Filter>CodeGeneration</Filter>
     </ClCompile>
@@ -74,9 +71,6 @@
       <Filter>CodeGeneration</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Source\ir\CallingConvention.cpp">
-      <Filter>IR</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Source\ir\Type.cpp">
       <Filter>IR</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Source\Preprocess\Preprocess.cpp">
@@ -88,10 +82,16 @@
     <ClCompile Include="..\..\Source\util\Charset.cpp">
       <Filter>Util</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Source\codegen\FunctionCompiler.cpp">
-      <Filter>CodeGeneration</Filter>
+    <ClCompile Include="..\..\Source\ir\TypeContext.cpp">
+      <Filter>IR</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Source\ir\IR.cpp">
+    <ClCompile Include="..\..\Source\ir\DefinitionContext.cpp">
+      <Filter>IR</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\ir\ConstantContext.cpp">
+      <Filter>IR</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\ir\FunctionContext.cpp">
       <Filter>IR</Filter>
     </ClCompile>
   </ItemGroup>

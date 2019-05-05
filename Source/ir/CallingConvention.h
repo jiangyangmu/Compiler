@@ -1,6 +1,6 @@
 #pragma once
 
-#include "Type.h"
+#include "TypeContext.h"
 #include "Location.h"
 
 namespace Language {

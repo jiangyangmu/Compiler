@@ -1,9 +1,9 @@
 #pragma once
 
 #include "../IR/Ast.h"
-#include "../IR/Definition.h"
-#include "../IR/Type.h"
-#include "../Codegen/FunctionCompiler.h"
+#include "../IR/DefinitionContext.h"
+#include "../IR/TypeContext.h"
+#include "../IR/FunctionContext.h"
 
 enum ASTScope {
     IN_FILE,

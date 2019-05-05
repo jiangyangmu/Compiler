@@ -1,4 +1,4 @@
-#include "Type.h"
+#include "TypeContext.h"
 #include "../Util/Common.h"
 #include "../Util/Bit.h"
 

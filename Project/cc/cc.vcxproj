@@ -20,14 +20,14 @@
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\Source\codegen\AstCompiler.h" />
-    <ClInclude Include="..\..\Source\codegen\FunctionCompiler.h" />
     <ClInclude Include="..\..\Source\codegen\Translation.h" />
     <ClInclude Include="..\..\Source\ir\Ast.h" />
     <ClInclude Include="..\..\Source\ir\CallingConvention.h" />
-    <ClInclude Include="..\..\Source\ir\Definition.h" />
-    <ClInclude Include="..\..\Source\ir\IR.h" />
+    <ClInclude Include="..\..\Source\ir\ConstantContext.h" />
+    <ClInclude Include="..\..\Source\ir\DefinitionContext.h" />
+    <ClInclude Include="..\..\Source\ir\FunctionContext.h" />
     <ClInclude Include="..\..\Source\ir\Location.h" />
-    <ClInclude Include="..\..\Source\ir\Type.h" />
+    <ClInclude Include="..\..\Source\ir\TypeContext.h" />
     <ClInclude Include="..\..\Source\lex\tokenizer.h" />
     <ClInclude Include="..\..\Source\logging\logging.h" />
     <ClInclude Include="..\..\Source\Preprocess\Preprocess.h" />
@@ -39,13 +39,13 @@
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\Source\codegen\AstCompiler.cpp" />
-    <ClCompile Include="..\..\Source\codegen\FunctionCompiler.cpp" />
     <ClCompile Include="..\..\Source\codegen\Translation.cpp" />
     <ClCompile Include="..\..\Source\ir\Ast.cpp" />
     <ClCompile Include="..\..\Source\ir\CallingConvention.cpp" />
-    <ClCompile Include="..\..\Source\ir\Definition.cpp" />
-    <ClCompile Include="..\..\Source\ir\IR.cpp" />
-    <ClCompile Include="..\..\Source\ir\Type.cpp" />
+    <ClCompile Include="..\..\Source\ir\ConstantContext.cpp" />
+    <ClCompile Include="..\..\Source\ir\DefinitionContext.cpp" />
+    <ClCompile Include="..\..\Source\ir\FunctionContext.cpp" />
+    <ClCompile Include="..\..\Source\ir\TypeContext.cpp" />
     <ClCompile Include="..\..\Source\lex\tokenizer.cpp" />
     <ClCompile Include="..\..\Source\logging\logging.cpp" />
     <ClCompile Include="..\..\Source\main.cpp" />

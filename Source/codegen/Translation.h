@@ -1,7 +1,8 @@
 #pragma once
 
-#include "../IR/Definition.h"
-#include "../Codegen/FunctionCompiler.h"
+#include "../IR/ConstantContext.h"
+#include "../IR/DefinitionContext.h"
+#include "../IR/FunctionContext.h"
 
 namespace Language
 {
