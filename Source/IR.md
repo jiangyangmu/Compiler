@@ -90,15 +90,10 @@ IR Operators
 
 # 1. data source
 
-    EXPR_ID
+    EXPR_DATA
         ()
         => Type     { ?INT, FLT, PTR, BLOB, PROC }
-        => Location { REG, SP_OFFSET_MEM, BP_OFFSET_MEM, LABEL }
-
-    EXPR_CONSTANT
-        ()
-        => Type     { ?INT, FLT, PTR }
-        => Location { LABEL, INLINE }
+        => Location { REG, SP_OFFSET_MEM, BP_OFFSET_MEM, LABEL, INLINE }
 
 # 2. casting (size change x repr change)
 

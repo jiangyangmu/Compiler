@@ -5,10 +5,6 @@
 
 #include "AstCompiler.h"
 #include "../Logging/Logging.h"
-#include "../IR/Ast.h"
-#include "../IR/Definition.h"
-#include "../IR/Function.h"
-#include "../IR/Type.h"
 
 AstCompileContext * CreateAstCompileContext()
 {
@@ -487,14 +483,9 @@ void CompileAst(AstCompileContext * context, Ast * ast)
         BeginScope(context, IN_COMPOUND_STATEMENT);
         BeginFunctionContext(context, functionName, Language::AsFunction(functionType), functionDefinitionContext);
 
-        // TODO: temp solution
-        context->currentFunctionContext->currentIntention.push_back(Language::WANT_VALUE);
-
         // compound statement
         CompileAst(context, child);
         context->currentFunctionContext->functionBody = PopNode(context);
-
-        context->currentFunctionContext->currentIntention.pop_back();
 
         EndFunctionContext(context);
         EndScope(context);
@@ -693,6 +684,15 @@ void CompileAst(AstCompileContext * context, Ast * ast)
 
         Language::FunctionType * functionType = Language::AsFunction(GetType(context));
 
+        bool isFunctionDefinition = CurrentDefinitionContext(context)->scope == Language::DefinitionContextScope::FUNCTION_SCOPE;
+        if (!isFunctionDefinition)
+        {
+            Language::DefinitionContext * functionDefinitionContext = NewDefinitionContext(context,
+                                                                                           Language::DefinitionContextScope::FUNCTION_SCOPE);
+
+            EnterDefinitionContext(context, functionDefinitionContext);
+        }
+
         // parameter declaration / parameter var list
         for (; child; child = child->rightSibling)
         {
@@ -716,6 +716,11 @@ void CompileAst(AstCompileContext * context, Ast * ast)
             }
         }
         ASSERT(!child || !child->rightSibling);
+
+        if (!isFunctionDefinition)
+        {
+            ExitDefinitionContext(context);
+        }
 
         EndScope(context);
     }

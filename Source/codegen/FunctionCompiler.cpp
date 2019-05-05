@@ -1,7 +1,7 @@
-#include "Function.h"
+#include "FunctionCompiler.h"
 
-#include "../ir/CallingConvention.h"
-#include "../util/Bit.h"
+#include "../IR/CallingConvention.h"
+#include "../Util/Bit.h"
 
 namespace Language {
 
@@ -66,7 +66,7 @@ FunctionContext * CreateFunctionContext(DefinitionContext * functionDefinitionCo
                                         StringRef functionName)
 {
     FunctionContext * functionContext = new FunctionContext;
-    
+
     functionContext->functionDefinitionContext = functionDefinitionContext;
     functionContext->functionType = functionType;
     functionContext->nextUniqueLabel = 0;
@@ -90,94 +90,10 @@ FunctionContext * CreateFunctionContext(DefinitionContext * functionDefinitionCo
     return functionContext;
 }
 
-void AddChild(Node * parent, Node * child)
-{
-    ASSERT(parent && child && !child->up);
-    
-    child->up = parent;
-    
-    if (!parent->down)
-    {
-        parent->down = child;
-    }
-    else
-    {
-        Node * last = parent->down;
-        while (last->right)
-            last = last->right;
-        last->right = child;
-    }
-}
-
-int CountChild(Node * node)
-{
-    ASSERT(node);
-    int n = 0;
-    Node * next = node->down;
-    while (next)
-    {
-        ++n;
-        next = next->right;
-    }
-    return n;
-}
-
-Node * LastChild(Node * parent)
-{
-    ASSERT(parent);
-
-    Node * lastChild = parent->down;
-    
-    if (lastChild)
-    {
-        while (lastChild->right)
-        {
-            lastChild = lastChild->right;
-        }
-    }
-
-    return lastChild;
-}
-
-Node * MakeNode(NodeType type)
-{
-    Node * node = new Node;
-    node->down = node->right = node->up = nullptr;
-    node->type = type;
-
-    if (type > BEGIN_STATEMENT && type < END_STATEMENT)
-    {
-        node->stmt.context = nullptr;
-    }
-    else if ((type > BEGIN_EXPRESSION && type < END_EXPRESSION) ||
-             type == EMPTY_EXPRESSION)
-    {
-        node->expr.type = nullptr;
-        node->expr.loc.type = NO_WHERE;
-    }
-
-    return node;
-}
-
-void DestroyNodeTree(Node * root)
-{
-    if (root)
-    {
-        Node * child = root->down;
-        while (child)
-        {
-            Node * nextChild = child->right;
-            DestroyNodeTree(child);
-            child = nextChild;
-        }
-        delete root;
-    }
-}
-
 Node * WrapCastNode(Node * node, Type * toType)
 {
     Type * fromType = node->expr.type;
-    
+
     if (TypeEqual(fromType, toType))
     {
         return node;
@@ -217,8 +133,8 @@ Node * WrapCastNode(Node * node, Type * toType)
 
     castNode->expr.type = toType;
     castNode->expr.loc.type = castNode->type == EXPR_CVT_REINTERP
-                              ? SAME_AS_FIRST_CHILD
-                              : NEED_ALLOC;
+        ? SAME_AS_FIRST_CHILD
+        : NEED_ALLOC;
 
     AddChild(castNode, node);
 
@@ -264,6 +180,7 @@ void   TypeChecking_Call(Node * call)
     ASSERT(IsMatchedCall(functionType, arguments));
 }
 
+
 Node * EmptyExpression(FunctionContext * context)
 {
     Node * node = MakeNode(EMPTY_EXPRESSION);
@@ -276,9 +193,9 @@ Location GetArgumentLocation(FunctionType * functionType,
     ParameterPassingCalleeProtocol calleeProtocol(functionType);
 
     size_t argumentIndex = calleeProtocol.IsReturnValueAddressAsFirstParameter()
-                           ? 1
-                           : 0;
-    
+        ? 1
+        : 0;
+
     while (true)
     {
         ASSERT(functionType->memberType[argumentIndex]);
@@ -298,20 +215,17 @@ Location GetArgumentLocation(FunctionType * functionType,
 Node * IdExpression(FunctionContext * context,
                     StringRef id)
 {
-    ASSERT(context->currentIntention.back() == WANT_VALUE ||
-           context->currentIntention.back() == WANT_ADDRESS);
-
     Definition * definition = LookupDefinition(context->currentDefinitionContext.back(),
                                                id,
                                                DefinitionContextNamespace::ID_NAMESPACE,
                                                true);
     ASSERT(definition &&
-           (
-               definition->type == OBJECT_DEFINITION ||
-               definition->type == FUNCTION_DEFINITION
+        (
+            definition->type == OBJECT_DEFINITION ||
+            definition->type == FUNCTION_DEFINITION
             ));
 
-    Node * node = MakeNode(EXPR_ID);
+    Node * node = MakeNode(EXPR_DATA);
 
     // function                 -> label
     // import object            -> label
@@ -374,9 +288,7 @@ Node * IdExpression(FunctionContext * context,
 // String -> add to const table, labal
 Node * ConstantExpression(FunctionContext * context, int value)
 {
-    ASSERT(context->currentIntention.back() == WANT_VALUE);
-
-    Node * node = MakeNode(EXPR_CONSTANT);
+    Node * node = MakeNode(EXPR_DATA);
     node->expr.type = &MakeInt(context->typeContext)->type;
     node->expr.loc.type = INLINE;
     node->expr.loc.inlineValue = value;
@@ -385,9 +297,7 @@ Node * ConstantExpression(FunctionContext * context, int value)
 }
 Node * ConstantExpression(FunctionContext * context, size_t value)
 {
-    ASSERT(context->currentIntention.back() == WANT_VALUE);
-
-    Node * node = MakeNode(EXPR_CONSTANT);
+    Node * node = MakeNode(EXPR_DATA);
     node->expr.type = &MakeInt(context->typeContext, 8)->type;
     node->expr.loc.type = INLINE;
     node->expr.loc.inlineValue = value;
@@ -396,9 +306,7 @@ Node * ConstantExpression(FunctionContext * context, size_t value)
 }
 Node * ConstantExpression(FunctionContext * context, float value)
 {
-    ASSERT(context->currentIntention.back() == WANT_VALUE);
-
-    Node * node = MakeNode(EXPR_CONSTANT);
+    Node * node = MakeNode(EXPR_DATA);
     node->expr.type = &MakeFloat(context->typeContext)->type;;
     node->expr.loc = LocateFloat(context->constantContext, value);
 
@@ -406,14 +314,12 @@ Node * ConstantExpression(FunctionContext * context, float value)
 }
 Node * ConstantExpression(FunctionContext * context, StringRef value)
 {
-    ASSERT(context->currentIntention.back() == WANT_VALUE);
+    Node * node = MakeNode(EXPR_DATA);
 
-    Node * node = MakeNode(EXPR_CONSTANT);
-    
     PointerType * pointer = MakePointer(context->typeContext);
     pointer->target = &MakeChar(context->typeContext)->type;
     node->expr.type = &pointer->type;
-    
+
     Location stringLocation;
     Location stringPointerLocation;
     LocateString(context->constantContext, value, &stringLocation, &stringPointerLocation);
@@ -425,28 +331,27 @@ Node * ConstantExpression(FunctionContext * context, StringRef value)
 
 Node * IncExpression(FunctionContext * context, Node * expr)
 {
-    ASSERT(context->currentIntention.back() == WANT_VALUE ||
-           context->currentIntention.back() == WANT_ADDRESS);
     ASSERT(IsScalar(expr->expr.type) &&
            IsAssignable(expr->expr.type) &&
            !IsConst(expr->expr.type));
 
     // increment inplace, output location equals to input location, to satisfy lvalue semantics
 
-    // integer  -> inc
+    // integer  -> iadd 1
     // float    -> fadd 1.0f
     // pointer  -> padd 1
 
     Node * node;
-    
+
     Type * type = expr->expr.type;
 
     if (IsIntegral(type))
     {
-        node = MakeNode(EXPR_IINC);
+        node = MakeNode(EXPR_IADD);
         node->expr.type = type;
 
         AddChild(node, expr);
+        AddChild(node, ConstantExpression(context, 1));
     }
     else if (IsFloating(type))
     {
@@ -472,14 +377,13 @@ Node * IncExpression(FunctionContext * context, Node * expr)
 }
 Node * PostIncExpression(FunctionContext * context, Node * expr)
 {
-    ASSERT(context->currentIntention.back() == WANT_VALUE);
     ASSERT(IsScalar(expr->expr.type) &&
            IsAssignable(expr->expr.type) &&
            !IsConst(expr->expr.type));
 
     // copy to output location, then increment to input location
 
-    // integer  -> inc
+    // integer  -> iadd 1
     // float    -> fadd 1.0f
     // pointer  -> padd 1
 
@@ -494,11 +398,13 @@ Node * PostIncExpression(FunctionContext * context, Node * expr)
 
     if (IsIntegral(type))
     {
-        Node * addNode = MakeNode(EXPR_IINC);
+        Node * addNode = MakeNode(EXPR_IADD);
         addNode->expr.type = type;
         addNode->expr.loc.type = SAME_AS_FIRST_GRANDCHILD;
 
         AddChild(addNode, dupNode);
+        AddChild(addNode, ConstantExpression(context, 1));
+
         node = addNode;
     }
     else if (IsFloating(type))
@@ -527,8 +433,6 @@ Node * PostIncExpression(FunctionContext * context, Node * expr)
 }
 Node * DecExpression(FunctionContext * context, Node * expr)
 {
-    ASSERT(context->currentIntention.back() == WANT_VALUE ||
-           context->currentIntention.back() == WANT_ADDRESS);
     ASSERT(IsScalar(expr->expr.type) && IsAssignable(expr->expr.type) && !IsConst(expr->expr.type));
 
     // decrement inplace, output location equals to input location, to satisfy lvalue semantics
@@ -543,10 +447,11 @@ Node * DecExpression(FunctionContext * context, Node * expr)
 
     if (IsIntegral(type))
     {
-        node = MakeNode(EXPR_IDEC);
+        node = MakeNode(EXPR_ISUB);
         node->expr.type = type;
 
         AddChild(node, expr);
+        AddChild(node, ConstantExpression(context, 1));
     }
     else if (IsFloating(type))
     {
@@ -572,7 +477,6 @@ Node * DecExpression(FunctionContext * context, Node * expr)
 }
 Node * PostDecExpression(FunctionContext * context, Node * expr)
 {
-    ASSERT(context->currentIntention.back() == WANT_VALUE);
     ASSERT(IsScalar(expr->expr.type) && IsAssignable(expr->expr.type) && !IsConst(expr->expr.type));
 
     // copy to output location, then decrement to input location
@@ -592,11 +496,13 @@ Node * PostDecExpression(FunctionContext * context, Node * expr)
 
     if (IsIntegral(type))
     {
-        Node * subNode = MakeNode(EXPR_IDEC);
+        Node * subNode = MakeNode(EXPR_ISUB);
         subNode->expr.type = type;
         subNode->expr.loc.type = SAME_AS_FIRST_GRANDCHILD;
 
         AddChild(subNode, dupNode);
+        AddChild(subNode, ConstantExpression(context, 1));
+
         node = subNode;
     }
     else if (IsFloating(type))
@@ -628,17 +534,14 @@ Node * MemberOfExpression(FunctionContext * context,
                           Node * structOrUnion,
                           StringRef memberName)
 {
-    ASSERT(context->currentIntention.back() == WANT_VALUE ||
-           context->currentIntention.back() == WANT_ADDRESS);
-
-    Type * memberType   = GetMemberType(structOrUnion->expr.type, memberName);
+    Type * memberType = GetMemberType(structOrUnion->expr.type, memberName);
     size_t memberOffset = GetMemberOffset(structOrUnion->expr.type, memberName);
 
     Node * addrNode = MakeNode(EXPR_PNEW);
     addrNode->expr.type = &(MakePointer(context->typeContext, structOrUnion->expr.type)->type);
     addrNode->expr.loc.type = NEED_ALLOC;
     AddChild(addrNode, structOrUnion);
-    
+
     Node * addNode = MakeNode(EXPR_MADDUI);
     addNode->expr.type = &(MakePointer(context->typeContext, memberType)->type);
     addNode->expr.loc.type = SAME_AS_FIRST_CHILD;
@@ -651,14 +554,9 @@ Node * IndirectMemberOfExpression(FunctionContext * context,
                                   Node * pointerToStructOrUnion,
                                   StringRef memberName)
 {
-    ASSERT(context->currentIntention.back() == WANT_VALUE ||
-           context->currentIntention.back() == WANT_ADDRESS);
-
     Node * structOrUnion;
 
-    context->currentIntention.push_back(WANT_VALUE);
     structOrUnion = IndirectExpression(context, pointerToStructOrUnion);
-    context->currentIntention.pop_back();
 
     return MemberOfExpression(context, structOrUnion, memberName);
 }
@@ -667,8 +565,6 @@ Node * CallExpression(FunctionContext * context,
                       Node * pointerToFunction,
                       std::vector<Node *> arguments)
 {
-    ASSERT(context->currentIntention.back() == WANT_VALUE);
-
     FunctionType * functionType = AsFunction(AsPointer(pointerToFunction->expr.type)->target);
 
     Node * node = MakeNode(EXPR_CALL);
@@ -699,16 +595,11 @@ Node * SubscriptExpression(FunctionContext * context,
                            Node * a,
                            Node * b)
 {
-    ASSERT(context->currentIntention.back() == WANT_VALUE ||
-           context->currentIntention.back() == WANT_ADDRESS);
-
     return IndirectExpression(context, AddExpression(context, a, b));
 }
 
 Node * GetAddressExpression(FunctionContext * context, Node * expr)
 {
-    ASSERT(context->currentIntention.back() == WANT_VALUE);
-
     Node * node = MakeNode(EXPR_PNEW);
     node->expr.type = &(MakePointer(context->typeContext, expr->expr.type)->type);
     node->expr.loc.type = NEED_ALLOC;
@@ -737,25 +628,40 @@ Node * PositiveExpression(FunctionContext * context, Node * expr)
     ASSERT(IsArithmetic(expr->expr.type));
 
     Type * newType = IsIntegral(expr->expr.type)
-                     ? IntegralPromotion(context->typeContext, expr->expr.type)
-                     : expr->expr.type;
+        ? IntegralPromotion(context->typeContext, expr->expr.type)
+        : expr->expr.type;
     return WrapCastNode(expr, newType);
 }
 Node * NegativeExpression(FunctionContext * context, Node * expr)
 {
     ASSERT(IsArithmetic(expr->expr.type));
 
-    Type * type    = expr->expr.type;
+    Type * type = expr->expr.type;
     Type * newType = IsIntegral(type)
-                     ? IntegralPromotion(context->typeContext, type)
-                     : type;
+        ? IntegralPromotion(context->typeContext, type)
+        : type;
 
-    Node * node    = MakeNode(IsIntegral(type) ? EXPR_SINEG : EXPR_FNEG);
+    Node * node;
 
-    node->expr.type = newType;
-    node->expr.loc.type = NEED_ALLOC;
-    
-    AddChild(node, WrapCastNode(expr, newType));
+    if (IsIntegral(type))
+    {
+        node = MakeNode(EXPR_ISUB);
+
+        node->expr.type = newType;
+        node->expr.loc.type = NEED_ALLOC;
+
+        AddChild(node, ConstantExpression(context, 0));
+        AddChild(node, WrapCastNode(expr, newType));
+    }
+    else
+    {
+        node = MakeNode(EXPR_FNEG);
+
+        node->expr.type = newType;
+        node->expr.loc.type = NEED_ALLOC;
+
+        AddChild(node, WrapCastNode(expr, newType));
+    }
 
     return node;
 }
@@ -843,9 +749,9 @@ Node * CastExpression(Node * expr, Type * type)
 Node * AddExpression(FunctionContext * context, Node * a, Node * b)
 {
     ASSERT(
-        (IsArithmetic(a->expr.type)      && IsArithmetic(b->expr.type)) ||
-        (IsPointerToObject(a->expr.type) && IsIntegral(b->expr.type))   ||
-        (IsIntegral(a->expr.type)        && IsPointerToObject(b->expr.type))
+        (IsArithmetic(a->expr.type) && IsArithmetic(b->expr.type)) ||
+        (IsPointerToObject(a->expr.type) && IsIntegral(b->expr.type)) ||
+        (IsIntegral(a->expr.type) && IsPointerToObject(b->expr.type))
     );
 
     Node * node;
@@ -889,8 +795,8 @@ Node * AddExpression(FunctionContext * context, Node * a, Node * b)
 Node * SubExpression(FunctionContext * context, Node * a, Node * b)
 {
     ASSERT(
-        (IsArithmetic(a->expr.type)      && IsArithmetic(b->expr.type)) ||
-        (IsPointerToObject(a->expr.type) && IsIntegral(b->expr.type))   ||
+        (IsArithmetic(a->expr.type) && IsArithmetic(b->expr.type)) ||
+        (IsPointerToObject(a->expr.type) && IsIntegral(b->expr.type)) ||
         (IsPointerToObject(a->expr.type) && IsPointerToObject(b->expr.type))
     );
 
@@ -1261,9 +1167,9 @@ Node * AssignExpression(FunctionContext * context, Node * a, Node * b)
 {
     // arithmetic/struct/union/pointer
     ASSERT(TypeEqual(a->expr.type, b->expr.type) ||
-           (IsIntegral(a->expr.type) && IsIntegral(b->expr.type)));
+        (IsIntegral(a->expr.type) && IsIntegral(b->expr.type)));
     ASSERT(IsAssignable(a->expr.type));
-    
+
     Node * node = MakeNode(EXPR_MCOPY);
     node->expr.type = a->expr.type;
     node->expr.loc.type = SAME_AS_FIRST_CHILD;
@@ -1290,7 +1196,7 @@ Node * ConditionExpression(FunctionContext * context, Node * a, Node * b, Node *
         (
             TypeEqual(t2, t3) &&
             (IsArithmetic(t2) || IsStructOrUnion(t2) || IsVoid(t2) || IsPointer(t2))
-        )
+            )
     );
 
     Node * node = MakeNode(EXPR_CONDITION);
@@ -1323,7 +1229,7 @@ Node * ConditionExpression(FunctionContext * context, Node * a, Node * b, Node *
         AddChild(node, b);
         AddChild(node, c);
     }
-    
+
     return node;
 }
 
@@ -1429,8 +1335,8 @@ Node * WhileStatement_Begin(FunctionContext * context)
     std::string endLabel = std::string("@L") + std::to_string(context->nextUniqueLabel++);
     context->targetToLabels.insert({
         node,
-        { beginLabel, endLabel }
-    });
+                                   { beginLabel, endLabel }
+                                   });
 
     context->currentBreakTarget.push_back(node);
     context->currentContinueTarget.push_back(node);
@@ -1464,8 +1370,8 @@ Node * DoWhileStatement_Begin(FunctionContext * context)
     std::string endLabel = std::string("@L") + std::to_string(context->nextUniqueLabel++);
     context->targetToLabels.insert({
         node,
-        { beginLabel, endLabel }
-    });
+                                   { beginLabel, endLabel }
+                                   });
 
     context->currentBreakTarget.push_back(node);
     context->currentContinueTarget.push_back(node);
@@ -1499,8 +1405,8 @@ Node * ForStatement_Begin(FunctionContext * context)
     std::string endLabel = std::string("@L") + std::to_string(context->nextUniqueLabel++);
     context->targetToLabels.insert({
         node,
-        { beginLabel, endLabel }
-    });
+                                   { beginLabel, endLabel }
+                                   });
 
     context->currentBreakTarget.push_back(node);
     context->currentContinueTarget.push_back(node);
@@ -1543,7 +1449,7 @@ Node * GotoStatement(FunctionContext * context, StringRef label)
     auto iter = context->isLabelDefined.find(label.toString());
     if (iter == context->isLabelDefined.end())
     {
-        context->isLabelDefined.insert(iter, {label.toString(), false});
+        context->isLabelDefined.insert(iter, { label.toString(), false });
     }
 
     return node;
@@ -1571,8 +1477,8 @@ Node * BreakStatement(FunctionContext * context)
     ASSERT(!context->currentBreakTarget.empty());
     context->nodeToTarget.insert({
         node,
-        { context->currentBreakTarget.back() , 1 }
-    });
+                                 { context->currentBreakTarget.back() , 1 }
+                                 });
 
     return node;
 }
@@ -1587,8 +1493,8 @@ Node * ContinueStatement(FunctionContext * context)
     ASSERT(!context->currentContinueTarget.empty());
     context->nodeToTarget.insert({
         node,
-        { context->currentContinueTarget.back() , 0 }
-    });
+                                 { context->currentContinueTarget.back() , 0 }
+                                 });
 
     return node;
 }
@@ -1603,9 +1509,9 @@ Node * SwitchStatement_Begin(FunctionContext * context)
     std::string endLabel = std::string("@L") + std::to_string(context->nextUniqueLabel++);
     context->targetToLabels.insert({
         node,
-        { "", endLabel }
-    });
-    context->switchToChildren.insert({node, {nullptr}});
+                                   { "", endLabel }
+                                   });
+    context->switchToChildren.insert({ node,{ nullptr } });
 
     context->currentBreakTarget.push_back(node);
     context->currentSwitch.push_back(node);
@@ -1636,7 +1542,7 @@ Node * CaseStatement(FunctionContext * context, u64 caseValue)
     node->stmt.caseValue = caseValue;
 
     ASSERT(!context->currentSwitch.empty());
-    Node * switchNode                       = context->currentSwitch.back();
+    Node * switchNode = context->currentSwitch.back();
     std::vector<std::string> & switchLabels = context->targetToLabels[switchNode];
 
     std::string caseLabel = std::string("@L") + std::to_string(context->nextUniqueLabel++);
@@ -1644,8 +1550,8 @@ Node * CaseStatement(FunctionContext * context, u64 caseValue)
 
     context->nodeToTarget.insert({
         node,
-        { switchNode, static_cast<int>(switchLabels.size() - 1) }
-    });
+                                 { switchNode, static_cast<int>(switchLabels.size() - 1) }
+                                 });
     ASSERT(context->switchToChildren.find(switchNode) != context->switchToChildren.end());
     context->switchToChildren[switchNode].push_back(node);
 
@@ -1660,7 +1566,7 @@ Node * DefaultStatement(FunctionContext * context)
     node->stmt.context = nullptr;
 
     ASSERT(!context->currentSwitch.empty());
-    Node * switchNode                       = context->currentSwitch.back();
+    Node * switchNode = context->currentSwitch.back();
     std::vector<std::string> & switchLabels = context->targetToLabels[switchNode];
 
     std::string defaultLabel = std::string("@L") + std::to_string(context->nextUniqueLabel++);
@@ -1668,13 +1574,14 @@ Node * DefaultStatement(FunctionContext * context)
 
     context->nodeToTarget.insert({
         node,
-        { switchNode, 0 }
-    });
+                                 { switchNode, 0 }
+                                 });
     ASSERT(context->switchToChildren.find(switchNode) != context->switchToChildren.end() && context->switchToChildren[switchNode][0] == nullptr);
     context->switchToChildren[switchNode][0] = node;
 
     return node;
 }
+
 
 void GetAllLocalObjectsInDefinitionContext(DefinitionContext * context,
                                            std::vector<ObjectDefinition *> & objects,
@@ -1725,8 +1632,8 @@ bool IsRegisterNode(Node * node)
 {
     ASSERT(node);
     return node->type == EXPR_PIND ||
-           node->type == EXPR_CALL ||
-           node->type == EXPR_CVT_REINTERP;
+        node->type == EXPR_CALL ||
+        node->type == EXPR_CVT_REINTERP;
 }
 
 void UpdateMaxTempZoneSpillZoneCallZone(FunctionContext * context, Node * exprTree)
@@ -1933,100 +1840,6 @@ void    PrepareStack(FunctionContext * context)
                                     FillLocalAndTempLocationInExpressionTree);
 }
 
-std::string NodeDebugString(Node * node)
-{
-    std::string s;
-    switch (node->type)
-    {
-        case STMT_COMPOUND:     s = "compound"; break;
-        case STMT_EXPRESSION:   s = "expression"; break;
-        case STMT_IF:           s = "if"; break;
-        case STMT_WHILE:        s = "while"; break;
-        case STMT_DO_WHILE:     s = "do_while"; break;
-        case STMT_FOR:          s = "for"; break;
-        case STMT_BREAK:        s = "break"; break;
-        case STMT_CONTINUE:     s = "continue"; break;
-        case STMT_RETURN:       s = "return"; break;
-        case STMT_GOTO:         s = "goto"; break;
-        case STMT_LABEL:        s = "label"; break;
-        case STMT_SWITCH:       s = "switch"; break;
-        case STMT_CASE:         s = "case"; break;
-        case STMT_DEFAULT:      s = "default"; break;
-        case EXPR_ID:           s = "id"; break;
-        case EXPR_CONSTANT:     s = "constant"; break;
-        case EXPR_CALL:         s = "call"; break;
-        case EXPR_CVT_SI2SI:    s = "cvt_si2si"; break;
-        case EXPR_CVT_SI2UI:    s = "cvt_si2ui"; break;
-        case EXPR_CVT_UI2SI:    s = "cvt_ui2si"; break;
-        case EXPR_CVT_UI2UI:    s = "cvt_ui2ui"; break;
-        case EXPR_CVT_F2F:      s = "cvt_f2f"; break;
-        case EXPR_CVT_SI2F:     s = "cvt_si2f"; break;
-        case EXPR_CVT_F2SI:     s = "cvt_f2si"; break;
-        case EXPR_CVT_I2B:      s = "cvt_i2b"; break;
-        case EXPR_CVT_B2I:      s = "cvt_b2i"; break;
-        case EXPR_CVT_F2B:      s = "cvt_f2b"; break;
-        case EXPR_CVT_B2F:      s = "cvt_b2f"; break;
-        case EXPR_CVT_REINTERP: s = "cvt_reinterp"; break;
-        case EXPR_BOOL_NOT:     s = "bool_not"; break;
-        case EXPR_BOOL_AND:     s = "bool_and"; break;
-        case EXPR_BOOL_OR:      s = "bool_or"; break;
-        case EXPR_SINEG:        s = "sineg"; break;
-        case EXPR_IINC:         s = "iinc"; break;
-        case EXPR_IDEC:         s = "idec"; break;
-        case EXPR_IADD:         s = "iadd"; break;
-        case EXPR_ISUB:         s = "isub"; break;
-        case EXPR_IMUL:         s = "imul"; break;
-        case EXPR_IDIV:         s = "idiv"; break;
-        case EXPR_IMOD:         s = "imod"; break;
-        case EXPR_INOT:         s = "inot"; break;
-        case EXPR_IAND:         s = "iand"; break;
-        case EXPR_IOR:          s = "ior"; break;
-        case EXPR_IXOR:         s = "ixor"; break;
-        case EXPR_ISHL:         s = "ishl"; break;
-        case EXPR_ISHR:         s = "ishr"; break;
-        case EXPR_IEQ:          s = "ieq"; break;
-        case EXPR_INE:          s = "ine"; break;
-        case EXPR_ILT:          s = "ilt"; break;
-        case EXPR_ILE:          s = "ile"; break;
-        case EXPR_IGE:          s = "ige"; break;
-        case EXPR_IGT:          s = "igt"; break;
-        case EXPR_FNEG:         s = "fneg"; break;
-        case EXPR_FADD:         s = "fadd"; break;
-        case EXPR_FSUB:         s = "fsub"; break;
-        case EXPR_FMUL:         s = "fmul"; break;
-        case EXPR_FDIV:         s = "fdiv"; break;
-        case EXPR_FEQ:          s = "feq"; break;
-        case EXPR_FNE:          s = "fne"; break;
-        case EXPR_FLT:          s = "flt"; break;
-        case EXPR_FLE:          s = "fle"; break;
-        case EXPR_FGE:          s = "fge"; break;
-        case EXPR_FGT:          s = "fgt"; break;
-        case EXPR_PADDSI:       s = "paddsi"; break;
-        case EXPR_PADDUI:       s = "paddui"; break;
-        case EXPR_PSUBSI:       s = "psubsi"; break;
-        case EXPR_PSUBUI:       s = "psubui"; break;
-        case EXPR_PDIFF:        s = "pdiff"; break;
-        case EXPR_PEQ:          s = "peq"; break;
-        case EXPR_PNE:          s = "pne"; break;
-        case EXPR_PLT:          s = "plt"; break;
-        case EXPR_PLE:          s = "ple"; break;
-        case EXPR_PGE:          s = "pge"; break;
-        case EXPR_PGT:          s = "pgt"; break;
-        case EXPR_PIND:         s = "pind"; break;
-        case EXPR_PNEW:         s = "pnew"; break;
-        case EXPR_MCOPY:        s = "mcopy"; break;
-        case EXPR_MDUP:         s = "mdup"; break;
-        case EXPR_MADDUI:       s = "maddui"; break;
-        case EXPR_MADDSI:       s = "maddsi"; break;
-        case EXPR_CONDITION:    s = "condition"; break;
-        case EXPR_ELIST:        s = "elist"; break;
-        case EMPTY_EXPRESSION:  s = "empty_expr"; break;
-        default: ASSERT(false); break;
-    }
-
-    return s;
-}
-
 void PrintNodeTree(Node * root, std::string indent)
 {
     ASSERT(root);
@@ -2043,7 +1856,7 @@ void PrintNodeTree(Node * root, std::string indent)
 std::string StackLayoutDebugString(FunctionContext * context)
 {
     ASSERT(context->stackFrameSize > 0);
-    
+
     std::string s;
 
     s = std::string() +

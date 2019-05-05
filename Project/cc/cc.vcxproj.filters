@@ -19,9 +19,6 @@
     <ClInclude Include="..\..\Source\ir\Definition.h">
       <Filter>IR</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Source\ir\Function.h">
-      <Filter>IR</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\Source\ir\Location.h">
       <Filter>IR</Filter>
     </ClInclude>
@@ -49,6 +46,12 @@
     <ClInclude Include="..\..\Source\util\Charset.h">
       <Filter>Util</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\Source\codegen\FunctionCompiler.h">
+      <Filter>CodeGeneration</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\ir\IR.h">
+      <Filter>IR</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\Source\lex\tokenizer.cpp">
@@ -62,9 +65,6 @@
       <Filter>IR</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Source\ir\Definition.cpp">
-      <Filter>IR</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Source\ir\Function.cpp">
       <Filter>IR</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Source\codegen\AstCompiler.cpp">
@@ -87,6 +87,12 @@
     </ClCompile>
     <ClCompile Include="..\..\Source\util\Charset.cpp">
       <Filter>Util</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\codegen\FunctionCompiler.cpp">
+      <Filter>CodeGeneration</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\ir\IR.cpp">
+      <Filter>IR</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

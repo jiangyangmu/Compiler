@@ -2,8 +2,8 @@
 
 #include "../IR/Ast.h"
 #include "../IR/Definition.h"
-#include "../IR/Function.h"
 #include "../IR/Type.h"
+#include "../Codegen/FunctionCompiler.h"
 
 enum ASTScope {
     IN_FILE,

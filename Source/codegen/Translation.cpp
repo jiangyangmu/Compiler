@@ -701,12 +701,25 @@ std::string TranslateCallExpression(FunctionContext * context,
         else
         {
             size_t width = paramSize;
+            // HACK: r8, r9 bug
+
+            Location paramSaveLoc = callerProtocol.GetParameterLocation(argumentIndex);
 
             // mov rax, paramLoc
             // mov ..., rax
-            s +=
-                Code::MOV1_RCX(RAX, paramLoc, width) +
-                Code::MOV2(callerProtocol.GetParameterLocation(argumentIndex), RAX, width);
+            if (paramSaveLoc.type == REGISTER && (paramSaveLoc.registerType == R8 || paramSaveLoc.registerType == R9) && width < 8)
+            {
+                s +=
+                    Code::MOV1_RCX(RAX, paramLoc, width) +
+                    Code::MOVSX(RAX, 8, RAX, width) +
+                    Code::MOV2(paramSaveLoc, RAX, 8);
+            }
+            else
+            {
+                s +=
+                    Code::MOV1_RCX(RAX, paramLoc, width) +
+                    Code::MOV2(paramSaveLoc, RAX, width);
+            }
         }
 
         argumentIndex += 1;
@@ -773,7 +786,6 @@ std::string TranslateExpression(FunctionContext * context,
         return s;
     }
 
-    ExpressionIntention intent = context->currentIntention.back();
     Type *      outType = expression->expr.type;
     size_t      outSize = TypeSize(outType);
     Location    outLoc = expression->expr.loc;
@@ -786,14 +798,10 @@ std::string TranslateExpression(FunctionContext * context,
     // 3. generate code
     // 4. mask non-volatile registers
 
-    if (expression->type == EXPR_ID)
+    if (expression->type == EXPR_DATA)
     {
         // do nothing
         ASSERT(IsValidLocation(expression->expr.loc));
-    }
-    else if (expression->type == EXPR_CONSTANT)
-    {
-        // do nothing
     }
     else if (expression->type == EXPR_CALL)
     {
@@ -1210,10 +1218,7 @@ std::string TranslateExpression(FunctionContext * context,
              op     + AX(1) + ", " + X64LocationString(inLoc2, 1) + "\n" +
              "mov " + X64LocationString(outLoc, 1) + ", " + AX(1) + "\n";
     }
-    else if (expression->type == EXPR_SINEG ||
-             expression->type == EXPR_INOT ||
-             expression->type == EXPR_IINC ||
-             expression->type == EXPR_IDEC)
+    else if (expression->type == EXPR_INOT)
     {
         s += TranslateChildrenExpressionAndSaveSpill(context, expression);
 
@@ -1229,22 +1234,12 @@ std::string TranslateExpression(FunctionContext * context,
 
         ASSERT(width == inSize);
 
-        std::string op;
-        switch (expression->type)
-        {
-            case EXPR_SINEG: op = "neg "; break;
-            case EXPR_INOT: op = "not "; break;
-            case EXPR_IINC: op = "inc "; break;
-            case EXPR_IDEC: op = "dec "; break;
-            default: ASSERT(false); break;
-        }
-
         // mov rax, inLoc
         // op  rax
         // mov outLoc, rax
         s +=
             Code::MOV1_RCX(RAX, inLoc, width) +
-            op + AX(width) + "\n" +
+            "not " + AX(width) + "\n" +
             Code::MOV2(outLoc, RAX, width);
     }
     else if (expression->type == EXPR_IADD ||
@@ -1363,6 +1358,7 @@ std::string TranslateExpression(FunctionContext * context,
         s += LoadSpillAndGetLocation(context, expression, 0, &inLoc1);
         s +=
             Code::MOV1_RCX(RAX, inLoc1, width) +
+            "xor rcx, rcx\n" +
             Code::MOV1(RCX, tmpLoc, 1) +
             op + AX(width) + ", " + CX(1) + "\n" +
             Code::MOV2(outLoc, RAX, width);
@@ -2027,10 +2023,8 @@ std::string TranslateReturnStatement(FunctionContext * context, Node * returnSta
 
     if (expr->type != EMPTY_EXPRESSION)
     {
-        context->currentIntention.push_back(WANT_NOTHING);
         s += TranslateExpression(context, expr);
-        context->currentIntention.pop_back();
-
+        
         // copy return value to reg/stack
         Type *      outType = expr->expr.type;
         size_t      outSize = TypeSize(outType);
@@ -2091,9 +2085,7 @@ std::string TranslateStatement(FunctionContext * context,
         
         if (expr->type != EMPTY_EXPRESSION)
         {
-            context->currentIntention.push_back(WANT_NOTHING);        
-            s += TranslateExpression(context, expr);        
-            context->currentIntention.pop_back();
+            s += TranslateExpression(context, expr);
         }
     }
     else if (statement->type == STMT_IF)
@@ -2103,9 +2095,7 @@ std::string TranslateStatement(FunctionContext * context,
         Node * ifBody = expr->right;
         Node * elseBody = ifBody->right;
 
-        context->currentIntention.push_back(WANT_VALUE);
         s += TranslateExpression(context, expr);
-        context->currentIntention.pop_back();
 
         s += "cmp al, 0\n";
         if (!elseBody)
@@ -2140,9 +2130,7 @@ std::string TranslateStatement(FunctionContext * context,
         const std::string & L1 = context->targetToLabels[statement][1];
 
         s += L0 + ":\n";
-        context->currentIntention.push_back(WANT_VALUE);
         s += TranslateExpression(context, expr);
-        context->currentIntention.pop_back();
         s += "cmp al, 0\n";
         s += "je " + L1 + "\n";
         s += TranslateStatement(context, body);
@@ -2163,9 +2151,7 @@ std::string TranslateStatement(FunctionContext * context,
         
         s += TranslateStatement(context, body);
         
-        context->currentIntention.push_back(WANT_VALUE);
         s += TranslateExpression(context, expr);
-        context->currentIntention.pop_back();
         s += "cmp al, 0\n";
         s += "jne " + L0 + "\n";
 
@@ -2185,24 +2171,18 @@ std::string TranslateStatement(FunctionContext * context,
 
         if (preExpr->type != EMPTY_EXPRESSION)
         {
-            context->currentIntention.push_back(WANT_NOTHING);
             s += TranslateExpression(context, preExpr);
-            context->currentIntention.pop_back();
         }
 
         s += L0 + ":\n";
-        context->currentIntention.push_back(WANT_VALUE);
         s += TranslateExpression(context, loopExpr);
-        context->currentIntention.pop_back();
         s += "cmp al, 0\n";
         s += "je " + L1 + "\n";
 
         s += TranslateStatement(context, body);
         if (postExpr->type != EMPTY_EXPRESSION)
         {
-            context->currentIntention.push_back(WANT_NOTHING);
             s += TranslateExpression(context, postExpr);
-            context->currentIntention.pop_back();
         }
 
         s += "jmp " + L0 + "\n";
@@ -2247,9 +2227,7 @@ std::string TranslateStatement(FunctionContext * context,
         Node * expr = statement->down;
         Node * body = expr->right;
 
-        context->currentIntention.push_back(WANT_VALUE);
         s += TranslateExpression(context, expr);
-        context->currentIntention.pop_back();
 
         const std::vector<std::string> & labels     = context->targetToLabels[statement];
         const std::vector<Node *> & defaultAndCases = context->switchToChildren[statement];
@@ -2313,8 +2291,9 @@ void TranslateFunctionContext(x64Program * program,
                 Location argumentSaveLoc;
                 argumentSaveLoc.type = BP_OFFSET;
                 argumentSaveLoc.offsetValue = 16 + 8 * callstackIndex;
-                size_t width = TypeSize(context->functionType->memberType[argumentIndex]);
-                text += "mov " + X64LocationString(argumentSaveLoc, width) + ", " + X64LocationString(argumentLoc, width) + " ; copy register argument\n";
+                // HACK: r8, r9 bug
+                //size_t width = TypeSize(context->functionType->memberType[argumentIndex]);
+                text += "mov " + X64LocationString(argumentSaveLoc, 8) + ", " + X64LocationString(argumentLoc, 8) + " ; copy register argument\n";
             }
         }
     }

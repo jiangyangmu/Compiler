@@ -59,6 +59,10 @@ ByteArray RemoveComments(const ByteArray & input)
             {
                 *out++ = *in++;
             }
+            else
+            {
+                ++in;
+            }
         }
         else
         {
