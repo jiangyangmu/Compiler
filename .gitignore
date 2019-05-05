@@ -38,4 +38,4 @@
 Test/
 Debug/
 Release/
-cc-integration-test/*.asm
+*/cc-integration-test/*.asm

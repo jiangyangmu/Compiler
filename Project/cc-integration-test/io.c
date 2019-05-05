@@ -35,9 +35,20 @@ int PrintInt(int i)
     return 0;
 }
 
+int print(const char * msg, int value)
+{
+    printf(msg);
+    printf(" = ");
+    PrintInt(value);
+    return 0;
+}
+
+
 int main()
 {
     printf("hello, world!\n");
     PrintInt(123456);
+
+    print("int", 789);
     return 0;
 }

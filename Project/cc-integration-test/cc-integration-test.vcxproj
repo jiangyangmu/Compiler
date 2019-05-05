@@ -157,6 +157,16 @@
       <FileType>CppCode</FileType>
     </None>
   </ItemGroup>
+  <ItemGroup>
+    <None Include="clib.c">
+      <FileType>CppCode</FileType>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="type.c">
+      <FileType>CppCode</FileType>
+    </None>
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Target Name="CC_ComputeInputOutputFiles">
     <ReadLinesFromFile File="@(CC_IncludedSourceFile)">
