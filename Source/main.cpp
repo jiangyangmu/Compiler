@@ -9,7 +9,7 @@
 #include "Util/Common.h"
 #include "Util/String.h"
 #include "Preprocess/Preprocess.h"
-#include "IR/Ast.h"
+#include "Parser/AstParser.h"
 #include "CodeGen/AstCompiler.h"
 #include "CodeGen/Translation.h"
 

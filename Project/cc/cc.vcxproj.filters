@@ -1,9 +1,6 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <ClInclude Include="..\..\Source\lex\tokenizer.h">
-      <Filter>Token</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\Source\logging\logging.h">
       <Filter>Util</Filter>
     </ClInclude>
@@ -12,9 +9,6 @@
     </ClInclude>
     <ClInclude Include="..\..\Source\util\Integer.h">
       <Filter>Util</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Source\ir\Ast.h">
-      <Filter>IR</Filter>
     </ClInclude>
     <ClInclude Include="..\..\Source\ir\Location.h">
       <Filter>IR</Filter>
@@ -52,17 +46,17 @@
     <ClInclude Include="..\..\Source\ir\FunctionContext.h">
       <Filter>IR</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\Source\Parser\AstParser.h">
+      <Filter>Parser</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\Parser\TokenParser.h">
+      <Filter>Parser</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\Source\lex\tokenizer.cpp">
-      <Filter>Token</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\Source\main.cpp" />
     <ClCompile Include="..\..\Source\logging\logging.cpp">
       <Filter>Util</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Source\ir\Ast.cpp">
-      <Filter>IR</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Source\codegen\AstCompiler.cpp">
       <Filter>CodeGeneration</Filter>
@@ -94,6 +88,12 @@
     <ClCompile Include="..\..\Source\ir\FunctionContext.cpp">
       <Filter>IR</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\Source\Parser\AstParser.cpp">
+      <Filter>Parser</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\Parser\TokenParser.cpp">
+      <Filter>Parser</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\Source\TODO.md" />
@@ -114,11 +114,11 @@
     <Filter Include="TestProgram">
       <UniqueIdentifier>{59b13598-559f-4567-9a35-1ee130d76635}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Token">
-      <UniqueIdentifier>{30426051-969a-4ee3-a4dc-fe32df8f5f11}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Preproc">
       <UniqueIdentifier>{852f7727-a09e-425f-a7ae-622b50d8a239}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Parser">
+      <UniqueIdentifier>{84354ce6-3e42-4a96-b0b2-e97732922331}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>

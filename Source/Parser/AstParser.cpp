@@ -1,4 +1,4 @@
-#include "Ast.h"
+#include "AstParser.h"
 
 Ast * NewAst(AstType type)
 {

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../lex/tokenizer.h"
+#include "TokenParser.h"
 
 enum AstType
 {
