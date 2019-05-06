@@ -27,23 +27,18 @@ TypeAliasDefinition * AsTypeAliasDefinition(Definition * definition)
     ASSERT(definition && definition->type == DefinitionType::TYPE_ALIAS_DEFINITION);
     return reinterpret_cast<TypeAliasDefinition *>(definition);
 }
-GotoLabelDefinition * AsGotoLabelDefinition(Definition * definition)
-{
-    ASSERT(definition && definition->type == DefinitionType::GOTO_LABEL_DEFINITION);
-    return reinterpret_cast<GotoLabelDefinition *>(definition);
-}
 
 Type * ExtractDefinitionCType(Definition * definition)
 {
     Type * type = nullptr;
     switch (definition->type)
     {
-        case OBJECT_DEFINITION:        type = reinterpret_cast<ObjectDefinition *>(definition)->objType; break;
-        case FUNCTION_DEFINITION:      type = reinterpret_cast<FunctionDefinition *>(definition)->funcType; break;
-        case ENUM_CONST_DEFINITION:    type = reinterpret_cast<EnumConstDefinition *>(definition)->enumConstType; break;
-        case TYPE_ALIAS_DEFINITION:    type = reinterpret_cast<TypeAliasDefinition *>(definition)->aliasedType; break;
-        case TYPE_TAG_DEFINITION:      type = reinterpret_cast<TypeTagDefinition *>(definition)->taggedType; break;
-        case GOTO_LABEL_DEFINITION: ASSERT(false); break;
+        case OBJECT_DEFINITION:         type = reinterpret_cast<ObjectDefinition *>(definition)->objType; break;
+        case FUNCTION_DEFINITION:       type = reinterpret_cast<FunctionDefinition *>(definition)->funcType; break;
+        case ENUM_CONST_DEFINITION:     type = reinterpret_cast<EnumConstDefinition *>(definition)->enumConstType; break;
+        case TYPE_ALIAS_DEFINITION:     type = reinterpret_cast<TypeAliasDefinition *>(definition)->aliasedType; break;
+        case TYPE_TAG_DEFINITION:       type = reinterpret_cast<TypeTagDefinition *>(definition)->taggedType; break;
+        default:                        ASSERT(false); break;
     }
     return type;
 }
@@ -52,13 +47,13 @@ void DeleteDefinition(Definition * definition)
 {
     switch (definition->type)
     {
-        case OBJECT_DEFINITION:        delete reinterpret_cast<ObjectDefinition *>(definition); break;
-        case FUNCTION_DEFINITION:      ASSERT(!AsFunctionDefinition(definition)->hasFuncBody);
-                                            delete reinterpret_cast<FunctionDefinition *>(definition); break;
-        case ENUM_CONST_DEFINITION:    delete reinterpret_cast<EnumConstDefinition *>(definition); break;
-        case TYPE_ALIAS_DEFINITION:    delete reinterpret_cast<TypeAliasDefinition *>(definition); break;
-        case TYPE_TAG_DEFINITION:      delete reinterpret_cast<TypeTagDefinition *>(definition); break;
-        case GOTO_LABEL_DEFINITION:    delete reinterpret_cast<GotoLabelDefinition *>(definition); break;
+        case OBJECT_DEFINITION:         delete reinterpret_cast<ObjectDefinition *>(definition); break;
+        case FUNCTION_DEFINITION:       ASSERT(!AsFunctionDefinition(definition)->hasFuncBody);
+                                        delete reinterpret_cast<FunctionDefinition *>(definition); break;
+        case ENUM_CONST_DEFINITION:     delete reinterpret_cast<EnumConstDefinition *>(definition); break;
+        case TYPE_ALIAS_DEFINITION:     delete reinterpret_cast<TypeAliasDefinition *>(definition); break;
+        case TYPE_TAG_DEFINITION:       delete reinterpret_cast<TypeTagDefinition *>(definition); break;
+        default:                        ASSERT(false); break;
     }
 }
 
@@ -83,10 +78,6 @@ Definition * MergeDefinition(Definition * a, Definition * b)
     //          no-type X no-type = no-type
     //          type X no-type = type
     //          no-type X type = type
-    // goto label:
-    //          no-def X no-def = no-def
-    //          def X no-def = def
-    //          no-def X def = def
     ASSERT(a && b && a->name == b->name);
 
     if (a->type == DefinitionType::OBJECT_DEFINITION && b->type == DefinitionType::OBJECT_DEFINITION)
@@ -173,23 +164,6 @@ Definition * MergeDefinition(Definition * a, Definition * b)
             return b;
         }
     }
-    else if (a->type == DefinitionType::GOTO_LABEL_DEFINITION &&
-             b->type == DefinitionType::GOTO_LABEL_DEFINITION)
-    {
-        GotoLabelDefinition * ga = AsGotoLabelDefinition(a);
-        GotoLabelDefinition * gb = AsGotoLabelDefinition(b);
-
-        if (!gb->isDefined)
-        {
-            DeleteDefinition(b);
-            return a;
-        }
-        else if (!ga->isDefined)
-        {
-            DeleteDefinition(a);
-            return b;
-        }
-    }
 
     return nullptr;
 }
@@ -209,9 +183,6 @@ DefinitionContextNamespace DefinitionType2DefinitionContextNamespace(DefinitionT
             break;
         case TYPE_TAG_DEFINITION:
             ns = TAG_NAMESPACE;
-            break;
-        case GOTO_LABEL_DEFINITION:
-            ns = LABEL_NAMESPACE;
             break;
     }
     return ns;
@@ -370,18 +341,6 @@ Definition * NewTypeAliasDefinition(DefinitionContext * context,
     return InsertDefinition(context, &typeAliasDef->def);
 }
 
-Definition * NewGotoLabelDefinition(DefinitionContext * context,
-                                    StringRef name,
-                                    bool isDefined)
-{
-    GotoLabelDefinition * gotoLabelDef = new GotoLabelDefinition;
-    gotoLabelDef->def.name = name;
-    gotoLabelDef->def.type = DefinitionType::GOTO_LABEL_DEFINITION;
-    gotoLabelDef->isDefined = isDefined;
-
-    return InsertDefinition(context, &gotoLabelDef->def);
-}
-
 DefinitionContext * CreateDefinitionContext(DefinitionContext * parent,
                                             DefinitionContextScope scope)
 {
@@ -443,9 +402,6 @@ void PrintDefinition(Definition * definition)
             break;
         case TYPE_TAG_DEFINITION:
             std::cout << "TAG \t" << TypeDebugString(AsTypeTagDefinition(definition)->taggedType);
-            break;
-        case GOTO_LABEL_DEFINITION:
-            std::cout << "LABL\t" << AsGotoLabelDefinition(definition)->isDefined;
             break;
     }
     std::cout << '\n';

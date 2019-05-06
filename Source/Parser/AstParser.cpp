@@ -593,12 +593,9 @@ Ast * ParseStatememt(TokenIterator & ti)
     {
         if (PEEK_T(Token::ID))
         {
-            Ast * labelStatement                = NewAst(LABEL_STMT);
-            labelStatement->leftChild           = NewAst(IDENTIFIER, NEXT());
-            EXPECT_T(Token::OP_COLON);
-            labelStatement->leftChild->rightSibling
-                                                = ParseStatememt(ti);
-            return labelStatement;
+            // No goto/label statement
+            ASSERT(false);
+            return nullptr;
         }
         else if (SKIP_T(Token::KW_CASE))
         {
@@ -717,11 +714,9 @@ Ast * ParseStatememt(TokenIterator & ti)
 
         if (SKIP_T(Token::KW_GOTO))
         {
-            Ast * gotoStatement                 = NewAst(GOTO_STMT);
-            ASSERT(PEEK_T(Token::ID));
-            gotoStatement->leftChild            = NewAst(IDENTIFIER, NEXT());
-            EXPECT_T(Token::STMT_END);
-            return gotoStatement;
+            // No goto/label statement
+            ASSERT(false);
+            return nullptr;
         }
         else if(SKIP_T(Token::KW_CONTINUE))
         {
@@ -1223,7 +1218,6 @@ void DebugPrintAstImpl(Ast * ast, size_t indent)
                                     "stmt",
                                     "stmt list",
                                     "labeled stmt",
-                                    "label",
                                     "case",
                                     "default",
                                     "compound stmt",
@@ -1236,7 +1230,6 @@ void DebugPrintAstImpl(Ast * ast, size_t indent)
                                     "do while stmt",
                                     "for stmt",
                                     "jump stmt",
-                                    "goto stmt",
                                     "continue stmt",
                                     "break stmt",
                                     "return stmt",

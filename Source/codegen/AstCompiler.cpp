@@ -1074,25 +1074,6 @@ void CompileAst(AstCompileContext * context, Ast * ast)
     {
 
     }
-    else if (ast->type == LABEL_STMT)
-    {
-        StringRef label = child->token.text;
-
-        (void)Language::NewGotoLabelDefinition(context->currentFunctionDefinitionContext,
-                                               label,
-                                               true);
-
-        child = child->rightSibling;
-        CompileAst(context, child);
-
-        Language::Node * statement = PopNode(context);
-
-        Language::Node * labelStatement = Language::LabelStatement(context->currentFunctionContext,
-                                                                   label,
-                                                                   statement);
-
-        PushNode(context, labelStatement);
-    }
     else if (ast->type == CASE_STMT)
     {
         //ASSERT(child->type == CONSTANT_EXPR);
@@ -1322,13 +1303,6 @@ void CompileAst(AstCompileContext * context, Ast * ast)
     else if (ast->type == JUMP_STMT)
     {
 
-    }
-    else if (ast->type == GOTO_STMT)
-    {
-        Language::Node * gotoStatement = Language::GotoStatement(context->currentFunctionContext,
-                                                                 child->token.text);
-
-        PushNode(context, gotoStatement);
     }
     else if (ast->type == CONTINUE_STMT)
     {

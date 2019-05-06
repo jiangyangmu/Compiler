@@ -12,7 +12,6 @@ enum DefinitionType
     ENUM_CONST_DEFINITION,
     TYPE_ALIAS_DEFINITION,
     TYPE_TAG_DEFINITION,
-    GOTO_LABEL_DEFINITION,
 };
 struct Definition
 {
@@ -71,20 +70,12 @@ struct TypeAliasDefinition
     Type *              aliasedType;
 };
 
-struct GotoLabelDefinition
-{
-    Definition          def;
-    bool                isDefined;
-};
-
 ObjectDefinition *      AsObjectDefinition(Definition * definition);
 FunctionDefinition *    AsFunctionDefinition(Definition * definition);
 EnumConstDefinition *   AsEnumConstDefinition(Definition * definition);
 TypeTagDefinition *     AsTypeTagDefinition(Definition * definition);
 TypeAliasDefinition *   AsTypeAliasDefinition(Definition * definition);
-GotoLabelDefinition *   AsGotoLabelDefinition(Definition * definition);
 
-// != GotoLabelDefinition
 Type *                  ExtractDefinitionCType(Definition * definition);
 
 // Build
@@ -114,10 +105,6 @@ Definition * NewTypeTagDefinition(DefinitionContext * context,
 Definition * NewTypeAliasDefinition(DefinitionContext * context,
                                     StringRef name,
                                     Type * aliasedType);
-
-Definition * NewGotoLabelDefinition(DefinitionContext * context,
-                                    StringRef name,
-                                    bool isDefined);
 
 // Manage
 

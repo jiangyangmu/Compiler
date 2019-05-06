@@ -103,8 +103,6 @@ std::string NodeDebugString(Node * node)
         case STMT_BREAK:        s = "break"; break;
         case STMT_CONTINUE:     s = "continue"; break;
         case STMT_RETURN:       s = "return"; break;
-        case STMT_GOTO:         s = "goto"; break;
-        case STMT_LABEL:        s = "label"; break;
         case STMT_SWITCH:       s = "switch"; break;
         case STMT_CASE:         s = "case"; break;
         case STMT_DEFAULT:      s = "default"; break;
@@ -1514,36 +1512,6 @@ void   ForStatement_End(FunctionContext * context)
 {
     context->currentBreakTarget.pop_back();
     context->currentContinueTarget.pop_back();
-}
-
-Node * GotoStatement(FunctionContext * context, StringRef label)
-{
-    Node * node = new Node;
-    node->down = node->right = node->up = nullptr;
-    node->type = STMT_GOTO;
-    node->stmt.label = new StringRef(label);
-
-    auto iter = context->isLabelDefined.find(label.toString());
-    if (iter == context->isLabelDefined.end())
-    {
-        context->isLabelDefined.insert(iter, { label.toString(), false });
-    }
-
-    return node;
-}
-
-Node * LabelStatement(FunctionContext * context, StringRef label, Node * stmt)
-{
-    Node * node = new Node;
-    node->down = node->right = node->up = nullptr;
-    node->type = STMT_LABEL;
-    node->stmt.label = new StringRef(label);
-
-    context->isLabelDefined[label.toString()] = true;
-
-    AddChild(node, stmt);
-
-    return node;
 }
 
 Node * BreakStatement(FunctionContext * context)

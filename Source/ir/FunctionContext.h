@@ -22,8 +22,6 @@ enum NodeType
     STMT_BREAK,
     STMT_CONTINUE,
     STMT_RETURN,
-    STMT_GOTO,
-    STMT_LABEL,
     STMT_SWITCH,
     STMT_CASE,
     STMT_DEFAULT,
@@ -101,7 +99,6 @@ struct Node
     union
     {
         DefinitionContext * context;    // for compound statement
-        StringRef * label;              // for goto & label statement
         u64 caseValue;                  // for case statement
     } stmt;
 
@@ -124,7 +121,7 @@ void        PrintNodeTree(Node * root);
 
 struct FunctionContext
 {
-    // External information
+    // Keep external information
 
     std::string functionName;
     // used in id expression, to figure out argument object location
@@ -134,21 +131,19 @@ struct FunctionContext
     // used to collect local variables
     DefinitionContext * functionDefinitionContext;
 
-    // IR tree build state
+    // Build stmt & expr tree
 
     Node * functionBody;
 
-    // Definition tree build state
+    // Build definition tree
 
     std::vector<DefinitionContext *> currentDefinitionContext;
 
-    // Jump label build state
+    // Build jump labels
 
     // label generation
     int nextUniqueLabel;
     // label check
-    // check used goto label are defined
-    std::map<std::string, bool> isLabelDefined;
     // check break/continue has target, case/default in switch
     std::vector<Node *> currentBreakTarget;     // can be while*/for/switch
     std::vector<Node *> currentContinueTarget;  // can be while*/for
@@ -240,7 +235,7 @@ Node * ConditionExpression(FunctionContext * context, Node * a, Node * b, Node *
 Node * CommaExpression(std::vector<Node *> & exprs);
 
 // Statement construction front end, fit C syntax
-// Construct flow-control tree, check and create labels (goto label defined, break/continue has target, case/default in switch).
+// Construct flow-control tree, check and create labels (break/continue has target, case/default in switch).
 
 Node * CompoundStatement_Begin(FunctionContext * context, DefinitionContext * definitionContext);
 void   CompoundStatement_AddStatement(Node * compoundStmt, Node * stmt);
@@ -273,7 +268,6 @@ void   ForStatement_SetPostExpr(Node * forStmt, Node * postExpr);
 void   ForStatement_SetBody(Node * forStmt, Node * body);
 void   ForStatement_End(FunctionContext * context);
 
-Node * GotoStatement(FunctionContext * context, StringRef label);
 Node * LabelStatement(FunctionContext * context, StringRef label, Node * stmt);
 
 Node * BreakStatement(FunctionContext * context);

@@ -2564,14 +2564,6 @@ std::string TranslateStatement(FunctionContext * context,
     {
         s += TranslateReturnStatement(context, stackLayout, statement);
     }
-    else if (statement->type == STMT_GOTO)
-    {
-        s += "jmp " + statement->stmt.label->toString() + "\n";
-    }
-    else if (statement->type == STMT_LABEL)
-    {
-        s += statement->stmt.label->toString() + ":\n";
-    }
     else if (statement->type == STMT_SWITCH)
     {
         // ... expr code ...
