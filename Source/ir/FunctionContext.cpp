@@ -5,7 +5,7 @@
 
 namespace Language {
 
-void AddChild(Node * parent, Node * child)
+void    AddChild(Node * parent, Node * child)
 {
     ASSERT(parent && child && !child->up);
     
@@ -24,7 +24,7 @@ void AddChild(Node * parent, Node * child)
     }
 }
 
-int CountChild(Node * node)
+int     CountChild(Node * node)
 {
     ASSERT(node);
     int n = 0;
@@ -37,7 +37,7 @@ int CountChild(Node * node)
     return n;
 }
 
-Node * LastChild(Node * parent)
+Node *  LastChild(Node * parent)
 {
     ASSERT(parent);
 
@@ -54,7 +54,7 @@ Node * LastChild(Node * parent)
     return lastChild;
 }
 
-Node * MakeNode(NodeType type)
+Node *  MakeNode(NodeType type)
 {
     Node * node = new Node;
     node->down = node->right = node->up = nullptr;
@@ -74,7 +74,7 @@ Node * MakeNode(NodeType type)
     return node;
 }
 
-void DestroyNodeTree(Node * root)
+void    DestroyNodeTree(Node * root)
 {
     if (root)
     {
@@ -179,7 +179,6 @@ std::string NodeDebugString(Node * node)
     return s;
 }
 
-
 FunctionContext * CreateFunctionContext(DefinitionContext * functionDefinitionContext,
                                         FunctionType * functionType,
                                         ConstantContext * constantContext,
@@ -188,25 +187,15 @@ FunctionContext * CreateFunctionContext(DefinitionContext * functionDefinitionCo
 {
     FunctionContext * functionContext = new FunctionContext;
 
-    functionContext->functionDefinitionContext = functionDefinitionContext;
+    functionContext->functionName = functionName.toString();
     functionContext->functionType = functionType;
-    functionContext->nextUniqueLabel = 0;
     functionContext->constantContext = constantContext;
     functionContext->typeContext = typeContext;
-    functionContext->functionName = functionName.toString();
-    functionContext->localZoneSize = 0;
-    functionContext->maxTempZoneSize = 0;
-    functionContext->maxSpillZoneSize = 0;
-    functionContext->maxCallZoneSize = 0;
-    functionContext->stackAllocSize = 0;
-    functionContext->stackFrameSize = 0;
-    functionContext->registerZoneEndOffset = 0;
-    functionContext->localZoneEndOffset = 0;
-    functionContext->tempZoneBeginOffset = 0;
-    functionContext->spillZoneEndOffset = 0;
-    functionContext->callZoneEndOffset = 0;
-    functionContext->dirtyRegisters = 0;
+    functionContext->functionDefinitionContext = functionDefinitionContext;
+
     functionContext->functionBody = nullptr;
+
+    functionContext->nextUniqueLabel = 0;
 
     return functionContext;
 }
@@ -262,46 +251,6 @@ Node * WrapCastNode(Node * node, Type * toType)
     return castNode;
 }
 
-size_t ComputeCallZoneSize(Node * call)
-{
-    ASSERT(call->down);
-
-    size_t size = 0;
-
-    // int/float/block(<=64)    -> register/value-on-stack
-    // block(>64)               -> address-on-stack
-    size += (CountChild(call) - 1) * 8;
-
-    // large return value
-    Type * returnType = call->down->expr.type;
-    if (TypeSize(returnType) > 8)
-    {
-        size += 8;
-    }
-
-    return size;
-}
-
-void   TypeChecking_Call(Node * call)
-{
-    ASSERT(call->down);
-
-    // num match, type match
-    FunctionType * functionType;
-    std::vector<Type *> arguments;
-
-    Node * next = call->down;
-    functionType = AsFunction(AsPointer(next->expr.type)->target);
-    while (next->right)
-    {
-        next = next->right;
-        arguments.push_back(next->expr.type);
-    }
-
-    ASSERT(IsMatchedCall(functionType, arguments));
-}
-
-
 Node * EmptyExpression(FunctionContext * context)
 {
     Node * node = MakeNode(EMPTY_EXPRESSION);
@@ -332,7 +281,6 @@ Location GetArgumentLocation(FunctionType * functionType,
     return loc;
     //return calleeProtocol.GetParameterLocation(argumentIndex);
 }
-
 Node * IdExpression(FunctionContext * context,
                     StringRef id)
 {
@@ -682,6 +630,24 @@ Node * IndirectMemberOfExpression(FunctionContext * context,
     return MemberOfExpression(context, structOrUnion, memberName);
 }
 
+// num match, type match
+bool   CheckCallExpression(Node * call)
+{
+    ASSERT(call->down);
+
+    FunctionType * functionType;
+    std::vector<Type *> arguments;
+
+    Node * next = call->down;
+    functionType = AsFunction(AsPointer(next->expr.type)->target);
+    while (next->right)
+    {
+        next = next->right;
+        arguments.push_back(next->expr.type);
+    }
+
+    return IsMatchedCall(functionType, arguments);
+}
 Node * CallExpression(FunctionContext * context,
                       Node * pointerToFunction,
                       std::vector<Node *> arguments)
@@ -702,7 +668,7 @@ Node * CallExpression(FunctionContext * context,
                      *(paramTypeIter++)));
     }
 
-    TypeChecking_Call(node);
+    ASSERT(CheckCallExpression(node));
 
     Node * dupNode = MakeNode(EXPR_MDUP);
     dupNode->expr.type = node->expr.type;
@@ -1368,15 +1334,6 @@ Node * CommaExpression(std::vector<Node *> & exprs)
     return node;
 }
 
-void   Function_Begin(FunctionContext * context)
-{
-}
-
-void   Function_End(FunctionContext * context)
-{
-    // check goto labels
-}
-
 Node * CompoundStatement_Begin(FunctionContext * context, DefinitionContext * definitionContext)
 {
     Node * node = new Node;
@@ -1416,7 +1373,6 @@ Node * ReturnStatement(Node * expr)
     node->stmt.context = nullptr;
     return node;
 }
-
 
 Node * IfStatement_Begin()
 {
@@ -1576,7 +1532,7 @@ Node * GotoStatement(FunctionContext * context, StringRef label)
     return node;
 }
 
-Node * LabelStatement(FunctionContext * context, StringRef label)
+Node * LabelStatement(FunctionContext * context, StringRef label, Node * stmt)
 {
     Node * node = new Node;
     node->down = node->right = node->up = nullptr;
@@ -1584,6 +1540,8 @@ Node * LabelStatement(FunctionContext * context, StringRef label)
     node->stmt.label = new StringRef(label);
 
     context->isLabelDefined[label.toString()] = true;
+
+    AddChild(node, stmt);
 
     return node;
 }
@@ -1655,12 +1613,14 @@ void   SwitchStatement_End(FunctionContext * context)
     context->currentSwitch.pop_back();
 }
 
-Node * CaseStatement(FunctionContext * context, u64 caseValue)
+Node * CaseStatement(FunctionContext * context, u64 caseValue, Node * stmt)
 {
     Node * node = new Node;
     node->down = node->right = node->up = nullptr;
     node->type = STMT_CASE;
     node->stmt.caseValue = caseValue;
+
+    AddChild(node, stmt);
 
     ASSERT(!context->currentSwitch.empty());
     Node * switchNode = context->currentSwitch.back();
@@ -1679,12 +1639,14 @@ Node * CaseStatement(FunctionContext * context, u64 caseValue)
     return node;
 }
 
-Node * DefaultStatement(FunctionContext * context)
+Node * DefaultStatement(FunctionContext * context, Node * stmt)
 {
     Node * node = new Node;
     node->down = node->right = node->up = nullptr;
     node->type = STMT_DEFAULT;
     node->stmt.context = nullptr;
+
+    AddChild(node, stmt);
 
     ASSERT(!context->currentSwitch.empty());
     Node * switchNode = context->currentSwitch.back();
@@ -1703,307 +1665,27 @@ Node * DefaultStatement(FunctionContext * context)
     return node;
 }
 
-
-void GetAllLocalObjectsInDefinitionContext(DefinitionContext * context,
-                                           std::vector<ObjectDefinition *> & objects,
-                                           bool isTopLevel = true)
-{
-    ASSERT(context);
-
-    for (Definition * definition : context->definitions[ID_NAMESPACE])
-    {
-        if (definition->type == OBJECT_DEFINITION)
-        {
-            ObjectDefinition * objectDefinition = AsObjectDefinition(definition);
-            if (objectDefinition->objStorageType == LOCAL_OBJECT)
-            {
-                objects.push_back(objectDefinition);
-            }
-        }
-    }
-
-    if (context->firstChild)
-        GetAllLocalObjectsInDefinitionContext(context->firstChild, objects, false);
-
-    if (!isTopLevel && context->next)
-        GetAllLocalObjectsInDefinitionContext(context->next, objects, false);
-}
-
-void ForExpressionTreeInFunctionBody(FunctionContext * context,
-                                     Node * body,
-                                     void(*func)(FunctionContext *, Node *))
-{
-    ASSERT(body);
-    if (body->type > BEGIN_EXPRESSION && body->type < END_EXPRESSION)
-    {
-        (*func)(context, body);
-    }
-    else
-    {
-        for (Node * child = body->down;
-             child;
-             child = child->right)
-        {
-            ForExpressionTreeInFunctionBody(context, child, func);
-        }
-    }
-}
-
-bool IsRegisterNode(Node * node)
-{
-    ASSERT(node);
-    return node->type == EXPR_PIND ||
-        node->type == EXPR_CALL ||
-        node->type == EXPR_CVT_REINTERP;
-}
-
-void UpdateMaxTempZoneSpillZoneCallZone(FunctionContext * context, Node * exprTree)
-{
-    size_t tempZoneSize = 0;
-    size_t callZoneSize = 0;
-    size_t maxSpillRegisters = 0;
-
-    // post-order
-    std::vector<std::pair<Node *, bool>> st = { { exprTree, false } };
-    while (!st.empty())
-    {
-        Node * node = st.back().first;
-        if (!st.back().second)
-        {
-            st.back().second = true;
-
-            std::vector<Node *> children;
-            for (Node * child = node->down; child; child = child->right)
-            {
-                children.push_back(child);
-            }
-            for (auto it = children.rbegin(); it != children.rend(); ++it)
-            {
-                st.push_back({ *it, false });
-            }
-        }
-        else
-        {
-            // compute tempZoneSize
-            if (node->expr.loc.type == NEED_ALLOC)
-            {
-                size_t align = TypeAlignment(node->expr.type);
-                size_t size = TypeSize(node->expr.type);
-
-                ASSERT(align <= 8);
-
-                tempZoneSize = (tempZoneSize + size + align - 1) / align * align;
-            }
-            // compute callZoneSize
-            if (node->type == EXPR_CALL)
-            {
-                size_t newCallZoneSize = ComputeCallZoneSize(node);
-
-                callZoneSize = callZoneSize < newCallZoneSize
-                    ? newCallZoneSize
-                    : callZoneSize;
-            }
-            // compute maxSpillRegisters
-            {
-                size_t spillRegisters = 0;
-                for (Node * child = node->down;
-                     child;
-                     child = child->right)
-                {
-                    if (IsRegisterNode(child))
-                        ++spillRegisters;
-                }
-                maxSpillRegisters = Max(maxSpillRegisters, spillRegisters);
-            }
-
-            st.pop_back();
-        }
-    }
-
-    context->maxTempZoneSize = Max(context->maxTempZoneSize, tempZoneSize);
-    context->maxSpillZoneSize = Max(context->maxSpillZoneSize, maxSpillRegisters * 8);
-    context->maxCallZoneSize = Max(context->maxCallZoneSize, callZoneSize);
-}
-
-void FillLocalAndTempLocationInExpressionTree(FunctionContext * context,
-                                              Node * exprTree)
-{
-    size_t offset = context->tempZoneBeginOffset;
-
-    // post-order
-    std::vector<std::pair<Node *, bool>> st = { { exprTree, false } };
-    while (!st.empty())
-    {
-        Node * node = st.back().first;
-        if (!st.back().second)
-        {
-            st.back().second = true;
-
-            std::vector<Node *> children;
-            for (Node * child = node->down; child; child = child->right)
-            {
-                children.push_back(child);
-            }
-            for (auto it = children.rbegin(); it != children.rend(); ++it)
-            {
-                st.push_back({ *it, false });
-            }
-        }
-        else
-        {
-            // fill location
-            if (node->expr.loc.type == NEED_ALLOC)
-            {
-                size_t align = TypeAlignment(node->expr.type);
-                size_t size = TypeSize(node->expr.type);
-
-                ASSERT(align <= 8);
-
-                offset = (offset + size + align - 1) / align * align;
-
-                node->expr.loc.type = ESP_OFFSET;
-                node->expr.loc.offsetValue = context->stackFrameSize - offset;
-            }
-            else if (node->expr.loc.type == SAME_AS_FIRST_CHILD)
-            {
-                node->expr.loc = node->down->expr.loc;
-            }
-            else if (node->expr.loc.type == SAME_AS_FIRST_GRANDCHILD)
-            {
-                node->expr.loc = node->down->down->expr.loc;
-            }
-            else if (node->expr.loc.type == SEARCH_LOCAL_DEFINITION_TABLE)
-            {
-                node->expr.loc.type = ESP_OFFSET;
-                node->expr.loc.offsetValue = context->stackFrameSize - context->localObjectOffsets.at(node->expr.loc.definitionValue);
-            }
-
-            st.pop_back();
-        }
-    }
-
-    ASSERT(offset <= (context->tempZoneBeginOffset + context->maxTempZoneSize));
-}
-
-Location GetSpillLocation(FunctionContext * functionContext, size_t i)
-{
-    ASSERT(functionContext->stackFrameSize != 0);
-    ASSERT((i * 8) < functionContext->maxSpillZoneSize);
-    Location location;
-    location.type = ESP_OFFSET;
-    location.offsetValue = functionContext->stackFrameSize - functionContext->spillZoneEndOffset + i * 8;
-    return location;
-}
-
-void    PrepareStack(FunctionContext * context)
-{
-    // step:
-    //      1. scan for non-volatile registers, fill {dirtyRegisters, registerZoneEndOffset}
-    //      2. scan for local objects, fill {localZoneSize, localZoneEndOffset, localObjectOffsets}
-    //      3. scan for temp objects, fill {maxTempZoneSize, tempZoneBeginOffset}
-    //      4. scan for spill nodes, fill {maxSpillZoneSize, spillZoneEndOffset}
-    //      5. scan for call nodes, fill {maxCallZoneSize, callZoneEndOffset}
-    //      6. fill {spillZoneEndOffset}
-    //      7. fill {stackFrameSize, stackAllocSize}
-    //      8. fill {local location in expression tree, temp location in expression tree}
-    //          * both depends on stackFrameSize
-
-    // "offset to previous stack frame"
-    size_t offset = 8;
-
-    // saved rbp, non-volatile registers
-    context->dirtyRegisters = RBP_MASK | RSI_MASK | RDI_MASK;
-    offset = context->registerZoneEndOffset = offset + 8 * CountBits(context->dirtyRegisters);
-
-    // local zone
-    std::vector<ObjectDefinition *> objectDefinitions;
-    GetAllLocalObjectsInDefinitionContext(context->functionDefinitionContext, objectDefinitions);
-    for (ObjectDefinition * objectDefinition : objectDefinitions)
-    {
-        size_t objectSize = TypeSize(objectDefinition->objType);
-        size_t objectAlign = TypeAlignment(objectDefinition->objType);
-        context->localZoneSize = (context->localZoneSize + objectSize + objectAlign - 1) / objectAlign * objectAlign;
-        context->localObjectOffsets.emplace(&objectDefinition->def, offset + context->localZoneSize);
-    }
-    offset = context->localZoneEndOffset = offset + context->localZoneSize;
-
-    // gap
-    offset = (offset + 7) / 8 * 8;
-
-    ForExpressionTreeInFunctionBody(context,
-                                    context->functionBody,
-                                    UpdateMaxTempZoneSpillZoneCallZone);
-
-    // temp zone
-    context->tempZoneBeginOffset = offset;
-    offset += context->maxTempZoneSize;
-
-    // gap
-    offset = (offset + 7) / 8 * 8;
-
-    // spill zone
-    context->maxSpillZoneSize += 8; // for tmpLoc
-    offset = context->spillZoneEndOffset = offset + context->maxSpillZoneSize;
-
-    // gap
-    offset = (offset + 15) / 16 * 16;
-
-    // call zone
-    offset = context->callZoneEndOffset = offset + context->maxCallZoneSize;
-
-    // stack layout
-    context->stackFrameSize = offset;
-    context->stackAllocSize = offset - context->registerZoneEndOffset;
-
-    // fill expression node location
-    ForExpressionTreeInFunctionBody(context,
-                                    context->functionBody,
-                                    FillLocalAndTempLocationInExpressionTree);
-}
-
-void PrintNodeTree(Node * root, std::string indent)
+void PrintNodeTreeImpl(Node * root, std::string indent)
 {
     ASSERT(root);
 
     std::cout << indent << NodeDebugString(root) << std::endl;
 
     if (root->down)
-        PrintNodeTree(root->down, indent + "  ");
+        PrintNodeTreeImpl(root->down, indent + "  ");
 
     if (root->right)
-        PrintNodeTree(root->right, indent);
+        PrintNodeTreeImpl(root->right, indent);
 }
 
-std::string StackLayoutDebugString(FunctionContext * context)
+void PrintNodeTree(Node * root)
 {
-    ASSERT(context->stackFrameSize > 0);
-
-    std::string s;
-
-    s = std::string() +
-        "; return address:        [rbp + 8]\n" +
-        "; non-volatile register: [rsp + " + std::to_string(context->stackFrameSize - context->registerZoneEndOffset) + ", rbp + 8)\n" +
-        "; local zone:            [rsp + " + std::to_string(context->stackFrameSize - context->localZoneEndOffset) + ", rsp + " + std::to_string(context->stackFrameSize - context->localZoneEndOffset + context->localZoneSize) + ")\n" +
-        "; temp  zone:            [rsp + " + std::to_string(context->stackFrameSize - context->tempZoneBeginOffset - context->maxTempZoneSize) + ", rsp + " + std::to_string(context->stackFrameSize - context->tempZoneBeginOffset) + ")\n" +
-        "; spill zone:            [rsp + " + std::to_string(context->stackFrameSize - context->spillZoneEndOffset) + ", rsp + " + std::to_string(context->stackFrameSize - context->spillZoneEndOffset + context->maxSpillZoneSize) + ")\n" +
-        "; call  zone:            [rsp + " + std::to_string(context->stackFrameSize - context->callZoneEndOffset) + ", rsp + " + std::to_string(context->stackFrameSize - context->callZoneEndOffset + context->maxCallZoneSize) + ")\n";
-
-    std::map<size_t, StringRef> localVariables;
-    for (auto kv : context->localObjectOffsets)
-    {
-        localVariables.emplace(kv.second, kv.first->name);
-    }
-    for (auto it = localVariables.rbegin(); it != localVariables.rend(); ++it)
-    {
-        s += "; " + it->second.toString() + ": [rsp + " + std::to_string(context->stackFrameSize - it->first) + "]\n";
-    }
-
-    return s;
+    PrintNodeTreeImpl(root, "");
 }
 
 void PrintFunctionContext(FunctionContext * context)
 {
-    PrintNodeTree(context->functionBody, "");
+    PrintNodeTree(context->functionBody);
 }
 
 }

@@ -6,16 +6,16 @@ Preprocessor
     ? Expand #include, macro
 * Output: SourceContext
 
-Lexer
+Token Parser
 * Input: SourceContext
 * Do
     > Tokenize source line
     > Unescape char constant ex. '\n'
     > Unescape string constant ex. "\n"
-* Output: vector<Token>
+* Output: Token list
 
 Ast Parser
-* Input: vector<Token>
+* Input: Token list
 * Output: Ast tree
 
 IR - Type Context

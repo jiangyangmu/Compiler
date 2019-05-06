@@ -114,51 +114,38 @@ struct Node
 
 // Build
 
-void    AddChild(Node * parent, Node * child);
 int     CountChild(Node * node);
 Node *  LastChild(Node * parent);
-Node *  MakeNode(NodeType type);
-void    DestroyNodeTree(Node * root);
 
 // Debug
 
 std::string NodeDebugString(Node * node);
-
-#define R12_MASK (1)
-#define R13_MASK (1 << 1)
-#define R14_MASK (1 << 2)
-#define R15_MASK (1 << 3)
-#define RDI_MASK (1 << 4)
-#define RSI_MASK (1 << 5)
-#define RBX_MASK (1 << 6)
-#define RBP_MASK (1 << 7)
-#define RSP_MASK (1 << 8)
-#define XMM6_MASK (1 << 9)
-#define XMM7_MASK (1 << 10)
-#define XMM8_MASK (1 << 11)
-#define XMM9_MASK (1 << 12)
-#define XMM10_MASK (1 << 13)
-#define XMM11_MASK (1 << 14)
-#define XMM12_MASK (1 << 15)
-#define XMM13_MASK (1 << 16)
-#define XMM14_MASK (1 << 17)
-#define XMM15_MASK (1 << 18)
+void        PrintNodeTree(Node * root);
 
 struct FunctionContext
 {
-    // Shared build state
+    // External information
 
-    DefinitionContext * functionDefinitionContext;
-    std::vector<DefinitionContext *> currentDefinitionContext;
-
+    std::string functionName;
     // used in id expression, to figure out argument object location
     FunctionType * functionType;
+    ConstantContext * constantContext;
+    TypeContext * typeContext;
+    // used to collect local variables
+    DefinitionContext * functionDefinitionContext;
 
-    // Statement tree build state
+    // IR tree build state
+
+    Node * functionBody;
+
+    // Definition tree build state
+
+    std::vector<DefinitionContext *> currentDefinitionContext;
+
+    // Jump label build state
 
     // label generation
     int nextUniqueLabel;
-
     // label check
     // check used goto label are defined
     std::map<std::string, bool> isLabelDefined;
@@ -166,10 +153,9 @@ struct FunctionContext
     std::vector<Node *> currentBreakTarget;     // can be while*/for/switch
     std::vector<Node *> currentContinueTarget;  // can be while*/for
     std::vector<Node *> currentSwitch;          // can be switch
-
-                                                // label binding
-                                                // while/do-while/for   -> (continue label, break label)
-                                                // switch               -> (default label, break label, case labels...)
+    // label binding
+    // while/do-while/for   -> (continue label, break label)
+    // switch               -> (default label, break label, case labels...)
     std::map<Node *, std::vector<std::string>> targetToLabels;
     // continue     -> (while/do-while/for, 0)
     // break        -> (while/do-while/for/switch, 1)
@@ -178,49 +164,6 @@ struct FunctionContext
     std::map<Node *, std::pair<Node *, int>> nodeToTarget;
     // switch       -> (default, case...)
     std::map<Node *, std::vector<Node *>> switchToChildren;
-
-    // Expression tree build state
-
-    ConstantContext * constantContext;
-    TypeContext * typeContext;
-
-    // Code generation state
-
-    std::string functionName;
-
-    // stack allocation
-    // layout:
-    //      returnAddress                   (8-byte aligned)
-    //      saved rbp                       (8-byte aligned) <-- rbp
-    //      nonVolatileReg                  (8-byte aligned)
-    //      localZoneSize
-    //      gap                             (8-byte aligned)
-    //      maxTempZoneSize
-    //      gap                             (8-byte aligned)
-    //      maxSpillZoneSize                (8-byte aligned)
-    //      gap
-    //      maxCallZoneSize                 (16-byte aligned) <-- rsp
-    // allocation zone
-    size_t localZoneSize;
-    size_t maxTempZoneSize;
-    size_t maxSpillZoneSize;
-    size_t maxCallZoneSize;
-    size_t stackAllocSize; // local zone + temp zone + spill zone + call zone + gaps
-    size_t stackFrameSize;
-    // allocation offset - "offset to previous stack frame"
-    size_t registerZoneEndOffset;   // for debug
-    size_t localZoneEndOffset;      // for debug
-    size_t tempZoneBeginOffset;     // for temp var location computation
-    size_t spillZoneEndOffset;      // needed by some expression node (e.g. EXPR_PVAL, EXPR_CVT_F2B)
-    size_t callZoneEndOffset;
-    std::map<Definition *, size_t> localObjectOffsets;
-
-    // non-volatile register mask (also used in stack allocation)
-    size_t dirtyRegisters;
-
-    // Final tree
-
-    Node * functionBody;
 };
 
 FunctionContext * CreateFunctionContext(DefinitionContext * functionDefinitionContext,
@@ -229,17 +172,8 @@ FunctionContext * CreateFunctionContext(DefinitionContext * functionDefinitionCo
                                         TypeContext * typeContext,
                                         StringRef functionName);
 
-Location GetSpillLocation(FunctionContext * functionContext, size_t i);
-
-// allocate stack, fill locals/temps
-void    PrepareStack(FunctionContext * context);
-
-bool    IsRegisterNode(Node * node);
-
 // Debug
 
-// after PrepareStack
-std::string StackLayoutDebugString(FunctionContext * context);
 void PrintFunctionContext(FunctionContext * context);
 
 
@@ -308,9 +242,6 @@ Node * CommaExpression(std::vector<Node *> & exprs);
 // Statement construction front end, fit C syntax
 // Construct flow-control tree, check and create labels (goto label defined, break/continue has target, case/default in switch).
 
-void   Function_Begin(FunctionContext * context);
-void   Function_End(FunctionContext * context);
-
 Node * CompoundStatement_Begin(FunctionContext * context, DefinitionContext * definitionContext);
 void   CompoundStatement_AddStatement(Node * compoundStmt, Node * stmt);
 void   CompoundStatement_End(FunctionContext * context);
@@ -343,7 +274,7 @@ void   ForStatement_SetBody(Node * forStmt, Node * body);
 void   ForStatement_End(FunctionContext * context);
 
 Node * GotoStatement(FunctionContext * context, StringRef label);
-Node * LabelStatement(FunctionContext * context, StringRef label);
+Node * LabelStatement(FunctionContext * context, StringRef label, Node * stmt);
 
 Node * BreakStatement(FunctionContext * context);
 Node * ContinueStatement(FunctionContext * context);
@@ -353,7 +284,7 @@ void   SwitchStatement_SetExpr(Node * switchStmt, Node * expr);
 void   SwitchStatement_SetBody(Node * switchStmt, Node * body);
 void   SwitchStatement_End(FunctionContext * context);
 
-Node * CaseStatement(FunctionContext * context, u64 caseValue);
-Node * DefaultStatement(FunctionContext * context);
+Node * CaseStatement(FunctionContext * context, u64 caseValue, Node * stmt);
+Node * DefaultStatement(FunctionContext * context, Node * stmt);
 
 }

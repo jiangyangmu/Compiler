@@ -6,6 +6,361 @@
 namespace Language
 {
 
+// Stack layout
+
+#define R12_MASK (1)
+#define R13_MASK (1 << 1)
+#define R14_MASK (1 << 2)
+#define R15_MASK (1 << 3)
+#define RDI_MASK (1 << 4)
+#define RSI_MASK (1 << 5)
+#define RBX_MASK (1 << 6)
+#define RBP_MASK (1 << 7)
+#define RSP_MASK (1 << 8)
+#define XMM6_MASK (1 << 9)
+#define XMM7_MASK (1 << 10)
+#define XMM8_MASK (1 << 11)
+#define XMM9_MASK (1 << 12)
+#define XMM10_MASK (1 << 13)
+#define XMM11_MASK (1 << 14)
+#define XMM12_MASK (1 << 15)
+#define XMM13_MASK (1 << 16)
+#define XMM14_MASK (1 << 17)
+#define XMM15_MASK (1 << 18)
+
+x64StackLayout * CreateStackLayout()
+{
+    x64StackLayout * stackLayout = new x64StackLayout;
+
+    stackLayout->localZoneSize = 0;
+    stackLayout->maxTempZoneSize = 0;
+    stackLayout->maxSpillZoneSize = 0;
+    stackLayout->maxCallZoneSize = 0;
+    stackLayout->stackAllocSize = 0;
+    stackLayout->stackFrameSize = 0;
+    stackLayout->registerZoneEndOffset = 0;
+    stackLayout->localZoneEndOffset = 0;
+    stackLayout->tempZoneBeginOffset = 0;
+    stackLayout->spillZoneEndOffset = 0;
+    stackLayout->callZoneEndOffset = 0;
+    stackLayout->dirtyRegisters = 0;
+
+    return stackLayout;
+}
+
+size_t ComputeCallZoneSize(Node * call)
+{
+    ASSERT(call->down);
+
+    size_t size = 0;
+
+    // int/float/block(<=64)    -> register/value-on-stack
+    // block(>64)               -> address-on-stack
+    size += (CountChild(call) - 1) * 8;
+
+    // large return value
+    Type * returnType = call->down->expr.type;
+    if (TypeSize(returnType) > 8)
+    {
+        size += 8;
+    }
+
+    return size;
+}
+
+void GetAllLocalObjectsInDefinitionContext(DefinitionContext * context,
+                                           std::vector<ObjectDefinition *> & objects,
+                                           bool isTopLevel = true)
+{
+    ASSERT(context);
+
+    for (Definition * definition : context->definitions[ID_NAMESPACE])
+    {
+        if (definition->type == OBJECT_DEFINITION)
+        {
+            ObjectDefinition * objectDefinition = AsObjectDefinition(definition);
+            if (objectDefinition->objStorageType == LOCAL_OBJECT)
+            {
+                objects.push_back(objectDefinition);
+            }
+        }
+    }
+
+    if (context->firstChild)
+        GetAllLocalObjectsInDefinitionContext(context->firstChild, objects, false);
+
+    if (!isTopLevel && context->next)
+        GetAllLocalObjectsInDefinitionContext(context->next, objects, false);
+}
+
+void ForExpressionTreeInFunctionBody(FunctionContext * context,
+                                     Node * body,
+                                     x64StackLayout * stackLayout,
+                                     void(*func)(x64StackLayout *, Node *))
+{
+    ASSERT(body);
+    if (body->type > BEGIN_EXPRESSION && body->type < END_EXPRESSION)
+    {
+        (*func)(stackLayout, body);
+    }
+    else
+    {
+        for (Node * child = body->down;
+             child;
+             child = child->right)
+        {
+            ForExpressionTreeInFunctionBody(context, child, stackLayout, func);
+        }
+    }
+}
+
+bool IsRegisterNode(Node * node)
+{
+    ASSERT(node);
+    return node->type == EXPR_PIND ||
+        node->type == EXPR_CALL ||
+        node->type == EXPR_CVT_REINTERP;
+}
+
+void UpdateMaxTempZoneSpillZoneCallZone(x64StackLayout * stackLayout, Node * exprTree)
+{
+    size_t tempZoneSize = 0;
+    size_t callZoneSize = 0;
+    size_t maxSpillRegisters = 0;
+
+    // post-order
+    std::vector<std::pair<Node *, bool>> st = { { exprTree, false } };
+    while (!st.empty())
+    {
+        Node * node = st.back().first;
+        if (!st.back().second)
+        {
+            st.back().second = true;
+
+            std::vector<Node *> children;
+            for (Node * child = node->down; child; child = child->right)
+            {
+                children.push_back(child);
+            }
+            for (auto it = children.rbegin(); it != children.rend(); ++it)
+            {
+                st.push_back({ *it, false });
+            }
+        }
+        else
+        {
+            // compute tempZoneSize
+            if (node->expr.loc.type == NEED_ALLOC)
+            {
+                size_t align = TypeAlignment(node->expr.type);
+                size_t size = TypeSize(node->expr.type);
+
+                ASSERT(align <= 8);
+
+                tempZoneSize = (tempZoneSize + size + align - 1) / align * align;
+            }
+            // compute callZoneSize
+            if (node->type == EXPR_CALL)
+            {
+                size_t newCallZoneSize = ComputeCallZoneSize(node);
+
+                callZoneSize = callZoneSize < newCallZoneSize
+                    ? newCallZoneSize
+                    : callZoneSize;
+            }
+            // compute maxSpillRegisters
+            {
+                size_t spillRegisters = 0;
+                for (Node * child = node->down;
+                     child;
+                     child = child->right)
+                {
+                    if (IsRegisterNode(child))
+                        ++spillRegisters;
+                }
+                maxSpillRegisters = Max(maxSpillRegisters, spillRegisters);
+            }
+
+            st.pop_back();
+        }
+    }
+
+    stackLayout->maxTempZoneSize = Max(stackLayout->maxTempZoneSize, tempZoneSize);
+    stackLayout->maxSpillZoneSize = Max(stackLayout->maxSpillZoneSize, maxSpillRegisters * 8);
+    stackLayout->maxCallZoneSize = Max(stackLayout->maxCallZoneSize, callZoneSize);
+}
+
+void FillLocalAndTempLocationInExpressionTree(x64StackLayout * stackLayout, Node * exprTree)
+{
+    size_t offset = stackLayout->tempZoneBeginOffset;
+
+    // post-order
+    std::vector<std::pair<Node *, bool>> st = { { exprTree, false } };
+    while (!st.empty())
+    {
+        Node * node = st.back().first;
+        if (!st.back().second)
+        {
+            st.back().second = true;
+
+            std::vector<Node *> children;
+            for (Node * child = node->down; child; child = child->right)
+            {
+                children.push_back(child);
+            }
+            for (auto it = children.rbegin(); it != children.rend(); ++it)
+            {
+                st.push_back({ *it, false });
+            }
+        }
+        else
+        {
+            // fill location
+            if (node->expr.loc.type == NEED_ALLOC)
+            {
+                size_t align = TypeAlignment(node->expr.type);
+                size_t size = TypeSize(node->expr.type);
+
+                ASSERT(align <= 8);
+
+                offset = (offset + size + align - 1) / align * align;
+
+                node->expr.loc.type = ESP_OFFSET;
+                node->expr.loc.offsetValue = stackLayout->stackFrameSize - offset;
+            }
+            else if (node->expr.loc.type == SAME_AS_FIRST_CHILD)
+            {
+                node->expr.loc = node->down->expr.loc;
+            }
+            else if (node->expr.loc.type == SAME_AS_FIRST_GRANDCHILD)
+            {
+                node->expr.loc = node->down->down->expr.loc;
+            }
+            else if (node->expr.loc.type == SEARCH_LOCAL_DEFINITION_TABLE)
+            {
+                node->expr.loc.type = ESP_OFFSET;
+                node->expr.loc.offsetValue =
+                    stackLayout->stackFrameSize - stackLayout->localObjectOffsets.at(node->expr.loc.definitionValue);
+            }
+
+            st.pop_back();
+        }
+    }
+
+    ASSERT(offset <= (stackLayout->tempZoneBeginOffset + stackLayout->maxTempZoneSize));
+}
+
+Location GetSpillLocation(x64StackLayout * stackLayout, size_t i)
+{
+    ASSERT(stackLayout->stackFrameSize != 0);
+    ASSERT((i * 8) < stackLayout->maxSpillZoneSize);
+    Location location;
+    location.type = ESP_OFFSET;
+    location.offsetValue = stackLayout->stackFrameSize - stackLayout->spillZoneEndOffset + i * 8;
+    return location;
+}
+
+x64StackLayout * PrepareStack(FunctionContext * context)
+{
+    // step:
+    //      1. scan for non-volatile registers, fill {dirtyRegisters, registerZoneEndOffset}
+    //      2. scan for local objects, fill {localZoneSize, localZoneEndOffset, localObjectOffsets}
+    //      3. scan for temp objects, fill {maxTempZoneSize, tempZoneBeginOffset}
+    //      4. scan for spill nodes, fill {maxSpillZoneSize, spillZoneEndOffset}
+    //      5. scan for call nodes, fill {maxCallZoneSize, callZoneEndOffset}
+    //      6. fill {spillZoneEndOffset}
+    //      7. fill {stackFrameSize, stackAllocSize}
+    //      8. fill {local location in expression tree, temp location in expression tree}
+    //          * both depends on stackFrameSize
+
+    x64StackLayout * stackLayout = CreateStackLayout();
+
+    // "offset to previous stack frame"
+    size_t offset = 8;
+
+    // saved rbp, non-volatile registers
+    stackLayout->dirtyRegisters = RBP_MASK | RSI_MASK | RDI_MASK;
+    offset = stackLayout->registerZoneEndOffset = offset + 8 * CountBits(stackLayout->dirtyRegisters);
+
+    // local zone
+    std::vector<ObjectDefinition *> objectDefinitions;
+    GetAllLocalObjectsInDefinitionContext(context->functionDefinitionContext, objectDefinitions);
+    for (ObjectDefinition * objectDefinition : objectDefinitions)
+    {
+        size_t objectSize = TypeSize(objectDefinition->objType);
+        size_t objectAlign = TypeAlignment(objectDefinition->objType);
+        stackLayout->localZoneSize = (stackLayout->localZoneSize + objectSize + objectAlign - 1) / objectAlign * objectAlign;
+        stackLayout->localObjectOffsets.emplace(&objectDefinition->def, offset + stackLayout->localZoneSize);
+    }
+    offset = stackLayout->localZoneEndOffset = offset + stackLayout->localZoneSize;
+
+    // gap
+    offset = (offset + 7) / 8 * 8;
+
+    ForExpressionTreeInFunctionBody(context,
+                                    context->functionBody,
+                                    stackLayout,
+                                    UpdateMaxTempZoneSpillZoneCallZone);
+
+    // temp zone
+    stackLayout->tempZoneBeginOffset = offset;
+    offset += stackLayout->maxTempZoneSize;
+
+    // gap
+    offset = (offset + 7) / 8 * 8;
+
+    // spill zone
+    stackLayout->maxSpillZoneSize += 8; // for tmpLoc
+    offset = stackLayout->spillZoneEndOffset = offset + stackLayout->maxSpillZoneSize;
+
+    // gap
+    offset = (offset + 15) / 16 * 16;
+
+    // call zone
+    offset = stackLayout->callZoneEndOffset = offset + stackLayout->maxCallZoneSize;
+
+    // stack layout
+    stackLayout->stackFrameSize = offset;
+    stackLayout->stackAllocSize = offset - stackLayout->registerZoneEndOffset;
+
+    // fill expression node location
+    ForExpressionTreeInFunctionBody(context,
+                                    context->functionBody,
+                                    stackLayout,
+                                    FillLocalAndTempLocationInExpressionTree);
+
+    return stackLayout;
+}
+
+std::string StackLayoutDebugString(x64StackLayout * stackLayout)
+{
+    ASSERT(stackLayout->stackFrameSize > 0);
+
+    std::string s;
+
+    s = std::string() +
+        "; return address:        [rbp + 8]\n" +
+        "; non-volatile register: [rsp + " + std::to_string(stackLayout->stackFrameSize - stackLayout->registerZoneEndOffset) + ", rbp + 8)\n" +
+        "; local zone:            [rsp + " + std::to_string(stackLayout->stackFrameSize - stackLayout->localZoneEndOffset) + ", rsp + " + std::to_string(stackLayout->stackFrameSize - stackLayout->localZoneEndOffset + stackLayout->localZoneSize) + ")\n" +
+        "; temp  zone:            [rsp + " + std::to_string(stackLayout->stackFrameSize - stackLayout->tempZoneBeginOffset - stackLayout->maxTempZoneSize) + ", rsp + " + std::to_string(stackLayout->stackFrameSize - stackLayout->tempZoneBeginOffset) + ")\n" +
+        "; spill zone:            [rsp + " + std::to_string(stackLayout->stackFrameSize - stackLayout->spillZoneEndOffset) + ", rsp + " + std::to_string(stackLayout->stackFrameSize - stackLayout->spillZoneEndOffset + stackLayout->maxSpillZoneSize) + ")\n" +
+        "; call  zone:            [rsp + " + std::to_string(stackLayout->stackFrameSize - stackLayout->callZoneEndOffset) + ", rsp + " + std::to_string(stackLayout->stackFrameSize - stackLayout->callZoneEndOffset + stackLayout->maxCallZoneSize) + ")\n";
+
+    std::map<size_t, StringRef> localVariables;
+    for (auto kv : stackLayout->localObjectOffsets)
+    {
+        localVariables.emplace(kv.second, kv.first->name);
+    }
+    for (auto it = localVariables.rbegin(); it != localVariables.rend(); ++it)
+    {
+        s += "; " + it->second.toString() + ": [rsp + " + std::to_string(stackLayout->stackFrameSize - it->first) + "]\n";
+    }
+
+    return s;
+}
+
+// Instruction helper
+
 std::string RegisterTypeToString(RegisterType type, size_t width);
 std::string X64LocationString(Location loc, size_t width);
 
@@ -377,10 +732,10 @@ std::string X64LocationString(Location loc, size_t width)
 
 // register mask (only non-volatile registers)
 
-void AssertRegisterMask(FunctionContext * context, size_t mask)
+void AssertRegisterMask(x64StackLayout * stackLayout, size_t mask)
 {
     ASSERT(CountBits(mask) == 1);
-    ASSERT((context->dirtyRegisters & mask) != 0);
+    ASSERT((stackLayout->dirtyRegisters & mask) != 0);
 }
 
 // program API
@@ -559,9 +914,11 @@ void TranslateConstantContext(x64Program * program,
 }
 
 std::string TranslateExpression(FunctionContext * context,
+                                x64StackLayout * stackLayout,
                                 Node * expression);
 // save child (spillIndex)
 std::string TranslateChildrenExpressionAndSaveSpill(FunctionContext * context,
+                                                    x64StackLayout * stackLayout,
                                                     Node * expression)
 {
     // handle eval order, shortcut effect, save register value to spill zone
@@ -572,18 +929,18 @@ std::string TranslateChildrenExpressionAndSaveSpill(FunctionContext * context,
          child;
          child = child->right)
     {
-        s += TranslateExpression(context, child);
+        s += TranslateExpression(context, stackLayout, child);
         if (IsRegisterNode(child))
         {
             // mov spillSlot, rcx
-            s += "mov " + X64LocationString(GetSpillLocation(context, spillIndex++), 8) + ", " + CX(8) + " ; save spill\n";
+            s += "mov " + X64LocationString(GetSpillLocation(stackLayout, spillIndex++), 8) + ", " + CX(8) + " ; save spill\n";
         }
     }
 
     return s;
 }
 // load child (spillIndex)
-std::string LoadSpillAndGetLocation(FunctionContext * context,
+std::string LoadSpillAndGetLocation(x64StackLayout * stackLayout,
                                     Node * expression,
                                     size_t childIndex,
                                     Location * childLocation)
@@ -613,7 +970,7 @@ std::string LoadSpillAndGetLocation(FunctionContext * context,
         childLocation->type = REGISTER_INDIRECT;
         childLocation->registerType = RCX;
         // mov rcx, spillSlot
-        return "mov " + CX(8) + ", " + X64LocationString(GetSpillLocation(context, spillIndex), 8) + " ; load spill\n";
+        return "mov " + CX(8) + ", " + X64LocationString(GetSpillLocation(stackLayout, spillIndex), 8) + " ; load spill\n";
     }
     else
     {
@@ -623,7 +980,7 @@ std::string LoadSpillAndGetLocation(FunctionContext * context,
     }
 }
 
-std::string TranslateCallExpression(FunctionContext * context,
+std::string TranslateCallExpression(x64StackLayout * stackLayout,
                                     Node * expression,
                                     Type * outType,
                                     size_t outSize,
@@ -676,7 +1033,7 @@ std::string TranslateCallExpression(FunctionContext * context,
         Type *      paramType = child->expr.type;
         size_t      paramSize = TypeSize(paramType);
 
-        s += LoadSpillAndGetLocation(context, expression, childIndex, &paramLoc);
+        s += LoadSpillAndGetLocation(stackLayout, expression, childIndex, &paramLoc);
 
         if (callerProtocol.IsParameterPassedByAddress(argumentIndex))
         {
@@ -734,7 +1091,7 @@ std::string TranslateCallExpression(FunctionContext * context,
     }
     else
     {
-        s += LoadSpillAndGetLocation(context, expression, 0, &funcLocation);
+        s += LoadSpillAndGetLocation(stackLayout, expression, 0, &funcLocation);
     }
 
     if (funcLocation.type == LocationType::LABEL)
@@ -771,6 +1128,7 @@ std::string TranslateCallExpression(FunctionContext * context,
 }
 
 std::string TranslateExpression(FunctionContext * context,
+                                x64StackLayout * stackLayout,
                                 Node * expression)
 {
     // Input: expression tree (all UAC/promotions/positive already convert to cast nodes)
@@ -790,7 +1148,7 @@ std::string TranslateExpression(FunctionContext * context,
     size_t      outSize = TypeSize(outType);
     Location    outLoc = expression->expr.loc;
 
-    Location    tmpLoc = GetSpillLocation(context, 0);
+    Location    tmpLoc = GetSpillLocation(stackLayout, 0);
 
     // Each expression code block should
     // 1. visit children (eval order, shortcut effect, save register value to spill zone)
@@ -805,9 +1163,9 @@ std::string TranslateExpression(FunctionContext * context,
     }
     else if (expression->type == EXPR_CALL)
     {
-        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
+        s += TranslateChildrenExpressionAndSaveSpill(context, stackLayout, expression);
 
-        s += TranslateCallExpression(context,
+        s += TranslateCallExpression(stackLayout,
                                      expression,
                                      outType,
                                      outSize,
@@ -815,13 +1173,13 @@ std::string TranslateExpression(FunctionContext * context,
     }
     else if (expression->type == EXPR_CVT_REINTERP)
     {
-        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
+        s += TranslateChildrenExpressionAndSaveSpill(context, stackLayout, expression);
 
         // do nothing
     }
     else if (expression->type == EXPR_CVT_SI2SI)
     {
-        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
+        s += TranslateChildrenExpressionAndSaveSpill(context, stackLayout, expression);
 
         ASSERT(IsIntegral(outType));
 
@@ -857,7 +1215,7 @@ std::string TranslateExpression(FunctionContext * context,
     }
     else if (expression->type == EXPR_CVT_F2SI)
     {
-        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
+        s += TranslateChildrenExpressionAndSaveSpill(context, stackLayout, expression);
 
         ASSERT(IsIntegral(outType));
 
@@ -909,7 +1267,7 @@ std::string TranslateExpression(FunctionContext * context,
     }
     else if (expression->type == EXPR_CVT_B2I)
     {
-        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
+        s += TranslateChildrenExpressionAndSaveSpill(context, stackLayout, expression);
 
         ASSERT(IsIntegral(outType));
 
@@ -944,7 +1302,7 @@ std::string TranslateExpression(FunctionContext * context,
     }
     else if (expression->type == EXPR_CVT_F2F)
     {
-        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
+        s += TranslateChildrenExpressionAndSaveSpill(context, stackLayout, expression);
 
         ASSERT(IsFloating(outType));
 
@@ -987,7 +1345,7 @@ std::string TranslateExpression(FunctionContext * context,
     }
     else if (expression->type == EXPR_CVT_SI2F)
     {
-        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
+        s += TranslateChildrenExpressionAndSaveSpill(context, stackLayout, expression);
 
         ASSERT(IsFloating(outType));
 
@@ -1045,7 +1403,7 @@ std::string TranslateExpression(FunctionContext * context,
     }
     else if (expression->type == EXPR_CVT_B2F)
     {
-        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
+        s += TranslateChildrenExpressionAndSaveSpill(context, stackLayout, expression);
 
         ASSERT(IsFloating(outType));
 
@@ -1091,7 +1449,7 @@ std::string TranslateExpression(FunctionContext * context,
     }
     else if (expression->type == EXPR_CVT_I2B)
     {
-        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
+        s += TranslateChildrenExpressionAndSaveSpill(context, stackLayout, expression);
 
         ASSERT(IsBool(outType));
 
@@ -1115,7 +1473,7 @@ std::string TranslateExpression(FunctionContext * context,
     }
     else if (expression->type == EXPR_CVT_F2B)
     {
-        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
+        s += TranslateChildrenExpressionAndSaveSpill(context, stackLayout, expression);
 
         ASSERT(IsBool(outType));
 
@@ -1163,7 +1521,7 @@ std::string TranslateExpression(FunctionContext * context,
     }
     else if (expression->type == EXPR_BOOL_NOT)
     {
-        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
+        s += TranslateChildrenExpressionAndSaveSpill(context, stackLayout, expression);
 
         ASSERT(IsBool(outType));
 
@@ -1184,7 +1542,7 @@ std::string TranslateExpression(FunctionContext * context,
     else if (expression->type == EXPR_BOOL_AND ||
              expression->type == EXPR_BOOL_OR)
     {
-        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
+        s += TranslateChildrenExpressionAndSaveSpill(context, stackLayout, expression);
 
         ASSERT(IsBool(outType));
 
@@ -1220,7 +1578,7 @@ std::string TranslateExpression(FunctionContext * context,
     }
     else if (expression->type == EXPR_INOT)
     {
-        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
+        s += TranslateChildrenExpressionAndSaveSpill(context, stackLayout, expression);
 
         ASSERT(IsInt(outType) && outSize >= 4);
 
@@ -1251,7 +1609,7 @@ std::string TranslateExpression(FunctionContext * context,
              expression->type == EXPR_IXOR ||
              expression->type == EXPR_IOR)
     {
-        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
+        s += TranslateChildrenExpressionAndSaveSpill(context, stackLayout, expression);
 
         ASSERT(IsInt(outType));
 
@@ -1295,9 +1653,9 @@ std::string TranslateExpression(FunctionContext * context,
             // op  inLoc2
             // mov outLoc, result
             s += "mov " + DX(8) + ", " + IntegerToHexString(0) + "\n";
-            s += LoadSpillAndGetLocation(context, expression, 0, &inLoc1);
+            s += LoadSpillAndGetLocation(stackLayout, expression, 0, &inLoc1);
             s += Code::MOV1_RCX(RAX, inLoc1, width);
-            s += LoadSpillAndGetLocation(context, expression, 1, &inLoc2);
+            s += LoadSpillAndGetLocation(stackLayout, expression, 1, &inLoc2);
             s +=
                 op + X64LocationString(inLoc2, width) + "\n" +
                 Code::MOV2(outLoc, resultReg, width);
@@ -1307,9 +1665,9 @@ std::string TranslateExpression(FunctionContext * context,
             // mov rax, inLoc1
             // op  rax, inLoc2
             // mov outLoc, rax
-            s += LoadSpillAndGetLocation(context, expression, 0, &inLoc1);
+            s += LoadSpillAndGetLocation(stackLayout, expression, 0, &inLoc1);
             s += Code::MOV1_RCX(RAX, inLoc1, width);
-            s += LoadSpillAndGetLocation(context, expression, 1, &inLoc2);
+            s += LoadSpillAndGetLocation(stackLayout, expression, 1, &inLoc2);
             s +=
                 op + AX(width) + ", " + X64LocationString(inLoc2, width) + "\n" +
                 Code::MOV2(outLoc, RAX, width);
@@ -1318,7 +1676,7 @@ std::string TranslateExpression(FunctionContext * context,
     else if (expression->type == EXPR_ISHL ||
              expression->type == EXPR_ISHR)
     {
-        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
+        s += TranslateChildrenExpressionAndSaveSpill(context, stackLayout, expression);
 
         ASSERT(IsInt(outType));
 
@@ -1351,11 +1709,11 @@ std::string TranslateExpression(FunctionContext * context,
         // mov cl, <tmp>
         // op  rax, cl
         // mov outLoc, rax
-        s += LoadSpillAndGetLocation(context, expression, 1, &inLoc2);
+        s += LoadSpillAndGetLocation(stackLayout, expression, 1, &inLoc2);
         s +=
             Code::MOV1_RCX(RAX, inLoc2, 1) +
             Code::MOV2(tmpLoc, RAX, 1);
-        s += LoadSpillAndGetLocation(context, expression, 0, &inLoc1);
+        s += LoadSpillAndGetLocation(stackLayout, expression, 0, &inLoc1);
         s +=
             Code::MOV1_RCX(RAX, inLoc1, width) +
             "xor rcx, rcx\n" +
@@ -1370,7 +1728,7 @@ std::string TranslateExpression(FunctionContext * context,
              expression->type == EXPR_IGE ||
              expression->type == EXPR_IGT)
     {
-        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
+        s += TranslateChildrenExpressionAndSaveSpill(context, stackLayout, expression);
 
         ASSERT(IsBool(outType));
 
@@ -1407,9 +1765,9 @@ std::string TranslateExpression(FunctionContext * context,
         // mov rcx, 1
         // cmovXX rax, rcx
         // mov outLoc, rax
-        s += LoadSpillAndGetLocation(context, expression, 0, &inLoc1);
+        s += LoadSpillAndGetLocation(stackLayout, expression, 0, &inLoc1);
         s += Code::MOV1_RCX(RAX, inLoc1, width);
-        s += LoadSpillAndGetLocation(context, expression, 1, &inLoc2);
+        s += LoadSpillAndGetLocation(stackLayout, expression, 1, &inLoc2);
         s +=
             Code::MOV1_RCX(RDX, inLoc2, width) +
             "cmp " + AX(width) + ", " + DX(width) + "\n" +
@@ -1420,7 +1778,7 @@ std::string TranslateExpression(FunctionContext * context,
     }
     else if (expression->type == EXPR_FNEG)
     {
-        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
+        s += TranslateChildrenExpressionAndSaveSpill(context, stackLayout, expression);
 
         ASSERT(IsFloating(outType) && outSize == 4);
 
@@ -1447,7 +1805,7 @@ std::string TranslateExpression(FunctionContext * context,
              expression->type == EXPR_FMUL ||
              expression->type == EXPR_FDIV)
     {
-        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
+        s += TranslateChildrenExpressionAndSaveSpill(context, stackLayout, expression);
 
         ASSERT(IsFloating(outType) && outSize == 4);
 
@@ -1479,9 +1837,9 @@ std::string TranslateExpression(FunctionContext * context,
         // movss xmm1, inLoc2
         // op    xmm0, xmm1
         // movss outLoc, xmm0
-        s += LoadSpillAndGetLocation(context, expression, 0, &inLoc1);
+        s += LoadSpillAndGetLocation(stackLayout, expression, 0, &inLoc1);
         s += Code::MOVSS1_RCX(XMM0, inLoc1, width);
-        s += LoadSpillAndGetLocation(context, expression, 1, &inLoc2);
+        s += LoadSpillAndGetLocation(stackLayout, expression, 1, &inLoc2);
         s +=
             Code::MOVSS1_RCX(XMM1, inLoc2, width) +
             op + XMM(0) + ", " + XMM(1) + "\n" +
@@ -1494,7 +1852,7 @@ std::string TranslateExpression(FunctionContext * context,
              expression->type == EXPR_FGE || 
              expression->type == EXPR_FGT)
     {
-        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
+        s += TranslateChildrenExpressionAndSaveSpill(context, stackLayout, expression);
 
         ASSERT(IsBool(outType));
 
@@ -1533,9 +1891,9 @@ std::string TranslateExpression(FunctionContext * context,
         // mov   rcx, 1
         // cmovne rax, rcx
         // mov   outLoc, rax
-        s += LoadSpillAndGetLocation(context, expression, 0, &inLoc1);
+        s += LoadSpillAndGetLocation(stackLayout, expression, 0, &inLoc1);
         s += Code::MOVSS1_RCX(XMM0, inLoc1, width);
-        s += LoadSpillAndGetLocation(context, expression, 1, &inLoc2);
+        s += LoadSpillAndGetLocation(stackLayout, expression, 1, &inLoc2);
         s +=
             Code::MOVSS1_RCX(XMM1, inLoc2, width) +
             op + XMM(0) + ", " + XMM(1) + "\n" +
@@ -1551,7 +1909,7 @@ std::string TranslateExpression(FunctionContext * context,
              expression->type == EXPR_PSUBSI ||
              expression->type == EXPR_PSUBUI)
     {
-        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
+        s += TranslateChildrenExpressionAndSaveSpill(context, stackLayout, expression);
 
         ASSERT(IsPointerToObject(outType));
 
@@ -1578,19 +1936,19 @@ std::string TranslateExpression(FunctionContext * context,
         // imul rcx
         // add rax, inLoc1
         // mov outLoc, rax
-        s += LoadSpillAndGetLocation(context, expression, 1, &inLoc2);
+        s += LoadSpillAndGetLocation(stackLayout, expression, 1, &inLoc2);
         s +=
             Code::MOV1_RCX(RAX, inLoc2, width) +
             "mov " + CX(width) + ", " + IntegerToHexString(shiftStep) + "\n" +
             "imul " + CX(width) + "\n";
-        s += LoadSpillAndGetLocation(context, expression, 0, &inLoc1);
+        s += LoadSpillAndGetLocation(stackLayout, expression, 0, &inLoc1);
         s +=
             Code::ADD_RCX(RAX, inLoc1, width) +
             Code::MOV2(outLoc, RAX, width);
     }
     else if (expression->type == EXPR_PDIFF)
     {
-        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
+        s += TranslateChildrenExpressionAndSaveSpill(context, stackLayout, expression);
 
         ASSERT(IsPtrDiffType(outType));
 
@@ -1620,9 +1978,9 @@ std::string TranslateExpression(FunctionContext * context,
         // mov rcx, objSize
         // div rcx
         // mov outLoc, rax
-        s += LoadSpillAndGetLocation(context, expression, 0, &inLoc1);
+        s += LoadSpillAndGetLocation(stackLayout, expression, 0, &inLoc1);
         s += Code::MOV1_RCX(RAX, inLoc1, width);
-        s += LoadSpillAndGetLocation(context, expression, 1, &inLoc2);
+        s += LoadSpillAndGetLocation(stackLayout, expression, 1, &inLoc2);
         s +=
             Code::SUB_RCX(RAX, inLoc2, width) +
             "mov " + CX(width) + ", " + IntegerToHexString(objSize) + "\n" +
@@ -1631,7 +1989,7 @@ std::string TranslateExpression(FunctionContext * context,
     }
     else if (expression->type == EXPR_PIND)
     {
-        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
+        s += TranslateChildrenExpressionAndSaveSpill(context, stackLayout, expression);
 
         Location    inLoc = expression->down->expr.loc;
         Type *      inType = expression->down->expr.type;
@@ -1649,7 +2007,7 @@ std::string TranslateExpression(FunctionContext * context,
              expression->type == EXPR_PGE ||
              expression->type == EXPR_PGT)
     {
-        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
+        s += TranslateChildrenExpressionAndSaveSpill(context, stackLayout, expression);
 
         ASSERT(IsBool(outType));
 
@@ -1686,9 +2044,9 @@ std::string TranslateExpression(FunctionContext * context,
         // mov rcx, 1
         // cmovXX rax, rcx
         // mov outLoc, rax
-        s += LoadSpillAndGetLocation(context, expression, 0, &inLoc1);
+        s += LoadSpillAndGetLocation(stackLayout, expression, 0, &inLoc1);
         s += Code::MOV1_RCX(RAX, inLoc1, width);
-        s += LoadSpillAndGetLocation(context, expression, 1, &inLoc2);
+        s += LoadSpillAndGetLocation(stackLayout, expression, 1, &inLoc2);
         s +=
             Code::MOV1_RCX(RDX, inLoc2, width) +
             "cmp " + AX(width) + ", " + DX(width) + "\n" +
@@ -1699,7 +2057,7 @@ std::string TranslateExpression(FunctionContext * context,
     }
     else if (expression->type == EXPR_PNEW)
     {
-        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
+        s += TranslateChildrenExpressionAndSaveSpill(context, stackLayout, expression);
 
         ASSERT(IsPointer(outType));
 
@@ -1717,7 +2075,7 @@ std::string TranslateExpression(FunctionContext * context,
     }
     else if (expression->type == EXPR_MCOPY)
     {
-        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
+        s += TranslateChildrenExpressionAndSaveSpill(context, stackLayout, expression);
 
         Location    inLoc1 = {NO_WHERE}; // may spill, set later
         Type *      inType1 = expression->down->expr.type;
@@ -1741,9 +2099,9 @@ std::string TranslateExpression(FunctionContext * context,
 
             // mov rax, inLoc2
             // mov inLoc1, rax
-            s += LoadSpillAndGetLocation(context, expression, 1, &inLoc2);
+            s += LoadSpillAndGetLocation(stackLayout, expression, 1, &inLoc2);
             s += Code::MOV1_RCX(RAX, inLoc2, width);
-            s += LoadSpillAndGetLocation(context, expression, 0, &inLoc1);
+            s += LoadSpillAndGetLocation(stackLayout, expression, 0, &inLoc1);
             s += Code::MOV3_RCX(inLoc1, RAX, width);
         }
         else
@@ -1756,9 +2114,9 @@ std::string TranslateExpression(FunctionContext * context,
             // mov rsi, rcx
             // mov rcx, objSize
             // rep movsb
-            s += LoadSpillAndGetLocation(context, expression, 0, &inLoc1);
+            s += LoadSpillAndGetLocation(stackLayout, expression, 0, &inLoc1);
             s += Code::LEA_RCX(RAX, inLoc1);
-            s += LoadSpillAndGetLocation(context, expression, 1, &inLoc2);
+            s += LoadSpillAndGetLocation(stackLayout, expression, 1, &inLoc2);
             s += Code::LEA_RCX(RCX, inLoc2);
             s +=
                 "mov " + DI(width) + ", " + AX(width) + "\n" +
@@ -1766,13 +2124,13 @@ std::string TranslateExpression(FunctionContext * context,
                 "mov " + CX(width) + ", " + IntegerToHexString(objSize) + "\n" +
                 "rep movsb" + "\n";
 
-            AssertRegisterMask(context, RDI_MASK);
-            AssertRegisterMask(context, RSI_MASK);
+            AssertRegisterMask(stackLayout, RDI_MASK);
+            AssertRegisterMask(stackLayout, RSI_MASK);
         }
     }
     else if (expression->type == EXPR_MDUP)
     {
-        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
+        s += TranslateChildrenExpressionAndSaveSpill(context, stackLayout, expression);
 
         Location    inLoc = expression->down->expr.loc;
         Type *      inType = expression->down->expr.type;
@@ -1814,14 +2172,14 @@ std::string TranslateExpression(FunctionContext * context,
                 "mov " + CX(width) + ", " + IntegerToHexString(inSize) + "\n" +
                 "rep movsb" + "\n";
 
-            AssertRegisterMask(context, RDI_MASK);
-            AssertRegisterMask(context, RSI_MASK);
+            AssertRegisterMask(stackLayout, RDI_MASK);
+            AssertRegisterMask(stackLayout, RSI_MASK);
         }
     }
     else if (expression->type == EXPR_MADDSI ||
              expression->type == EXPR_MADDUI)
     {
-        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
+        s += TranslateChildrenExpressionAndSaveSpill(context, stackLayout, expression);
 
         ASSERT(IsPointer(outType));
 
@@ -1842,9 +2200,9 @@ std::string TranslateExpression(FunctionContext * context,
         // mov rax, inLoc1
         // add rax, inLoc2
         // mov outLoc, rax
-        s += LoadSpillAndGetLocation(context, expression, 0, &inLoc1);
+        s += LoadSpillAndGetLocation(stackLayout, expression, 0, &inLoc1);
         s += Code::MOV1_RCX(RAX, inLoc1, width);
-        s += LoadSpillAndGetLocation(context, expression, 1, &inLoc2);
+        s += LoadSpillAndGetLocation(stackLayout, expression, 1, &inLoc2);
         s +=
             Code::ADD_RCX(RAX, inLoc2, width) +
             Code::MOV2(outLoc, RAX, width);
@@ -1854,7 +2212,7 @@ std::string TranslateExpression(FunctionContext * context,
         // TODO: impl condition expr
         ASSERT(false);
 
-        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
+        s += TranslateChildrenExpressionAndSaveSpill(context, stackLayout, expression);
 
         Location    condLoc = expression->down->expr.loc;
         Type *      condType = expression->down->expr.type;
@@ -1913,8 +2271,8 @@ std::string TranslateExpression(FunctionContext * context,
                      "mov " + CX(width) + ", " + IntegerToHexString(inSize1) + "\n" +
                      "rep movsb" + "\n";
 
-                AssertRegisterMask(context, RDI_MASK);
-                AssertRegisterMask(context, RSI_MASK);
+                AssertRegisterMask(stackLayout, RDI_MASK);
+                AssertRegisterMask(stackLayout, RSI_MASK);
             }
         }
         s += "jmp " + L1 + "\n";
@@ -1948,15 +2306,15 @@ std::string TranslateExpression(FunctionContext * context,
                      "mov " + CX(width) + ", " + IntegerToHexString(inSize2) + "\n" +
                      "rep movsb" + "\n";
 
-                AssertRegisterMask(context, RDI_MASK);
-                AssertRegisterMask(context, RSI_MASK);
+                AssertRegisterMask(stackLayout, RDI_MASK);
+                AssertRegisterMask(stackLayout, RSI_MASK);
             }
         }
         s += L1 + ":\n";
     }
     else if (expression->type == EXPR_ELIST)
     {
-        s += TranslateChildrenExpressionAndSaveSpill(context, expression);
+        s += TranslateChildrenExpressionAndSaveSpill(context, stackLayout, expression);
 
         Node *      lastChild = LastChild(expression);
         Location    inLoc = lastChild->expr.loc;
@@ -2001,8 +2359,8 @@ std::string TranslateExpression(FunctionContext * context,
                     "mov " + CX(width) + ", " + IntegerToHexString(inSize) + "\n" +
                     "rep movsb" + "\n";
 
-                AssertRegisterMask(context, RDI_MASK);
-                AssertRegisterMask(context, RSI_MASK);
+                AssertRegisterMask(stackLayout, RDI_MASK);
+                AssertRegisterMask(stackLayout, RSI_MASK);
             }
         }
     }
@@ -2014,7 +2372,9 @@ std::string TranslateExpression(FunctionContext * context,
     return s;
 }
 
-std::string TranslateReturnStatement(FunctionContext * context, Node * returnStatement)
+std::string TranslateReturnStatement(FunctionContext * context,
+                                     x64StackLayout * stackLayout,
+                                     Node * returnStatement)
 {
     std::string s;
 
@@ -2023,7 +2383,7 @@ std::string TranslateReturnStatement(FunctionContext * context, Node * returnSta
 
     if (expr->type != EMPTY_EXPRESSION)
     {
-        s += TranslateExpression(context, expr);
+        s += TranslateExpression(context, stackLayout, expr);
         
         // copy return value to reg/stack
         Type *      outType = expr->expr.type;
@@ -2053,7 +2413,7 @@ std::string TranslateReturnStatement(FunctionContext * context, Node * returnSta
     }
     
     // epilog: add stack, restore regs
-    s += "add rsp, " + IntegerToHexString(context->stackAllocSize) + "\n";
+    s += "add rsp, " + IntegerToHexString(stackLayout->stackAllocSize) + "\n";
     s += "pop rdi\n";
     s += "pop rsi\n";
     s += "pop rbp\n";
@@ -2063,6 +2423,7 @@ std::string TranslateReturnStatement(FunctionContext * context, Node * returnSta
 }
 
 std::string TranslateStatement(FunctionContext * context,
+                               x64StackLayout * stackLayout,
                                Node * statement)
 {
     ASSERT(statement && statement->type >= BEGIN_STATEMENT && statement->type <= END_STATEMENT);
@@ -2075,7 +2436,7 @@ std::string TranslateStatement(FunctionContext * context,
              child;
              child = child->right)
         {
-            s += TranslateStatement(context, child);
+            s += TranslateStatement(context, stackLayout, child);
         }
     }
     else if (statement->type == STMT_EXPRESSION)
@@ -2085,7 +2446,7 @@ std::string TranslateStatement(FunctionContext * context,
         
         if (expr->type != EMPTY_EXPRESSION)
         {
-            s += TranslateExpression(context, expr);
+            s += TranslateExpression(context, stackLayout, expr);
         }
     }
     else if (statement->type == STMT_IF)
@@ -2095,7 +2456,7 @@ std::string TranslateStatement(FunctionContext * context,
         Node * ifBody = expr->right;
         Node * elseBody = ifBody->right;
 
-        s += TranslateExpression(context, expr);
+        s += TranslateExpression(context, stackLayout, expr);
 
         s += "cmp al, 0\n";
         if (!elseBody)
@@ -2103,7 +2464,7 @@ std::string TranslateStatement(FunctionContext * context,
             std::string L0 = std::string("@L") + std::to_string(context->nextUniqueLabel++);
 
             s += "je " + L0 + "\n";
-            s += TranslateStatement(context, ifBody);
+            s += TranslateStatement(context, stackLayout, ifBody);
             s += L0 + ":\n";
         }
         else
@@ -2112,10 +2473,10 @@ std::string TranslateStatement(FunctionContext * context,
             std::string L1 = std::string("@L") + std::to_string(context->nextUniqueLabel++);
 
             s += "je " + L0 + "\n";
-            s += TranslateStatement(context, ifBody);
+            s += TranslateStatement(context, stackLayout, ifBody);
             s += "jmp " + L1 + "\n";
             s += L0 + ":\n";
-            s += TranslateStatement(context, elseBody);        
+            s += TranslateStatement(context, stackLayout, elseBody);        
             s += L1 + ":\n";
         }
     }
@@ -2130,10 +2491,10 @@ std::string TranslateStatement(FunctionContext * context,
         const std::string & L1 = context->targetToLabels[statement][1];
 
         s += L0 + ":\n";
-        s += TranslateExpression(context, expr);
+        s += TranslateExpression(context, stackLayout, expr);
         s += "cmp al, 0\n";
         s += "je " + L1 + "\n";
-        s += TranslateStatement(context, body);
+        s += TranslateStatement(context, stackLayout, body);
         s += "jmp " + L0 + "\n";
         s += L1 + ":\n";
     }
@@ -2149,9 +2510,9 @@ std::string TranslateStatement(FunctionContext * context,
 
         s += L0 + ":\n";
         
-        s += TranslateStatement(context, body);
+        s += TranslateStatement(context, stackLayout, body);
         
-        s += TranslateExpression(context, expr);
+        s += TranslateExpression(context, stackLayout, expr);
         s += "cmp al, 0\n";
         s += "jne " + L0 + "\n";
 
@@ -2171,18 +2532,18 @@ std::string TranslateStatement(FunctionContext * context,
 
         if (preExpr->type != EMPTY_EXPRESSION)
         {
-            s += TranslateExpression(context, preExpr);
+            s += TranslateExpression(context, stackLayout, preExpr);
         }
 
         s += L0 + ":\n";
-        s += TranslateExpression(context, loopExpr);
+        s += TranslateExpression(context, stackLayout, loopExpr);
         s += "cmp al, 0\n";
         s += "je " + L1 + "\n";
 
-        s += TranslateStatement(context, body);
+        s += TranslateStatement(context, stackLayout, body);
         if (postExpr->type != EMPTY_EXPRESSION)
         {
-            s += TranslateExpression(context, postExpr);
+            s += TranslateExpression(context, stackLayout, postExpr);
         }
 
         s += "jmp " + L0 + "\n";
@@ -2201,7 +2562,7 @@ std::string TranslateStatement(FunctionContext * context,
     }
     else if (statement->type == STMT_RETURN)
     {
-        s += TranslateReturnStatement(context, statement);
+        s += TranslateReturnStatement(context, stackLayout, statement);
     }
     else if (statement->type == STMT_GOTO)
     {
@@ -2227,7 +2588,7 @@ std::string TranslateStatement(FunctionContext * context,
         Node * expr = statement->down;
         Node * body = expr->right;
 
-        s += TranslateExpression(context, expr);
+        s += TranslateExpression(context, stackLayout, expr);
 
         const std::vector<std::string> & labels     = context->targetToLabels[statement];
         const std::vector<Node *> & defaultAndCases = context->switchToChildren[statement];
@@ -2235,12 +2596,12 @@ std::string TranslateStatement(FunctionContext * context,
         {
             u64 caseValue = defaultAndCases[i]->stmt.caseValue;
             s += "cmp rax, " + std::to_string(caseValue) + "\n";
-            s += "je " + labels[i + 2];
+            s += "je " + labels[i + 1];
         }
 
         s += "jmp " + labels[0] + "\n";
 
-        s += TranslateStatement(context, body);
+        s += TranslateStatement(context, stackLayout, body);
 
         s += labels[1] + ":\n";
     }
@@ -2264,7 +2625,8 @@ std::string TranslateStatement(FunctionContext * context,
 }
 
 void TranslateFunctionContext(x64Program * program,
-                              FunctionContext * context)
+                              FunctionContext * context,
+                              x64StackLayout * stackLayout)
 {
     std::string & text = program->textSegment;
 
@@ -2272,8 +2634,7 @@ void TranslateFunctionContext(x64Program * program,
     text += context->functionName + " PROC\n";
 
     // prolog: save arg, save reg, alloc stack
-    PrepareStack(context);
-    text += StackLayoutDebugString(context);
+    text += StackLayoutDebugString(stackLayout);
     text += "push rbp\n";
     text += "mov rbp, rsp\n";
     {
@@ -2299,10 +2660,10 @@ void TranslateFunctionContext(x64Program * program,
     }
     text += "push rsi\n";
     text += "push rdi\n";
-    text += "sub rsp, " + IntegerToHexString(context->stackAllocSize) + "\n";
+    text += "sub rsp, " + IntegerToHexString(stackLayout->stackAllocSize) + "\n";
 
     // body (including epilog)
-    text += TranslateStatement(context, context->functionBody);
+    text += TranslateStatement(context, stackLayout, context->functionBody);
 
     // <label> ENDP
     text += context->functionName + " ENDP\n";
@@ -2323,7 +2684,8 @@ x64Program Translate(DefinitionContext * definitionContext,
     // function -> proc
     for (FunctionContext * functionContext : functionContexts)
     {
-        TranslateFunctionContext(&program, functionContext);
+        x64StackLayout * stackLayout = PrepareStack(functionContext);
+        TranslateFunctionContext(&program, functionContext, stackLayout);
     }
 
     return program;

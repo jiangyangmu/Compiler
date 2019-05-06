@@ -1088,8 +1088,8 @@ void CompileAst(AstCompileContext * context, Ast * ast)
         Language::Node * statement = PopNode(context);
 
         Language::Node * labelStatement = Language::LabelStatement(context->currentFunctionContext,
-                                                                   label);
-        AddChild(labelStatement, statement);
+                                                                   label,
+                                                                   statement);
 
         PushNode(context, labelStatement);
     }
@@ -1104,18 +1104,19 @@ void CompileAst(AstCompileContext * context, Ast * ast)
         Language::Node * statement = PopNode(context);
 
         Language::Node * caseStatement = Language::CaseStatement(context->currentFunctionContext,
-                                                                 (u64)caseValue);
-        AddChild(caseStatement, statement);
+                                                                 (u64)caseValue,
+                                                                 statement);
 
         PushNode(context, caseStatement);
     }
     else if (ast->type == DEFAULT_STMT)
     {
         CompileAst(context, child);
+
         Language::Node * statement = PopNode(context);
 
-        Language::Node * defaultStatement = Language::DefaultStatement(context->currentFunctionContext);
-        AddChild(defaultStatement, statement);
+        Language::Node * defaultStatement = Language::DefaultStatement(context->currentFunctionContext,
+                                                                       statement);
 
         PushNode(context, defaultStatement);
     }

@@ -198,8 +198,6 @@ struct TypeContext
 {
     // all types
     std::vector<Type *> types;
-    //Type *      types[100];
-    //size_t      size;
 
     // type id allocation
     u64 nextTypeBaseId;
