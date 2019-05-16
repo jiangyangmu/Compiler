@@ -20,7 +20,6 @@ struct ConstantContext
     };
 
     int nextStringLabel;
-    int nextFloatLabel;
 
     std::map<int, StringConstant> hashToStringConstant;
     std::map<int, FloatConstant> hashToFloatConstant;

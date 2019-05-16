@@ -19,15 +19,18 @@ Ast Parser
 * Output: Ast tree
 
 IR - Type Context
-* Construct type object
-* Support "incomplete" concept - hole in type object
-    * For type struct/union
-    * Create "incomplete" type object
-    * Build the "incomplete" type object into normal type object
-    * Complete the "incomplete" type object transparently
-        * require type object has value semantics
-        * require no type object copying
-* Manage type object, query type object prop
+* Type object: reprentation & construction
+    * Construct directly
+    * Construct from base type and transform rules
+    * Construct well known types (e.g. size_t, ptrdiff_t), user must define with 'typedef', compiler will use directly.
+* Type object attributes: construction & transfer
+    * Identification: type id and type equality
+    * Constness
+    * Addressable-ness
+    * Assignable-ness
+    * Incompleteness: hole in type object (Only for type struct/union)
+* Type object and operation mapping (with the help of Function Context)
+* Type object management
     * Build type context (a global struct)
 
 IR - Definition Context

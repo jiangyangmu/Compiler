@@ -123,11 +123,11 @@ struct FunctionContext
 {
     // Keep external information
 
-    std::string functionName;
+    std::string         functionName;
+    ConstantContext *   constantContext;
+    TypeContext *       typeContext;
     // used in id expression, to figure out argument object location
-    FunctionType * functionType;
-    ConstantContext * constantContext;
-    TypeContext * typeContext;
+    FunctionType *      functionType;
     // used to collect local variables
     DefinitionContext * functionDefinitionContext;
 
@@ -158,7 +158,7 @@ struct FunctionContext
     // default      -> (switch, 0)
     std::map<Node *, std::pair<Node *, int>> nodeToTarget;
     // switch       -> (default, case...)
-    std::map<Node *, std::vector<Node *>> switchToChildren;
+    std::map<Node *, std::vector<Node *>> switchToChildren; // only used to get case value
 };
 
 FunctionContext * CreateFunctionContext(DefinitionContext * functionDefinitionContext,

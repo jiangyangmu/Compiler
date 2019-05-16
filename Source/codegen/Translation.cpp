@@ -117,9 +117,7 @@ void ForExpressionTreeInFunctionBody(FunctionContext * context,
 bool IsRegisterNode(Node * node)
 {
     ASSERT(node);
-    return node->type == EXPR_PIND ||
-        node->type == EXPR_CALL ||
-        node->type == EXPR_CVT_REINTERP;
+    return node->type == EXPR_PIND || node->type == EXPR_CALL;
 }
 
 void UpdateMaxTempZoneSpillZoneCallZone(x64StackLayout * stackLayout, Node * exprTree)

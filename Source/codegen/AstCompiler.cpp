@@ -127,22 +127,26 @@ public:
             return builtType = &Language::MakeFloat(context)->type;
         else
         {
-            //char * desc = new char[4];
-            //char * d = desc;
-            //if (type_specifier_has_ & 0x80)
-            //    *(d++) = 'S';
-            //if (type_specifier_has_ & 0x100)
-            //    *(d++) = 'U';
-            //if (type_specifier_has_ & 0x2)
-            //    *(d++) = 'c';
-            //if (type_specifier_has_ & 0x4)
-            //    *(d++) = 's';
-            //if (type_specifier_has_ & 0x10)
-            //    *(d++) = 'l';
-            //if (type_specifier_has_ & 0x8)
-            //    *(d++) = 'i';
-            //*d = '\0';
-            return builtType = &Language::MakeInt(context)->type;
+            // SI1: signed char
+            // UI1: unsigned char
+            // SI2: (signed) short (int)
+            // UI2: unsigned short (int)
+            // SI4: (signed) (int)
+            // UI4: unsigned (int)
+            // SI8: (signed) long (int)
+            // UI8: unsigned long (int)
+            bool isSigned = true;
+            size_t width = 4;
+
+            if (type_specifier_has_ & 0x100) // unsigned
+                isSigned = false;
+            if (type_specifier_has_ & 0x2) // char
+                width = 1;
+            else if (type_specifier_has_ & 0x4) // short
+                width = 2;
+            else if (type_specifier_has_ & 0x10) // long
+                width = 8;
+            return builtType = &Language::MakeInt(context, width, isSigned)->type;
         }
     }
 };
@@ -538,6 +542,8 @@ void CompileAst(AstCompileContext * context, Ast * ast)
         }
         else if (type->name == Language::FUNCTION)
         {
+            Language::TypeSetAssignable(type);
+            Language::TypeSetAddressable(type);
             (void)NewFunctionDefinition(CurrentDefinitionContext(context),
                                         id,
                                         type,
@@ -668,7 +674,95 @@ void CompileAst(AstCompileContext * context, Ast * ast)
     }
     else if (ast->type == ABSTRACT_DECLARATOR)
     {
+        Language::Type * type = nullptr;
 
+        // pointer list
+        Language::PointerType * pointerType = nullptr;
+        if (child->type == POINTER_LIST)
+        {
+            CompileAst(context, child);
+            child = child->rightSibling;
+
+            pointerType = AsPointer(PopType(context));
+        }
+
+        // abstract declarator
+        Language::Type * innerType = nullptr;
+        if (child->type == ABSTRACT_DECLARATOR)
+        {
+            CompileAst(context, child);
+            innerType = PopType(context);
+        }
+        child = child->rightSibling;
+
+        // array:constant expression / function:parameter list
+        // constrain: 1+ array or 1 function
+        Language::Type * beginType = innerType;
+        Language::Type * endType = innerType;
+        int constrain = 0;
+        while (child)
+        {
+            if (child->type == PRIMARY_EXPR)
+            {
+                ASSERT(constrain < 2);
+                constrain = 1;
+                ASSERT(child->token.type == Token::CONST_INT);
+
+                Language::ArrayType * arrayType = Language::MakeArray(context->typeContext, child->token.ival);
+
+                if (endType)
+                {
+                    Language::SetTargetType(context->typeContext, endType, &arrayType->type);
+                }
+                else
+                {
+                    ASSERT(!beginType);
+                    beginType = &arrayType->type;
+                }
+                endType = &arrayType->type;
+            }
+            else
+            {
+                ASSERT(constrain == 0);
+                constrain = 2;
+                ASSERT(child->type == PARAMETER_LIST);
+
+                Language::FunctionType * functionType = Language::MakeFunction(context->typeContext);
+                
+                // call FunctionAddParameter, FunctionSetVarList
+                PushType(context, &functionType->type);
+                CompileAst(context, child);
+                (void)PopType(context);
+
+                if (endType)
+                {
+                    Language::SetTargetType(context->typeContext, endType, &functionType->type);
+                }
+                else
+                {
+                    ASSERT(!beginType);
+                    beginType = &functionType->type;
+                }
+                endType = &functionType->type;
+            }
+            child = child->rightSibling;
+        }
+
+        if (beginType)
+        {
+            if (pointerType)
+            {
+                Language::SetTargetType(context->typeContext, endType, &pointerType->type);
+            }
+            type = beginType;
+        }
+        else if (pointerType)
+        {
+            type = &pointerType->type;
+        }
+
+        ASSERT(type);
+        PushType(context, type);
     }
     else if (ast->type == DIRECT_ABSTRACT_DECLARATOR)
     {
@@ -702,7 +796,12 @@ void CompileAst(AstCompileContext * context, Ast * ast)
 
                 StringRef           id = PopId(context);
                 Language::Type *    type = PopType(context);
+
+                Language::TypeSetAssignable(type);
+                Language::TypeSetAddressable(type);
+
                 Language::FunctionAddParameter(functionType, id, type);
+                
                 (void)Language::NewObjectDefinition(CurrentDefinitionContext(context),
                                                     id,
                                                     type,
@@ -770,7 +869,43 @@ void CompileAst(AstCompileContext * context, Ast * ast)
     }
     else if (ast->type == TYPE_NAME)
     {
+        Language::Type * type = nullptr;
 
+        BeginTypeSpecifier(context);
+        BeginTypeQualifier(context);
+
+        // type specifier / type qualifier
+        ASSERT(child && (IsAstTypeSpecifier(child->type) ||
+                         IsAstTypeQualifier(child->type)));
+        do
+        {
+            CompileAst(context, child);
+            child = child->rightSibling;
+        } while (child && (IsAstTypeSpecifier(child->type) ||
+                           IsAstTypeQualifier(child->type)));
+
+        Language::Type *    typeSpecifier = GetTypeSpecifier(context);
+        int                 typeQualifier = GetTypeQualifier(context);
+
+        EndTypeQualifier(context);
+        EndTypeSpecifier(context);
+
+        // abstract declarator
+        Language::Type *    abstractDeclarator = nullptr;
+        if (child)
+        {
+            ASSERT(child->type == ABSTRACT_DECLARATOR);
+            CompileAst(context, child);
+            abstractDeclarator = PopType(context);
+        }
+        
+        type = ConcatType(context,
+                          typeSpecifier,
+                          typeQualifier,
+                          abstractDeclarator);
+
+        ASSERT(type);
+        PushType(context, type);
     }
     else if (ast->type == POINTER)
     {
@@ -1460,7 +1595,18 @@ void CompileAst(AstCompileContext * context, Ast * ast)
     }
     else if (ast->type == CAST_EXPR)
     {
-        // TODO: wait parser support
+        CompileAst(context, child);
+        child = child->rightSibling;
+
+        Language::Type *    type = PopType(context);
+
+        CompileAst(context, child);
+
+        Language::Node *    castOrUnary = PopNode(context);
+
+        Language::Node *    cast = Language::CastExpression(castOrUnary, type);
+
+        PushNode(context, cast);
     }
     else if (ast->type == MUL_EXPR)
     {

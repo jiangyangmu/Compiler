@@ -29,15 +29,15 @@ enum TypeName
 enum TypeProperty
 {
     TP_INCOMPLETE       = 1,
-    TP_CONST            = (1 << 2),
-    TP_ADDRESSABLE      = (1 << 3),
-    TP_ASSIGNABLE       = (1 << 4),
+    TP_CONST            = (1 << 1),
+    TP_ADDRESSABLE      = (1 << 2),
+    TP_ASSIGNABLE       = (1 << 3),
 
-    TP_IS_INTEGRAL      = (1 << 5),
-    TP_IS_ARITHMETIC    = (1 << 6),
-    TP_IS_SCALAR        = (1 << 7),
+    TP_IS_INTEGRAL      = (1 << 4),
+    TP_IS_ARITHMETIC    = (1 << 5),
+    TP_IS_SCALAR        = (1 << 6),
     
-    TP_IS_OBJECT        = (1 << 8),
+    TP_IS_OBJECT        = (1 << 7),
 };
 
 struct Type
@@ -67,6 +67,7 @@ struct CharType
 struct IntType
 {
     Type type;
+    bool isSigned;
 };
 
 struct FloatType
@@ -125,8 +126,6 @@ struct UnionType
     size_t      memberOffset[10];
 };
 
-u64             TypeId(Type * type);
-
 VoidType *      AsVoid(Type * type);
 BoolType *      AsBool(Type * type);
 CharType *      AsChar(Type * type);
@@ -139,14 +138,14 @@ EnumType *      AsEnum(Type * type);
 StructType *    AsStruct(Type * type);
 UnionType *     AsUnion(Type * type);
 
-// Build
+// Construct type object
 
 struct TypeContext;
 
 VoidType *      MakeVoid(TypeContext * context);
 BoolType *      MakeBool(TypeContext * context);
 CharType *      MakeChar(TypeContext * context);
-IntType *       MakeInt(TypeContext * context, size_t width = 4);
+IntType *       MakeInt(TypeContext * context, size_t width = 4, bool isSigned = true);
 FloatType *     MakeFloat(TypeContext * context, size_t width = 4);
 
 ArrayType *     MakeArray(TypeContext * context, size_t length); // length, target
@@ -173,7 +172,9 @@ void            StructDone(StructType * type);
 UnionType *     MakeUnion(TypeContext * context);    // member id/type
 void            UnionAddMember(UnionType * type, StringRef mname, Type * mtype);
 
-// set target of {array, pointer, function}
+Type *          CloneType(TypeContext * context, Type * type);
+
+// array, pointer, function
 void            SetTargetType(TypeContext * context, Type * type, Type * target);
 
 void            TypeSetProperties(Type * type, int prop);
@@ -190,9 +191,46 @@ Type *          DefaultArgumentPromotion(TypeContext * context, Type * type);
 Type *          DecayType(TypeContext * context, Type * type);
 Type *          PtrDiffType(TypeContext * context);
 bool            IsPtrDiffType(Type * type);
-//Type *          RemoveAssignable(TypeContext * context, Type * type);
 
-// Manage
+// Query type object properties
+
+u64             TypeId(Type * type);
+
+bool            TypeEqual(Type * a, Type * b);
+size_t          TypeSize(Type * type);
+size_t          TypeAlignment(Type * type);
+
+// categories
+bool            IsScalar(Type * type);
+bool            IsIntegral(Type * type);
+bool            IsFloating(Type * type);
+bool            IsArithmetic(Type * type);
+
+// attributes
+bool            IsConst(Type * type);
+bool            IsIncomplete(Type * type);
+bool            IsAssignable(Type * type);
+bool            IsAddressable(Type * type);
+
+// specific types
+bool            IsVoid(Type * type);
+bool            IsBool(Type * type);
+bool            IsInt(Type * type);
+bool            IsStructOrUnion(Type * type);
+bool            IsArray(Type * type);
+bool            IsPointer(Type * type);
+bool            IsPointerToObject(Type * type);
+bool            IsPointerToFunction(Type * type);
+bool            IsFunction(Type * type);
+bool            IsCallableObject(Type * type); // function, pointer to function
+
+// specific type properties
+Type *          GetMemberType(Type * type, StringRef memberName);
+size_t          GetMemberOffset(Type * type, StringRef memberName);
+Type *          GetTargetType(Type * type);
+bool            IsMatchedCall(FunctionType * func, std::vector<Type *> & arguments);
+
+// Manage runtime environment
 
 struct TypeContext
 {
@@ -211,46 +249,8 @@ struct TypeContext
 
 TypeContext *   CreateTypeContext();
 
-// Query
-
-bool            TypeEqual(Type * a, Type * b);
-size_t          TypeSize(Type * type);
-size_t          TypeAlignment(Type * type);
-
-bool            IsScalar(Type * type);
-bool            IsIntegral(Type * type);
-bool            IsFloating(Type * type);
-bool            IsArithmetic(Type * type);
-bool            IsConst(Type * type);
-bool            IsIncomplete(Type * type);
-bool            IsAssignable(Type * type);
-bool            IsAddressable(Type * type);
-bool            IsVoid(Type * type);
-bool            IsBool(Type * type);
-bool            IsInt(Type * type);
-bool            IsStructOrUnion(Type * type);
-bool            IsArray(Type * type);
-bool            IsPointer(Type * type);
-//bool            IsNullPointer();
-bool            IsPointerToObject(Type * type);
-bool            IsPointerToFunction(Type * type);
-bool            IsFunction(Type * type);
-bool            IsCallableObject(Type * type); // function, pointer to function
-
-// TODO: remove these, use specific type test is more clear.
-bool            IsComparable(Type * t1, Type * t2); // arithmetic or same type pointer
-bool            CanTestEquality(Type * t1, Type * t2);
-
-bool            ImplicitConvertible(Type * from, Type * to);
-
-// Type must be struct or union. Return type inherits props like const.
-Type *          GetMemberType(Type * type, StringRef memberName);
-size_t          GetMemberOffset(Type * type, StringRef memberName);
-// Type must be pointer. Return type inherits props like const.
-Type *          GetTargetType(Type * type);
-bool            IsMatchedCall(FunctionType * func, std::vector<Type *> & arguments);
-
 // Debug
+
 std::string     TypeDebugString(Type * type);
 void            PrintType(Type * type);
 void            PrintTypeContext(TypeContext * context);

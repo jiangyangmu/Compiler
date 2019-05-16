@@ -91,6 +91,15 @@ bool First(AstType at, const Token & token)
                                     };
         return Contains(type, first, ARRAY_SIZE(first));
     }
+    else if (at == ABSTRACT_DECLARATOR)
+    {
+        const Token::Type first[] = {
+                                        Token::OP_MUL,
+                                        Token::LP,
+                                        Token::LSB,
+                                    };
+        return Contains(type, first, ARRAY_SIZE(first));
+    }
     else if (at == DECLARATION)
     {
         return First(DECLARATION_SPECIFIERS, token);
@@ -542,6 +551,111 @@ Ast * ParseDeclarator(TokenIterator & ti)
     return declarator;
 }
 
+Ast * ParseAbstractDeclarator(TokenIterator & ti)
+{
+    Ast * declarator                            = NewAst(ABSTRACT_DECLARATOR);
+
+    Ast ** pNextChild                           = &declarator->leftChild;
+
+    if (SKIP_T(Token::OP_MUL))
+    {
+        Ast * pointerList                       = NewAst(POINTER_LIST);
+
+        Ast * pointer                           = NewAst(POINTER);
+        pointer->leftChild                      = (PEEK_T(Token::KW_CONST) || PEEK_T(Token::KW_VOLATILE))
+                                                  ? NewAst(TYPE_QUALIFIER, NEXT())
+                                                  : nullptr;
+
+        pointerList->leftChild                  = pointer;
+
+        while (SKIP_T(Token::OP_MUL))
+        {
+            pointer->rightSibling               = NewAst(POINTER);
+            pointer->rightSibling->leftChild    = (PEEK_T(Token::KW_CONST) || PEEK_T(Token::KW_VOLATILE))
+                                                  ? NewAst(TYPE_QUALIFIER, NEXT())
+                                                  : nullptr;
+            pointer                             = pointer->rightSibling;
+        }
+
+        *pNextChild                             = pointerList;
+        pNextChild                              = &((*pNextChild)->rightSibling);
+    }
+
+    // abstract_declarator?
+    if (PEEK_T(Token::LP) && First(ABSTRACT_DECLARATOR, PEEK2()))
+    {
+        EXPECT_T(Token::LP);
+        *pNextChild                             = ParseAbstractDeclarator(ti);
+        EXPECT_T(Token::RP);
+        pNextChild                              = &((*pNextChild)->rightSibling);
+    }
+
+    // (array|func)*
+    if(PEEK_T(Token::LP) || PEEK_T(Token::LSB))
+    {
+        while (true)
+        {
+            if (SKIP_T(Token::LSB))
+            {
+                *pNextChild                     = !PEEK_T(Token::RSB)
+                                                  ? ParseConstantExpr(ti)
+                                                  : NewAst(CONSTANT_EXPR);
+                pNextChild                      = &((*pNextChild)->rightSibling);
+                EXPECT_T(Token::RSB);
+            }
+            else if (SKIP_T(Token::LP))
+            {
+                *pNextChild                     = !PEEK_T(Token::RP)
+                                                  ? ParseParameterList(ti)
+                                                  : NewAst(PARAMETER_LIST);
+                pNextChild                      = &((*pNextChild)->rightSibling);
+                EXPECT_T(Token::RP);
+            }
+            else
+            {
+                break;
+            }
+        }
+    }
+
+    ASSERT(declarator->leftChild);
+
+    return declarator;
+}
+
+Ast * ParseTypename(TokenIterator & ti)
+{
+    Ast * typeName                              = NewAst(TYPE_NAME);
+    Ast ** pNextChild                           = &typeName->leftChild;
+
+    while (true)
+    {
+        if (First(TYPE_SPECIFIER, PEEK()))
+        {
+            *pNextChild                         = ParseTypeSpecifier(ti);
+            pNextChild                          = &(*pNextChild)->rightSibling;
+        }
+        else if (First(TYPE_QUALIFIER, PEEK()))
+        {
+            *pNextChild                         = NewAst(TYPE_QUALIFIER, NEXT());
+            pNextChild                          = &(*pNextChild)->rightSibling;
+        }
+        else
+        {
+            break;
+        }
+    }
+    ASSERT(typeName->leftChild);
+
+    if (First(ABSTRACT_DECLARATOR, PEEK()))
+    {
+        *pNextChild                             = ParseAbstractDeclarator(ti);
+        pNextChild                              = &(*pNextChild)->rightSibling;
+    }
+
+    return typeName;
+}
+
 Ast * ParseInitializer(TokenIterator & ti)
 {
     // TODO
@@ -978,8 +1092,19 @@ Ast * ParseMulExpr(TokenIterator & ti, Ast * leftMulExpr /* = nullptr */)
 }
 Ast * ParseCastExpr(TokenIterator & ti)
 {
-    // TODO: parse type-name
-    return ParseUnaryExpr(ti);
+    if (PEEK_T(Token::LP) && (First(TYPE_SPECIFIER, PEEK2()) || First(TYPE_QUALIFIER, PEEK2())))
+    {
+        Ast * castExpr                          = NewAst(CAST_EXPR);
+        EXPECT_T(Token::LP);
+        castExpr->leftChild                     = ParseTypename(ti);
+        EXPECT_T(Token::RP);
+        castExpr->leftChild->rightSibling       = ParseCastExpr(ti);
+        return castExpr;
+    }
+    else
+    {
+        return ParseUnaryExpr(ti);
+    }
 }
 bool IsUnaryOp(Token::Type t)
 {

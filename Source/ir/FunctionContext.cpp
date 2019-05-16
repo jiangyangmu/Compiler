@@ -444,59 +444,8 @@ Node * IncExpression(FunctionContext * context, Node * expr)
 }
 Node * PostIncExpression(FunctionContext * context, Node * expr)
 {
-    ASSERT(IsScalar(expr->expr.type) &&
-           IsAssignable(expr->expr.type) &&
-           !IsConst(expr->expr.type));
-
-    // copy to output location, then increment to input location
-
-    // integer  -> iadd 1
-    // float    -> fadd 1.0f
-    // pointer  -> padd 1
-
-    Node * node;
-
-    Type * type = expr->expr.type;
-
-    Node * dupNode = MakeNode(EXPR_MDUP);
-    dupNode->expr.type = type;
-    dupNode->expr.loc.type = NEED_ALLOC;
-    AddChild(dupNode, expr);
-
-    if (IsIntegral(type))
-    {
-        Node * addNode = MakeNode(EXPR_IADD);
-        addNode->expr.type = type;
-        addNode->expr.loc.type = SAME_AS_FIRST_GRANDCHILD;
-
-        AddChild(addNode, dupNode);
-        AddChild(addNode, ConstantExpression(context, 1));
-
-        node = addNode;
-    }
-    else if (IsFloating(type))
-    {
-        Node * addNode = MakeNode(EXPR_FADD);
-        addNode->expr.type = type;
-        addNode->expr.loc.type = SAME_AS_FIRST_GRANDCHILD;
-
-        AddChild(addNode, dupNode);
-        AddChild(addNode, ConstantExpression(context, 1.0f));
-        node = addNode;
-    }
-    else
-    {
-        ASSERT(IsPointer(type));
-        Node * addNode = MakeNode(EXPR_PADDUI);
-        addNode->expr.type = type;
-        addNode->expr.loc.type = SAME_AS_FIRST_GRANDCHILD;
-
-        AddChild(addNode, dupNode);
-        AddChild(addNode, ConstantExpression(context, 1ull));
-        node = addNode;
-    }
-
-    return node;
+    // TODO: implement
+    return IncExpression(context, expr);
 }
 Node * DecExpression(FunctionContext * context, Node * expr)
 {
@@ -544,57 +493,8 @@ Node * DecExpression(FunctionContext * context, Node * expr)
 }
 Node * PostDecExpression(FunctionContext * context, Node * expr)
 {
-    ASSERT(IsScalar(expr->expr.type) && IsAssignable(expr->expr.type) && !IsConst(expr->expr.type));
-
-    // copy to output location, then decrement to input location
-
-    // integer  -> dec
-    // float    -> fsub 1.0f
-    // pointer  -> psub 1
-
-    Node * node;
-
-    Type * type = expr->expr.type;
-
-    Node * dupNode = MakeNode(EXPR_MDUP);
-    dupNode->expr.type = type;
-    dupNode->expr.loc.type = NEED_ALLOC;
-    AddChild(dupNode, expr);
-
-    if (IsIntegral(type))
-    {
-        Node * subNode = MakeNode(EXPR_ISUB);
-        subNode->expr.type = type;
-        subNode->expr.loc.type = SAME_AS_FIRST_GRANDCHILD;
-
-        AddChild(subNode, dupNode);
-        AddChild(subNode, ConstantExpression(context, 1));
-
-        node = subNode;
-    }
-    else if (IsFloating(type))
-    {
-        Node * subNode = MakeNode(EXPR_FSUB);
-        subNode->expr.type = type;
-        subNode->expr.loc.type = SAME_AS_FIRST_GRANDCHILD;
-
-        AddChild(subNode, dupNode);
-        AddChild(subNode, ConstantExpression(context, 1.0f));
-        node = subNode;
-    }
-    else
-    {
-        ASSERT(IsPointer(type));
-        Node * subNode = MakeNode(EXPR_PSUBUI);
-        subNode->expr.type = type;
-        subNode->expr.loc.type = SAME_AS_FIRST_GRANDCHILD;
-
-        AddChild(subNode, dupNode);
-        AddChild(subNode, ConstantExpression(context, 1ull));
-        node = subNode;
-    }
-
-    return node;
+    // TODO: implement
+    return DecExpression(context, expr);
 }
 
 Node * MemberOfExpression(FunctionContext * context,
@@ -685,6 +585,8 @@ Node * SubscriptExpression(FunctionContext * context,
 
 Node * GetAddressExpression(FunctionContext * context, Node * expr)
 {
+    ASSERT(IsAddressable(expr->expr.type));
+
     Node * node = MakeNode(EXPR_PNEW);
     node->expr.type = &(MakePointer(context->typeContext, expr->expr.type)->type);
     node->expr.loc.type = NEED_ALLOC;
@@ -698,8 +600,12 @@ Node * IndirectExpression(FunctionContext * context, Node * expr)
 {
     ASSERT(IsPointer(expr->expr.type));
 
+    Type * type = CloneType(context->typeContext, AsPointer(expr->expr.type)->target);
+    TypeSetAssignable(type);
+    TypeSetAddressable(type);
+
     Node * node = MakeNode(EXPR_PIND);
-    node->expr.type = AsPointer(expr->expr.type)->target;
+    node->expr.type = type;
     node->expr.loc.type = REGISTER_INDIRECT;
     node->expr.loc.registerType = RCX;
 
@@ -788,10 +694,18 @@ Node * CastExpression(Node * expr, Type * type)
     {
         // pointer/integer/float/bool
         // TODO: integer signed-ness
-        if (IsPointer(fromType) && IsPointer(toType))
+        if (IsPointer(fromType))
         {
-            node = MakeNode(EXPR_CVT_REINTERP);
-            node->expr.loc.type = SAME_AS_FIRST_CHILD;
+            if (IsPointer(toType))
+            {
+                node = MakeNode(EXPR_CVT_REINTERP);
+                node->expr.loc.type = SAME_AS_FIRST_CHILD;
+            }
+            else if (IsIntegral(toType) && TypeSize(fromType) == TypeSize(toType))
+            {
+                node = MakeNode(EXPR_CVT_REINTERP);
+                node->expr.loc.type = SAME_AS_FIRST_CHILD;
+            }
         }
         else if (IsIntegral(fromType))
         {
@@ -1104,7 +1018,12 @@ Node * BoolOrExpression(FunctionContext * context, Node * a, Node * b)
 
 Node * CmpExpression(FunctionContext * context, NodeType op, Node * a, Node * b)
 {
-    ASSERT(IsComparable(a->expr.type, b->expr.type)); // arithmetic or same type pointer
+    Type * atype = a->expr.type;
+    Type * btype = b->expr.type;
+    ASSERT(
+        (IsArithmetic(atype) && IsArithmetic(btype)) ||
+        (IsPointer(atype) && IsPointer(btype) && TypeEqual(AsPointer(atype)->target, AsPointer(btype)->target))
+    );
 
     Node * node = MakeNode(op);
     node->expr.type = &(MakeBool(context->typeContext)->type);
@@ -1117,7 +1036,7 @@ Node * CmpExpression(FunctionContext * context, NodeType op, Node * a, Node * b)
 }
 Node * EqExpression(FunctionContext * context, Node * a, Node * b)
 {
-    ASSERT(CanTestEquality(a->expr.type, b->expr.type)); // arithmetic or same type pointer
+    ASSERT(TypeEqual(a->expr.type, b->expr.type)); // arithmetic or same type pointer
 
     NodeType cmpType;
 
@@ -1139,7 +1058,7 @@ Node * EqExpression(FunctionContext * context, Node * a, Node * b)
 }
 Node * NeExpression(FunctionContext * context, Node * a, Node * b)
 {
-    ASSERT(CanTestEquality(a->expr.type, b->expr.type)); // arithmetic or same type pointer
+    ASSERT(TypeEqual(a->expr.type, b->expr.type)); // arithmetic or same type pointer
 
     NodeType cmpType;
 
@@ -1161,7 +1080,12 @@ Node * NeExpression(FunctionContext * context, Node * a, Node * b)
 }
 Node * LtExpression(FunctionContext * context, Node * a, Node * b)
 {
-    ASSERT(IsComparable(a->expr.type, b->expr.type)); // arithmetic or same type pointer
+    Type * atype = a->expr.type;
+    Type * btype = b->expr.type;
+    ASSERT(
+        (IsArithmetic(atype) && IsArithmetic(btype)) ||
+        (IsPointer(atype) && IsPointer(btype) && TypeEqual(AsPointer(atype)->target, AsPointer(btype)->target))
+    );
 
     NodeType cmpType;
 
@@ -1183,7 +1107,12 @@ Node * LtExpression(FunctionContext * context, Node * a, Node * b)
 }
 Node * LeExpression(FunctionContext * context, Node * a, Node * b)
 {
-    ASSERT(IsComparable(a->expr.type, b->expr.type)); // arithmetic or same type pointer
+    Type * atype = a->expr.type;
+    Type * btype = b->expr.type;
+    ASSERT(
+        (IsArithmetic(atype) && IsArithmetic(btype)) ||
+        (IsPointer(atype) && IsPointer(btype) && TypeEqual(AsPointer(atype)->target, AsPointer(btype)->target))
+    );
 
     NodeType cmpType;
 
@@ -1205,7 +1134,12 @@ Node * LeExpression(FunctionContext * context, Node * a, Node * b)
 }
 Node * GeExpression(FunctionContext * context, Node * a, Node * b)
 {
-    ASSERT(IsComparable(a->expr.type, b->expr.type)); // arithmetic or same type pointer
+    Type * atype = a->expr.type;
+    Type * btype = b->expr.type;
+    ASSERT(
+        (IsArithmetic(atype) && IsArithmetic(btype)) ||
+        (IsPointer(atype) && IsPointer(btype) && TypeEqual(AsPointer(atype)->target, AsPointer(btype)->target))
+    );
 
     NodeType cmpType;
 
@@ -1227,7 +1161,12 @@ Node * GeExpression(FunctionContext * context, Node * a, Node * b)
 }
 Node * GtExpression(FunctionContext * context, Node * a, Node * b)
 {
-    ASSERT(IsComparable(a->expr.type, b->expr.type)); // arithmetic or same type pointer
+    Type * atype = a->expr.type;
+    Type * btype = b->expr.type;
+    ASSERT(
+        (IsArithmetic(atype) && IsArithmetic(btype)) ||
+        (IsPointer(atype) && IsPointer(btype) && TypeEqual(AsPointer(atype)->target, AsPointer(btype)->target))
+    );
 
     NodeType cmpType;
 
@@ -1251,7 +1190,8 @@ Node * GtExpression(FunctionContext * context, Node * a, Node * b)
 Node * AssignExpression(FunctionContext * context, Node * a, Node * b)
 {
     // arithmetic/struct/union/pointer
-    ASSERT(TypeEqual(a->expr.type, b->expr.type) ||
+    ASSERT(
+        TypeEqual(a->expr.type, b->expr.type) ||
         (IsIntegral(a->expr.type) && IsIntegral(b->expr.type)));
     ASSERT(IsAssignable(a->expr.type));
 

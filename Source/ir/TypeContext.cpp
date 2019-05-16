@@ -198,7 +198,7 @@ CharType * MakeChar(TypeContext * context)
     return type;
 }
 
-IntType * MakeInt(TypeContext * context, size_t width)
+IntType * MakeInt(TypeContext * context, size_t width, bool isSigned)
 {
     ASSERT(width <= 8 && CountBits(width) == 1);
     IntType * type = new IntType;
@@ -207,6 +207,7 @@ IntType * MakeInt(TypeContext * context, size_t width)
     type->type.size = width;
     type->type.align = width;
     type->type.baseId = ChooseTypeBaseId(context, &type->type);
+    type->isSigned = isSigned;
     context->types.push_back(&type->type);
     return type;
 }
@@ -406,6 +407,27 @@ void UnionAddMember(UnionType * type, StringRef mname, Type * mtype)
     type->type.size = Max(type->type.size, mtype->size);
 }
 
+Type * CloneType(TypeContext * context, Type * type)
+{
+    Type * clone = nullptr;
+    switch (type->name)
+    {
+        case VOID:      clone = &(new VoidType(*AsVoid(type)))->type; break;
+        case BOOL:      clone = &(new BoolType(*AsBool(type)))->type; break;
+        case CHAR:      clone = &(new CharType(*AsChar(type)))->type; break;
+        case INT:       clone = &(new IntType(*AsInt(type)))->type; break;
+        case FLOAT:     clone = &(new FloatType(*AsFloat(type)))->type; break;
+        case ARRAY:     clone = &(new ArrayType(*AsArray(type)))->type; break;
+        case POINTER:   clone = &(new PointerType(*AsPointer(type)))->type; break;
+        case FUNCTION:  clone = &(new FunctionType(*AsFunction(type)))->type; break;
+        case ENUM:      clone = &(new EnumType(*AsEnum(type)))->type; break;
+        case STRUCT:    clone = &(new StructType(*AsStruct(type)))->type; break;
+        case UNION:     clone = &(new UnionType(*AsUnion(type)))->type; break;
+        default:        ASSERT(false); break;
+    }
+    return clone;
+}
+
 void SetTargetType(TypeContext * context, Type * type, Type * target)
 {
     ASSERT(type->name == ARRAY ||
@@ -444,7 +466,13 @@ void TypeSetAddressable(Type * type)
 
 Type * IntegralPromotion(TypeContext * context, Type * type)
 {
-    // {bool, char, int, enum} -> int-4
+    // void/array/pointer/function/struct/union -> ERROR
+    // bool/char = int-s1
+    // enum = int-s4
+    // int-s1/int-s2                            -> int-s4
+    // int-u1/int-u2                            -> int-u4
+    // int-s*                                   -> int-s* (* >= 4)
+    // int-u*                                   -> int-u* (* >= 4)
 
     ASSERT(IsIntegral(type));
 
@@ -452,14 +480,17 @@ Type * IntegralPromotion(TypeContext * context, Type * type)
 
     if (type->name == BOOL ||
         type->name == CHAR ||
-        type->name == ENUM ||
-        type->size < 4)
+        type->name == ENUM)
     {
-        promoType = &MakeInt(context)->type;
+        promoType = &MakeInt(context, 4, true)->type;
     }
     else
     {
-        promoType = type;
+        ASSERT(IsInt(type));
+        if (type->size < 4)
+            promoType = &MakeInt(context, 4, AsInt(type)->isSigned)->type;
+        else
+            promoType = type;
     }
 
     return promoType;
@@ -467,8 +498,16 @@ Type * IntegralPromotion(TypeContext * context, Type * type)
 
 Type * UsualArithmeticConversion(TypeContext * context, Type * left, Type * right)
 {
-    // float-10 > float-8 > float-4 > int-8 > int-4
-    // TODO: handle unsigned int
+    // * x void/array/pointer/function/struct/union -> ERROR
+    // * x float-8                                  -> float-8
+    // * x float-4                                  -> float-4
+    // bool/char = int-s1
+    // enum = int-s4
+    // int-(s/u)A x int-(s/u)B                      -> Promo(int-(s/u)B) (A < B)
+    // int-sN x int-sN                              -> Promo(int-sN)
+    // int-uN x int-uN                              -> Promo(int-uN)
+    // int-sN x int-uN                              -> Promo(int-s2N) (N < 8)
+    // int-s8 x int-u8                              -> ERROR
 
     ASSERT(IsArithmetic(left) && IsArithmetic(right));
 
@@ -478,29 +517,62 @@ Type * UsualArithmeticConversion(TypeContext * context, Type * left, Type * righ
     }
     else
     {
-        return IntegralPromotion(
-            context,
-            left->size >= right->size ? left : right
-        );
+        ASSERT(IsIntegral(left) && IsIntegral(right));
+
+        IntType * i1 = AsInt(IntegralPromotion(context, left));
+        IntType * i2 = AsInt(IntegralPromotion(context, right));
+
+        if (i1->type.size < i2->type.size)
+        {
+            IntType * t = i1;
+            i1 = i2;
+            i2 = t;
+        }
+
+        if (i1->type.size > i2->type.size)
+        {
+            return &i1->type;
+        }
+        else
+        {
+            if (i1->isSigned == i2->isSigned)
+            {
+                return &i1->type;
+            }
+            else
+            {
+                ASSERT(i1->type.size < 8);
+                return &MakeInt(context, i1->type.size * 2, true)->type;
+            }
+        }
     }
 }
 
 Type * DefaultArgumentPromotion(TypeContext * context, Type * type)
 {
-    // {bool, char, int, enum}  -> int-4
-    // float-4                  -> float-8
-    // *                        -> *
+    // void/array/function  -> ERROR
+    // bool/char/enum       -> int-s8
+    // int-s*               -> int-s8
+    // int-u*               -> int-u8
+    // float-*              -> float-8
+    // pointer              -> pointer
+    // struct               -> struct
+    // union                -> union
 
     if (IsIntegral(type))
     {
-        return IntegralPromotion(context, type);
+        bool isSigned = IsInt(type) ? AsInt(type)->isSigned : true;
+        return &MakeInt(context, 8, isSigned)->type;
     }
     else if (IsFloating(type))
     {
-        return type;
+        return &MakeFloat(context, type->size)->type;
     }
     else
     {
+        ASSERT(type->name == POINTER ||
+               type->name == STRUCT ||
+               type->name == UNION);
         return type;
     }
 }
@@ -522,11 +594,7 @@ Type * DecayType(TypeContext * context, Type * type)
     }
     else if (type->name == FUNCTION)
     {
-        PointerType * pointerType = MakePointer(context);
-
-        pointerType->target = type;
-
-        return &pointerType->type;
+        return &MakePointer(context, type)->type;
     }
     else
     {
@@ -536,8 +604,7 @@ Type * DecayType(TypeContext * context, Type * type)
 
 Type * PtrDiffType(TypeContext * context)
 {
-    // int-8
-    return &MakeInt(context, 8)->type;
+    return &MakeInt(context, 8, true)->type;
 }
 
 bool IsPtrDiffType(Type * type)
@@ -549,8 +616,6 @@ TypeContext * CreateTypeContext()
 {
     TypeContext * context = new TypeContext;
     
-    //memset(context->types, 0, sizeof(context->types));
-    //context->size = 0;
     context->nextTypeBaseId = MAX_RESERVED_BASE_ID + 1;
 
     return context;
@@ -653,8 +718,7 @@ bool IsIncomplete(Type * type)
 
 bool IsAssignable(Type * type)
 {
-    //return type->prop & TP_ASSIGNABLE; // TODO: impl IsAssignable
-    return true;
+    return type->prop & TP_ASSIGNABLE;
 }
 
 bool IsAddressable(Type * type)
@@ -713,24 +777,6 @@ bool IsCallableObject(Type * type)
            (type->name == POINTER && AsPointer(type)->target->name == FUNCTION);
 }
 
-// arithmetic or same type pointer
-bool IsComparable(Type * t1, Type * t2)
-{
-    return (IsArithmetic(t1) && IsArithmetic(t2)) ||
-           (IsPointer(t1) && IsPointer(t2) && TypeEqual(AsPointer(t1)->target, AsPointer(t2)->target));
-}
-
-bool CanTestEquality(Type * t1, Type * t2)
-{
-    return TypeEqual(t1, t2);
-}
-
-// TODO: impl
-bool ImplicitConvertible(Type * from, Type * to)
-{
-    return true;
-}
-
 Type * GetMemberType(Type * type, StringRef memberName)
 {
     ASSERT(IsStructOrUnion(type) && !IsIncomplete(type));
@@ -763,6 +809,8 @@ Type * GetMemberType(Type * type, StringRef memberName)
             }
         }
     }
+
+    // TODO: handle 'const struct/union'
 
     ASSERT(memberType);
 
