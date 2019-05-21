@@ -388,7 +388,7 @@ UnionType * MakeUnion(TypeContext * context)
 {
     UnionType * type = new UnionType;
     type->type.name = UNION;
-    type->type.prop = TP_IS_OBJECT;
+    type->type.prop = TP_IS_OBJECT | TP_INCOMPLETE;
     type->type.size = 0; // to fill
     type->type.align = 0; // to fill
     type->type.baseId = ChooseTypeBaseId(context, &type->type);
@@ -405,6 +405,12 @@ void UnionAddMember(UnionType * type, StringRef mname, Type * mtype)
     type->memberType[i] = mtype;
     type->type.align = Max(type->type.align, mtype->align);
     type->type.size = Max(type->type.size, mtype->size);
+}
+
+void UnionDone(UnionType * type)
+{
+    ASSERT(IsIncomplete(&type->type));
+    type->type.prop &= ~TP_INCOMPLETE;
 }
 
 Type * CloneType(TypeContext * context, Type * type)
@@ -741,6 +747,16 @@ bool IsInt(Type * type)
     return type->name == INT;
 }
 
+bool IsStruct(Type * type)
+{
+    return type->name == STRUCT;
+}
+
+bool IsUnion(Type * type)
+{
+    return type->name == UNION;
+}
+
 bool IsStructOrUnion(Type * type)
 {
     return type->name == STRUCT || type->name == UNION;
@@ -853,7 +869,7 @@ size_t GetMemberOffset(Type * type, StringRef memberName)
         }
 
         ASSERT(offset != 10);
-        return unionType->memberOffset[offset];
+        return 0;
     }
 }
 

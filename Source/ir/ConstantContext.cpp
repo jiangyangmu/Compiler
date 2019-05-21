@@ -17,7 +17,7 @@ int StringHash(StringRef string)
     int index = 1;
     for (char c : string)
     {
-        i += 1610612741 * index * c;
+        i += 1610612741 * index * index * c;
         ++index;
     }
 

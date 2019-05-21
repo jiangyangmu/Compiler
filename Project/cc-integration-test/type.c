@@ -332,6 +332,40 @@ int pointer_operations()
 }
 
 /* struct/union */
+int struct_operations()
+{
+    struct S { int x; char y; long int z; } s;
+
+    /* member access */
+    s.x = 1;
+    s.y = 2;
+    s.z = 3;
+    expect("s.x", s.x, 1);
+    expect("s.y", s.y, 2);
+    expect("s.z", s.z, 3);
+
+    /* sizeof */
+    expect("sizeof(S)", sizeof(s), 16);
+
+    return 0;
+}
+int union_operations()
+{
+    union U { int x; char y; long int z; } u;
+
+    /* member access */
+    u.x = 300;
+    expect("u.x", u.x, 300);
+    u.y = 2;
+    expect("u.y", u.y, 2);
+    u.z = 999;
+    expect("u.z", u.z, 999);
+
+    /* sizeof */
+    expect("sizeof(U)", sizeof(u), 8);
+
+    return 0;
+}
 
 /* function */
 int _2power(int e)
@@ -359,6 +393,8 @@ int main()
     float_operations();
     array_operations();
     pointer_operations();
+    struct_operations();
+    union_operations();
     function_operations();
 
     return 0;

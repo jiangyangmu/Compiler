@@ -90,11 +90,11 @@ public:
                 type_specifier_allow_ &= 0x200;
                 m_Type = typeHandle;
                 break;
-                // case Token::KW_UNION:
-                //    __check_set(0x400);
-                //    type_specifier_allow_ &= 0x400;
-                //    // TODO: type_ = new UnionType();
-                //    break;
+            case Token::KW_UNION:
+                __check_set(0x400);
+                type_specifier_allow_ &= 0x400;
+                m_Type = typeHandle;
+                break;
             case Token::KW_ENUM:
                 __check_set(0x800);
                 type_specifier_allow_ &= 0x800;
@@ -971,7 +971,8 @@ void CompileAst(AstCompileContext * context, Ast * ast)
     {
         AddTypeSpecifier(context, ast->token.type);
     }
-    else if (ast->type == STRUCT_SPECIFIER)
+    else if (ast->type == STRUCT_SPECIFIER ||
+             ast->type == UNION_SPECIFIER)
     {
         // identifier
         StringRef tag;
@@ -1029,7 +1030,8 @@ void CompileAst(AstCompileContext * context, Ast * ast)
         //  tag definition
         //      create
 
-        Language::StructType * structType = nullptr;
+        bool                isStructType = (ast->type == STRUCT_SPECIFIER);
+        Language::Type *    structOrUnionType = nullptr;
         
         bool needCreateTagDefinition = false;
 
@@ -1039,24 +1041,39 @@ void CompileAst(AstCompileContext * context, Ast * ast)
             bool isNewIncomplete = (child == nullptr);
 
             ASSERT(isOldIncomplete || isNewIncomplete);
+            ASSERT(
+                (isStructType && Language::IsStruct(existingTagDefinition->taggedType)) ||
+                (!isStructType && Language::IsUnion(existingTagDefinition->taggedType)));
 
-            structType = Language::AsStruct(existingTagDefinition->taggedType);
+            structOrUnionType = existingTagDefinition->taggedType;
         }
         else if (existingParentTagDefinition != nullptr &&
                  !Language::IsIncomplete(existingParentTagDefinition->taggedType))
         {
             bool isNewIncomplete = (child == nullptr);
 
-            if (isNewIncomplete)
-                structType = Language::AsStruct(existingParentTagDefinition->taggedType);
+            if (isNewIncomplete &&
+                (
+                    (isStructType && Language::IsStruct(existingParentTagDefinition->taggedType)) ||
+                    (!isStructType && Language::IsUnion(existingParentTagDefinition->taggedType))
+                ))
+            {
+                structOrUnionType = existingParentTagDefinition->taggedType;
+            }
             else
-                structType = Language::MakeStruct(context->typeContext);
+            {
+                structOrUnionType = isStructType
+                                    ? &Language::MakeStruct(context->typeContext)->type
+                                    : &Language::MakeUnion(context->typeContext)->type;
+            }
 
             needCreateTagDefinition = true;
         }
         else
         {
-            structType = Language::MakeStruct(context->typeContext);
+            structOrUnionType = isStructType
+                                ? &Language::MakeStruct(context->typeContext)->type
+                                : &Language::MakeUnion(context->typeContext)->type;
             needCreateTagDefinition = true;
         }
 
@@ -1064,7 +1081,7 @@ void CompileAst(AstCompileContext * context, Ast * ast)
         {
             (void)NewTypeTagDefinition(CurrentDefinitionContext(context),
                                        tag,
-                                       &structType->type);
+                                       structOrUnionType);
         }
 
         // struct declarations
@@ -1108,15 +1125,21 @@ void CompileAst(AstCompileContext * context, Ast * ast)
                                                                typeSpecifier,
                                                                typeQualifier,
                                                                declarator);
-                        Language::StructAddMember(structType, mname, mtype);
+                        isStructType
+                            ? Language::StructAddMember(Language::AsStruct(structOrUnionType), mname, mtype)
+                            : Language::UnionAddMember(Language::AsUnion(structOrUnionType), mname, mtype);
                     } while (subChild);
                 }
                 child = child->rightSibling;
             } while (child);
-            Language::StructDone(structType);
+            isStructType
+                ? Language::StructDone(AsStruct(structOrUnionType))
+                : Language::UnionDone(AsUnion(structOrUnionType));
         }
 
-        AddTypeSpecifier(context, Token::KW_STRUCT, &structType->type);
+        AddTypeSpecifier(context,
+                         isStructType ? Token::KW_STRUCT : Token::KW_UNION,
+                         structOrUnionType);
     }
     else if (ast->type == UNION_SPECIFIER)
     {

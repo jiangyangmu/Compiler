@@ -150,7 +150,6 @@ struct UnionType
 
     StringRef   memberName[10];
     Type *      memberType[10];
-    size_t      memberOffset[10];
 };
 
 VoidType *      AsVoid(Type * type);
@@ -198,6 +197,7 @@ void            StructDone(StructType * type);
 
 UnionType *     MakeUnion(TypeContext * context);    // member id/type
 void            UnionAddMember(UnionType * type, StringRef mname, Type * mtype);
+void            UnionDone(UnionType * type);
 
 Type *          CloneType(TypeContext * context, Type * type);
 
@@ -243,6 +243,8 @@ bool            IsAddressable(Type * type);
 bool            IsVoid(Type * type);
 bool            IsBool(Type * type);
 bool            IsInt(Type * type);
+bool            IsStruct(Type * type);
+bool            IsUnion(Type * type);
 bool            IsStructOrUnion(Type * type);
 bool            IsArray(Type * type);
 bool            IsPointer(Type * type);
