@@ -1,6 +1,6 @@
 int putchar(int ch);
 int puts(const char * fmt);
-int printf(const char * fmt);
+int printf(const char * fmt, ...);
 int PrintInt(int i)
 {
     int d;
@@ -57,6 +57,21 @@ int PrintHex(int * p)
     return 0;
 }
 
+int PrintFloat(float f)
+{
+    int i;
+    if (f < 0.0)
+    {
+        putchar('-');
+        f = -f;
+    }
+    i = (int)f;
+    PrintInt(i);
+    putchar('.');
+    putchar('0');
+    return 0;
+}
+
 int show(const char * msg)
 {
     puts(msg);
@@ -89,6 +104,21 @@ int expectp(const char * name, int * act, int * exp)
         PrintHex(act);
         printf(", expect ");
         PrintHex(exp);
+        printf("\n\n");
+    }
+
+    return 0;
+}
+int expectf(const char * name, float act, float exp)
+{
+    if (act != exp)
+    {
+        printf("\n FAIL: ");
+        printf(name);
+        printf(" is ");
+        PrintFloat(act);
+        printf(", expect ");
+        PrintFloat(exp);
         printf("\n\n");
     }
 
@@ -177,7 +207,65 @@ int int_operations()
 
 /* enum */
 
-/* float: property, operation */
+/* float */
+int float_operations()
+{
+    float x;
+    float y;
+
+    /* write, read */
+    x = 1.0;
+    y = 2.0;
+    expectf("x", x, 1.0);
+    expectf("y", y, 2.0);
+    x = 3.0;
+    y = 4.0;
+    expectf("x", x, 3.0);
+    expectf("y", y, 4.0);
+
+    /* arith */
+    x = 1.0;
+    expectf("-x", -x, -1.0);
+    expectf("++x", ++x, 2.0);
+    expectf("x", x, 2.0);
+    expectf("--x", --x, 1.0);
+    expectf("x", x, 1.0);
+    x = 9.0;
+    y = 3.0;
+    expectf("x + y", x + y, 12.0);
+    expectf("x - y", x - y, 6.0);
+    expectf("x * y", x * y, 27.0);
+    expectf("x / y", x / y, 3.0);
+    expectf("x * y + x / y - x", x * y + x / y - x, 21.0);
+
+    /* compare */
+    x = 2.0;
+    y = 2.0;
+    expect("x == y", x == y, 1);
+    expect("x != y", x != y, 0);
+    expect("x < y", x < y, 0);
+    expect("x <= y", x <= y, 1);
+    expect("x > y", x > y, 0);
+    expect("x >= y", x >= y, 1);
+    x = 1.0;
+    y = 3.0;
+    expect("x == y", x == y, 0);
+    expect("x != y", x != y, 1);
+    expect("x < y", x < y, 1);
+    expect("x <= y", x <= y, 1);
+    expect("x > y", x > y, 0);
+    expect("x >= y", x >= y, 0);
+    x = 3.0;
+    y = 1.0;
+    expect("x == y", x == y, 0);
+    expect("x != y", x != y, 1);
+    expect("x < y", x < y, 0);
+    expect("x <= y", x <= y, 0);
+    expect("x > y", x > y, 1);
+    expect("x >= y", x >= y, 1);
+
+    return 0;
+}
 
 /* array */
 int array_operations()
@@ -218,12 +306,27 @@ int pointer_operations()
 {
     int i;
     int *p;
+    int **pp;
 
     /* write, read */
     p = &i;
+    pp = &p;
     expectp("p", p, &i);
+    expectp("*pp", *pp, p);
 
     /* target write, read */
+    i = 1;
+    expect("i", i, 1);
+    expect("*p", *p, 1);
+    expect("**pp", **pp, 1);
+    *p = 2;
+    expect("i", i, 2);
+    expect("*p", *p, 2);
+    expect("**pp", **pp, 2);
+    **pp = 3;
+    expect("i", i, 3);
+    expect("*p", *p, 3);
+    expect("**pp", **pp, 3);
 
     return 0;
 }
@@ -253,6 +356,7 @@ int function_operations()
 int main()
 {
     int_operations();
+    float_operations();
     array_operations();
     pointer_operations();
     function_operations();

@@ -465,19 +465,6 @@ struct Code
             RegisterTypeToString(src, srcWidth) + "\n";
     }
 
-    static std::string MOVSS0(RegisterType xmm, RegisterType rax, size_t width)
-    {
-        // 1. movss xmm, rax (argument value)
-
-        ASSERT(XMM0 <= xmm && xmm <= XMM3);
-        ASSERT(rax == RAX);
-        ASSERT(width == 4 || width == 8);
-
-        return (width == 4 ? "movss " : "movsd ") +
-            RegisterTypeToString(xmm, width) + ", " +
-            RegisterTypeToString(rax, width) + "\n";
-    }
-
     static std::string MOVSS1_RCX(RegisterType xmm, Location loc, size_t width)
     {
         // 1. movss xmm, [rcx]/loc (expr value)
@@ -903,11 +890,18 @@ void TranslateConstantContext(x64Program * program,
     }
 
     // float constant   -> <label> DD 0<hex>r ; <value>
+    program->constSegment += "ALIGN 16\n";
     for (auto kv : context->hashToFloatConstant)
     {
         const StringRef & label = kv.second.label;
         const float &     value = kv.second.value;
-        program->constSegment += label.toString() + " DD 0" + FloatToHexString(value) + "r ; " + std::to_string(value) + "\n";
+        program->constSegment +=
+            label.toString() + " DD " +
+            "0" + FloatToHexString(value) + "r," +
+            "0" + FloatToHexString(value) + "r," +
+            "0" + FloatToHexString(value) + "r," +
+            "0" + FloatToHexString(value) + "r" +
+            " ; " + std::to_string(value) + "\n";
     }
 }
 
@@ -1016,7 +1010,7 @@ std::string TranslateCallExpression(x64StackLayout * stackLayout,
         // mov ..., rax
         s +=
             Code::LEA(RAX, outLoc) +
-            Code::MOV2(callerProtocol.GetParameterLocation(argumentIndex), RAX, width);
+            Code::MOV2(callerProtocol.GetParameterLocation(argumentIndex, nullptr), RAX, width);
 
         argumentIndex += 1;
     }
@@ -1033,7 +1027,7 @@ std::string TranslateCallExpression(x64StackLayout * stackLayout,
 
         s += LoadSpillAndGetLocation(stackLayout, expression, childIndex, &paramLoc);
 
-        if (callerProtocol.IsParameterPassedByAddress(argumentIndex))
+        if (callerProtocol.IsParameterPassedByAddress(argumentIndex, paramType))
         {
             size_t width = 8;
 
@@ -1041,24 +1035,48 @@ std::string TranslateCallExpression(x64StackLayout * stackLayout,
             // mov ..., rax
             s +=
                 Code::LEA_RCX(RAX, paramLoc) +
-                Code::MOV2(callerProtocol.GetParameterLocation(argumentIndex), RAX, width);
+                Code::MOV2(callerProtocol.GetParameterLocation(argumentIndex, paramType), RAX, width);
         }
-        else if (callerProtocol.IsParameterPassedByXMM(argumentIndex))
+        else if (callerProtocol.IsParameterPassedByXMM(argumentIndex, paramType))
         {
             size_t width = paramSize;
 
-            // mov rax, paramLoc
-            // movss xmm, rax
-            s +=
-                Code::MOV1_RCX(RAX, paramLoc, width) +
-                Code::MOVSS0(callerProtocol.GetParameterLocation(argumentIndex).registerType, RAX, width);
+            // movss xmm, paramLoc
+            if (IsMemoryLocation(paramLoc))
+            {
+                s += Code::MOVSS1_RCX(callerProtocol.GetParameterLocation(argumentIndex, paramType).registerType,
+                                      paramLoc,
+                                      width);
+            }
+            else
+            {
+                Location tmpLoc = GetSpillLocation(stackLayout, 0);
+                s +=
+                    "mov " + RegisterTypeToString(RAX, width) + ", " + X64LocationString(paramLoc, width) + "\n" +
+                    "mov " + X64LocationString(tmpLoc, width) + ", " + RegisterTypeToString(RAX, width) + "\n" +
+                    Code::MOVSS1_RCX(callerProtocol.GetParameterLocation(argumentIndex, paramType).registerType, tmpLoc, width);
+            }
+
+            if (argumentIndex < 4 && callerProtocol.IsVarArgument(argumentIndex))
+            {
+                ASSERT(width == 8);
+                s += "mov ";
+                switch (argumentIndex)
+                {
+                    case 0: s += "rcx"; break;
+                    case 1: s += "rdx"; break;
+                    case 2: s += "r8"; break;
+                    case 3: s += "r9"; break;
+                }
+                s += ", " + X64LocationString(paramLoc, width) + "\n";
+            }
         }
         else
         {
             size_t width = paramSize;
             // HACK: r8, r9 bug
 
-            Location paramSaveLoc = callerProtocol.GetParameterLocation(argumentIndex);
+            Location paramSaveLoc = callerProtocol.GetParameterLocation(argumentIndex, paramType);
 
             // mov rax, paramLoc
             // mov ..., rax
@@ -1793,9 +1811,10 @@ std::string TranslateExpression(FunctionContext * context,
         // movss xmm0, inLoc
         // xorps xmm0, DWORD PTR __xmm@80000000
         // movss outLoc, xmm0
+        int flt = 0x80000000;
         s +=
             Code::MOVSS1_RCX(XMM0, inLoc, width) +
-            "xorps " + XMM(0) + ", " + X64LocationString(LocateFloat(context->constantContext, 0x80000000), width) + "\n" +
+            "xorps " + XMM(0) + ", " + X64LocationString(LocateFloat(context->constantContext, *(reinterpret_cast<float *>(&flt))), width) + "\n" +
             Code::MOVSS2(outLoc, XMM0, width);
     }
     else if (expression->type == EXPR_FADD ||
@@ -1872,11 +1891,11 @@ std::string TranslateExpression(FunctionContext * context,
         switch (expression->type)
         {
             case EXPR_FEQ: op = "cmpeqss "; break;
-            case EXPR_FNE: op = "cmpness "; break;
+            case EXPR_FNE: op = "cmpneqss "; break;
             case EXPR_FLT: op = "cmpltss "; break;
             case EXPR_FLE: op = "cmpless "; break;
-            case EXPR_FGE: op = "cmpgess "; break;
-            case EXPR_FGT: op = "cmpgtss "; break;
+            case EXPR_FGE: op = "cmpnltss "; break;
+            case EXPR_FGT: op = "cmpnless "; break;
             default: ASSERT(false); break;
         }
 
@@ -2642,9 +2661,18 @@ void TranslateFunctionContext(x64Program * program,
                 Location argumentSaveLoc;
                 argumentSaveLoc.type = BP_OFFSET;
                 argumentSaveLoc.offsetValue = 16 + 8 * callstackIndex;
-                // HACK: r8, r9 bug
-                //size_t width = TypeSize(context->functionType->memberType[argumentIndex]);
-                text += "mov " + X64LocationString(argumentSaveLoc, 8) + ", " + X64LocationString(argumentLoc, 8) + " ; copy register argument\n";
+                
+                if (calleeProtocol.IsParameterPassedByXMM(callstackIndex))
+                {
+                    size_t width = TypeSize(context->functionType->memberType[argumentIndex]);
+                    ASSERT(width == 4 || width == 8);
+                    text += (width == 4 ? "movss " : "movsd ") + X64LocationString(argumentSaveLoc, width) + ", " + X64LocationString(argumentLoc, width) + " ; copy register argument\n";
+                }
+                else
+                {
+                    // HACK: r8, r9 bug
+                    text += "mov " + X64LocationString(argumentSaveLoc, 8) + ", " + X64LocationString(argumentLoc, 8) + " ; copy register argument\n";
+                }
             }
         }
     }
@@ -2669,6 +2697,9 @@ x64Program Translate(DefinitionContext * definitionContext,
     TranslateDefinitionContext(&program, definitionContext);
 
     // Extract data info: constant -> data segment
+    int flt = 0x80000000;
+    LocateFloat(constantContext, 0.0f);
+    LocateFloat(constantContext, *(reinterpret_cast<float *>(&flt)));
     TranslateConstantContext(&program, constantContext);
 
     // function -> proc

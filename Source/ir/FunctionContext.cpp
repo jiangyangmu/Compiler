@@ -560,10 +560,25 @@ Node * CallExpression(FunctionContext * context,
     Type ** paramTypeIter = functionType->memberType;
     for (Node * argument : arguments)
     {
-        AddChild(node,
-                 WrapCastNode(
-                     WrapCastNode(argument, DecayType(context->typeContext, argument->expr.type)),
-                     *(paramTypeIter++)));
+        if (*paramTypeIter)
+        {
+            AddChild(node,
+                     WrapCastNode(
+                         WrapCastNode(argument, DecayType(context->typeContext, argument->expr.type)),
+                         *paramTypeIter));
+        }
+        else
+        {
+            ASSERT(functionType->isVarList);
+            Type * decayedType = DecayType(context->typeContext, argument->expr.type);
+            Type * promoType = DefaultArgumentPromotion(context->typeContext, decayedType);
+            AddChild(node,
+                     WrapCastNode(
+                         WrapCastNode(argument, decayedType),
+                         promoType));
+        }
+
+        ++paramTypeIter;
     }
 
     ASSERT(CheckCallExpression(node));

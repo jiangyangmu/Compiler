@@ -411,8 +411,14 @@ Token::Type OperatorPunctuatorType(StringRef text) {
 
 static inline double EvalFloat(StringRef text) {
     // TODO implement EvalFloat()
-    assert(text == "1.0");
-    return 1.0;
+    int i = 0;
+    for (char c : text)
+    {
+        if (!isdigit(c))
+            break;
+        i = i * 10 + (c - '0');
+    }
+    return (double)i;
 }
 
 static inline int EvalInt(StringRef text) {

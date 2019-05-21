@@ -51,3 +51,13 @@ inline bool IsValidLocation(const Location & loc)
 {
     return loc.type > NO_WHERE && loc.type <= REGISTER_INDIRECT;
 }
+
+inline bool IsMemoryLocation(const Location & loc)
+{
+    return loc.type == ESP_OFFSET || loc.type == BP_OFFSET || loc.type == REGISTER_INDIRECT;
+}
+
+inline bool IsXMMLocation(const Location & loc)
+{
+    return loc.type == REGISTER && (XMM0 <= loc.type && loc.type <= XMM3);
+}

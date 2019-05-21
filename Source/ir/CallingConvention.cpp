@@ -32,6 +32,8 @@ ParameterPassingCallerProtocol::ParameterPassingCallerProtocol(FunctionType * fu
     size_t rspOffset = 0;
     size_t nextIndex = 0;
 
+    isVarList = functionType->isVarList;
+
     Type * returnType = functionType->target;
     if (IsLargeOrIrregularType(returnType))
     {
@@ -65,16 +67,12 @@ ParameterPassingCallerProtocol::ParameterPassingCallerProtocol(FunctionType * fu
             loc.type = REGISTER;
             loc.offsetValue = (RegisterType)(XMM0 + nextIndex);
 
-            nextIndex += 1;
-
             parameterPassedByAddress.push_back(false);
         }
         else if (!IsLargeOrIrregularType(parameterType) && nextIndex < 4)
         {
             loc.type = REGISTER;
             loc.offsetValue = (RegisterType)(RCX + nextIndex);
-
-            nextIndex += 1;
 
             parameterPassedByAddress.push_back(false);
         }
@@ -83,33 +81,85 @@ ParameterPassingCallerProtocol::ParameterPassingCallerProtocol(FunctionType * fu
             loc.type = ESP_OFFSET;
             loc.offsetValue = rspOffset;
 
-            rspOffset += 8;
-            nextIndex += 1;
-
             parameterPassedByAddress.push_back(true);
         }
+
+        rspOffset += 8;
+        nextIndex += 1;
 
         parameterLocations.push_back(loc);
     }
 }
 
-Location ParameterPassingCallerProtocol::GetParameterLocation(size_t index)
+Location GetDefaultParameterLocation(size_t index, Type * argumentType)
 {
-    ASSERT(index < parameterLocations.size());
-    return parameterLocations[index];
+    Location loc;
+
+    if (IsFloating(argumentType) && index < 4)
+    {
+        loc.type = REGISTER;
+        loc.offsetValue = (RegisterType)(XMM0 + index);
+    }
+    else if (!IsLargeOrIrregularType(argumentType) && index < 4)
+    {
+        loc.type = REGISTER;
+        loc.offsetValue = (RegisterType)(RCX + index);
+    }
+    else
+    {
+        loc.type = ESP_OFFSET;
+        loc.offsetValue = index * 8;
+    }
+
+    return loc;
 }
 
-bool ParameterPassingCallerProtocol::IsParameterPassedByAddress(size_t index)
+Location ParameterPassingCallerProtocol::GetParameterLocation(size_t index, Type * argumentType)
 {
-    ASSERT(index < parameterLocations.size());
-    return parameterPassedByAddress[index];
+    if (index < parameterLocations.size())
+    {
+        return parameterLocations[index];
+    }
+    else
+    {
+        ASSERT(isVarList && argumentType);
+        return GetDefaultParameterLocation(index, argumentType);
+    }
 }
 
-bool ParameterPassingCallerProtocol::IsParameterPassedByXMM(size_t index)
+bool ParameterPassingCallerProtocol::IsParameterPassedByAddress(size_t index, Type * argumentType)
 {
-    ASSERT(index < parameterLocations.size());
-    return parameterLocations[index].type == REGISTER &&
-           (XMM0 <= parameterLocations[index].registerType && parameterLocations[index].registerType <= XMM3);
+    if (index < parameterLocations.size())
+    {
+        return parameterPassedByAddress[index];
+    }
+    else
+    {
+        ASSERT(isVarList && argumentType);
+        return GetDefaultParameterLocation(index, argumentType).type == ESP_OFFSET;
+    }
+}
+
+bool ParameterPassingCallerProtocol::IsParameterPassedByXMM(size_t index, Type * argumentType)
+{
+    Location loc;
+
+    if (index < parameterLocations.size())
+    {
+        loc = parameterLocations[index];
+    }
+    else
+    {
+        ASSERT(isVarList && argumentType);
+        loc = GetDefaultParameterLocation(index, argumentType);
+    }
+
+    return loc.type == REGISTER && (XMM0 <= loc.registerType && loc.registerType <= XMM3);
+}
+
+bool ParameterPassingCallerProtocol::IsVarArgument(size_t index)
+{
+    return isVarList && index >= parameterLocations.size();
 }
 
 bool ParameterPassingCallerProtocol::IsReturnValueAddressAsFirstParameter()
@@ -159,16 +209,12 @@ ParameterPassingCalleeProtocol::ParameterPassingCalleeProtocol(FunctionType * fu
             loc.type = REGISTER;
             loc.offsetValue = (RegisterType)(XMM0 + nextIndex);
 
-            nextIndex += 1;
-
             parameterPassedByAddress.push_back(false);
         }
         else if (!IsLargeOrIrregularType(parameterType) && nextIndex < 4)
         {
             loc.type = REGISTER;
             loc.offsetValue = (RegisterType)(RCX + nextIndex);
-
-            nextIndex += 1;
 
             parameterPassedByAddress.push_back(false);
         }
@@ -177,11 +223,11 @@ ParameterPassingCalleeProtocol::ParameterPassingCalleeProtocol(FunctionType * fu
             loc.type = BP_OFFSET;
             loc.offsetValue = rbpOffset;
 
-            rbpOffset += 8;
-            nextIndex += 1;
-
             parameterPassedByAddress.push_back(true);
         }
+
+        rbpOffset += 8;
+        nextIndex += 1;
 
         parameterLocations.push_back(loc);
     }

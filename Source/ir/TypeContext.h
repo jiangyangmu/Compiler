@@ -26,6 +26,33 @@ enum TypeName
     UNION,
 };
 
+// life of 'const'
+//   occurance of 'const'
+//   in physical sense
+//     1. on whole/part object (int, struct)
+//     2. on object in different sources (point to, func return, func arg, static, local)
+//   in syntax sense
+//     1. pointer
+//     2. struct/union member
+//     3. type name
+//     4. function return object, function parameters
+//     5. declaration
+//   effect of 'const'
+//     ban write at compile time
+// life of 'addressable'
+//   static object & function is addressable
+//   extern object & function is addressable
+//   param object is addressable
+//   return object is NOT addressable
+//   local object is addressable
+//   tmp object created by compiler is NOT addressable
+// life of 'assignable'
+//   array and function is NOT assignable
+//   static/extern/param/local object is assignable
+//   return/tmp object is NOT assignable
+// life of 'incomplete'
+//   only struct/union can be incomplete
+//   all type functions need aware of incompleteness, like size, equal, align, convert
 enum TypeProperty
 {
     TP_INCOMPLETE       = 1,

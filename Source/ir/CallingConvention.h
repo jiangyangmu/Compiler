@@ -8,13 +8,15 @@ namespace Language {
 class ParameterPassingCallerProtocol
 {
 public:
-    ParameterPassingCallerProtocol(FunctionType * functionType);
+    explicit ParameterPassingCallerProtocol(FunctionType * functionType);
 
-    Location GetParameterLocation(size_t index);
+    Location GetParameterLocation(size_t index, Type * argumentType);
 
-    bool IsParameterPassedByAddress(size_t index);
+    bool IsParameterPassedByAddress(size_t index, Type * argumentType);
 
-    bool IsParameterPassedByXMM(size_t index);
+    bool IsParameterPassedByXMM(size_t index, Type * argumentType);
+
+    bool IsVarArgument(size_t index);
 
     bool IsReturnValueAddressAsFirstParameter();
 
@@ -22,12 +24,13 @@ private:
     std::vector<Location> parameterLocations;
     std::vector<bool> parameterPassedByAddress;
     bool rvaAsFirstParameter;
+    bool isVarList;
 };
 
 class ParameterPassingCalleeProtocol
 {
 public:
-    ParameterPassingCalleeProtocol(FunctionType * functionType);
+    explicit ParameterPassingCalleeProtocol(FunctionType * functionType);
 
     Location GetParameterLocation(size_t index);
 

@@ -566,7 +566,7 @@ Type * DefaultArgumentPromotion(TypeContext * context, Type * type)
     }
     else if (IsFloating(type))
     {
-        return &MakeFloat(context, type->size)->type;
+        return &MakeFloat(context, 8)->type;
     }
     else
     {
