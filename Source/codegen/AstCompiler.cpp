@@ -479,9 +479,8 @@ void CompileAst(AstCompileContext * context, Ast * ast)
                                     functionName,
                                     functionType,
                                     storageToken == Token::KW_STATIC
-                                        ? Language::FunctionStorageType::GLOBAL_FUNCTION
-                                        : Language::FunctionStorageType::GLOBAL_EXPORT_FUNCTION,
-                                    true);
+                                        ? Language::FunctionStorageType::PRIVATE_FUNCTION
+                                        : Language::FunctionStorageType::PUBLIC_FUNCTION);
 
         EnterDefinitionContext(context, functionDefinitionContext);
         BeginScope(context, IN_COMPOUND_STATEMENT);
@@ -548,9 +547,8 @@ void CompileAst(AstCompileContext * context, Ast * ast)
                                         id,
                                         type,
                                         storageToken == Token::KW_STATIC
-                                            ? Language::FunctionStorageType::GLOBAL_FUNCTION
-                                            : Language::FunctionStorageType::IMPORT_FUNCTION,
-                                        false);
+                                            ? Language::FunctionStorageType::FORCE_PRIVATE_FUNCTION
+                                            : Language::FunctionStorageType::IMPORT_FUNCTION);
         }
         else
         {
@@ -688,12 +686,13 @@ void CompileAst(AstCompileContext * context, Ast * ast)
 
         // abstract declarator
         Language::Type * innerType = nullptr;
-        if (child->type == ABSTRACT_DECLARATOR)
+        if (child && child->type == ABSTRACT_DECLARATOR)
         {
             CompileAst(context, child);
+            child = child->rightSibling;
+
             innerType = PopType(context);
         }
-        child = child->rightSibling;
 
         // array:constant expression / function:parameter list
         // constrain: 1+ array or 1 function
@@ -1597,21 +1596,29 @@ void CompileAst(AstCompileContext * context, Ast * ast)
     {
         CompileAst(context, child);
 
-        Language::Node * postfix = PopNode(context);
-
         Language::Node * unary = nullptr;
-        switch (ast->token.type)
+
+        if (ast->token.type == Token::KW_SIZEOF)
         {
-            case Token::OP_INC:     unary = Language::IncExpression(context->currentFunctionContext, postfix); break;
-            case Token::OP_DEC:     unary = Language::DecExpression(context->currentFunctionContext, postfix); break;
-            case Token::BIT_AND:    unary = Language::GetAddressExpression(context->currentFunctionContext, postfix); break;
-            case Token::OP_MUL:     unary = Language::IndirectExpression(context->currentFunctionContext, postfix); break;
-            case Token::OP_ADD:     unary = Language::PositiveExpression(context->currentFunctionContext, postfix); break;
-            case Token::OP_SUB:     unary = Language::NegativeExpression(context->currentFunctionContext, postfix); break;
-            case Token::BIT_NOT:    unary = Language::BitNotExpression(context->currentFunctionContext, postfix); break;
-            case Token::BOOL_NOT:   unary = Language::BoolNotExpression(context->currentFunctionContext, postfix); break;
-            case Token::KW_SIZEOF:  unary = Language::SizeOfExpression(context->currentFunctionContext, postfix); break;
-            default:                ASSERT(false); break;
+            unary = (child->type == TYPE_NAME)
+                    ? Language::SizeOfExpression(context->currentFunctionContext, PopType(context))
+                    : Language::SizeOfExpression(context->currentFunctionContext, PopNode(context));
+        }
+        else
+        {
+            Language::Node * postfix = PopNode(context);
+            switch (ast->token.type)
+            {
+                case Token::OP_INC:     unary = Language::IncExpression(context->currentFunctionContext, postfix); break;
+                case Token::OP_DEC:     unary = Language::DecExpression(context->currentFunctionContext, postfix); break;
+                case Token::BIT_AND:    unary = Language::GetAddressExpression(context->currentFunctionContext, postfix); break;
+                case Token::OP_MUL:     unary = Language::IndirectExpression(context->currentFunctionContext, postfix); break;
+                case Token::OP_ADD:     unary = Language::PositiveExpression(context->currentFunctionContext, postfix); break;
+                case Token::OP_SUB:     unary = Language::NegativeExpression(context->currentFunctionContext, postfix); break;
+                case Token::BIT_NOT:    unary = Language::BitNotExpression(context->currentFunctionContext, postfix); break;
+                case Token::BOOL_NOT:   unary = Language::BoolNotExpression(context->currentFunctionContext, postfix); break;
+                default:                ASSERT(false); break;
+            }
         }
         
         PushNode(context, unary);

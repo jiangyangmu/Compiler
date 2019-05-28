@@ -48,7 +48,8 @@ void DeleteDefinition(Definition * definition)
     switch (definition->type)
     {
         case OBJECT_DEFINITION:         delete reinterpret_cast<ObjectDefinition *>(definition); break;
-        case FUNCTION_DEFINITION:       ASSERT(!AsFunctionDefinition(definition)->hasFuncBody);
+        case FUNCTION_DEFINITION:       ASSERT(AsFunctionDefinition(definition)->funcStorageType != PUBLIC_FUNCTION &&
+                                               AsFunctionDefinition(definition)->funcStorageType != PRIVATE_FUNCTION);
                                         delete reinterpret_cast<FunctionDefinition *>(definition); break;
         case ENUM_CONST_DEFINITION:     delete reinterpret_cast<EnumConstDefinition *>(definition); break;
         case TYPE_ALIAS_DEFINITION:     delete reinterpret_cast<TypeAliasDefinition *>(definition); break;
@@ -100,51 +101,52 @@ Definition * MergeDefinition(Definition * a, Definition * b)
 
         if (TypeEqual(fa->funcType, fb->funcType))
         {
-            int i = 0;
-            
-            // {extern, extern} = 1, {static, extern} = 2, {static, static} = 3
-            if (fa->funcStorageType == FunctionStorageType::IMPORT_FUNCTION &&
-                fb->funcStorageType == FunctionStorageType::IMPORT_FUNCTION)
-                i = 1;
-            else if (fa->funcStorageType == FunctionStorageType::GLOBAL_FUNCTION)
-            {
-                if (fb->funcStorageType == FunctionStorageType::IMPORT_FUNCTION)
-                    i = 2;
-                else
-                    i = 3;
-            }
+            FunctionStorageType storageType;
 
-            // {nobody, nobody} = ?*3-2, {body, nobody} = ?*3-1, {nobody, body} = ?*3
-            if (!fa->hasFuncBody && !fb->hasFuncBody)
-                i = i + i + i - 2;
-            else if (fa->hasFuncBody && !fb->hasFuncBody)
-                i = i + i + i - 1;
-            else if (!fa->hasFuncBody && fb->hasFuncBody)
-                i = i + i + i;
-
-            Definition * result = nullptr;
-            // valid i: [1, 9]
-            switch (i)
+            if (fb->funcStorageType == FunctionStorageType::IMPORT_FUNCTION)
             {
-                case 3:
-                case 6:
-                case 9:
-                    fa->hasFuncBody = true;
-                    fb->hasFuncBody = false;
-                case 1:
-                case 2:
-                case 4:
-                case 5:
-                case 7:
-                case 8:
-                    DeleteDefinition(b);
-                    result = a;
-                    break;
-                default:
-                    break;
+                DeleteDefinition(b);
+                return a;
             }
-            if (result)
-                return result;
+            else if (fa->funcStorageType == FunctionStorageType::IMPORT_FUNCTION)
+            {
+                DeleteDefinition(a);
+                return b;
+            }
+            else if (fa->funcStorageType == FunctionStorageType::FORCE_PRIVATE_FUNCTION)
+            {
+                switch (fb->funcStorageType)
+                {
+                    case FunctionStorageType::PRIVATE_FUNCTION:
+                    case FunctionStorageType::PUBLIC_FUNCTION:
+                        storageType = FunctionStorageType::PRIVATE_FUNCTION;
+                        break;
+                    case FunctionStorageType::IMPORT_FUNCTION:
+                    case FunctionStorageType::FORCE_PRIVATE_FUNCTION:
+                        storageType = FunctionStorageType::FORCE_PRIVATE_FUNCTION;
+                        break;
+                }
+                fa->funcStorageType = storageType;
+                DeleteDefinition(b);
+                return a;
+            }
+            else if (fb->funcStorageType == FunctionStorageType::FORCE_PRIVATE_FUNCTION)
+            {
+                switch (fb->funcStorageType)
+                {
+                    case FunctionStorageType::PRIVATE_FUNCTION:
+                    case FunctionStorageType::PUBLIC_FUNCTION:
+                        storageType = FunctionStorageType::PRIVATE_FUNCTION;
+                        break;
+                    case FunctionStorageType::IMPORT_FUNCTION:
+                    case FunctionStorageType::FORCE_PRIVATE_FUNCTION:
+                        storageType = FunctionStorageType::FORCE_PRIVATE_FUNCTION;
+                        break;
+                }
+                fa->funcStorageType = storageType;
+                DeleteDefinition(b);
+                return a;
+            }
         }
     }
     else if (a->type == DefinitionType::TYPE_TAG_DEFINITION &&
@@ -290,15 +292,13 @@ Definition * NewObjectDefinition(DefinitionContext * context,
 Definition * NewFunctionDefinition(DefinitionContext * context,
                                    StringRef name,
                                    Type * funcType,
-                                   FunctionStorageType funcStorageType,
-                                   bool hasFuncBody)
+                                   FunctionStorageType funcStorageType)
 {
     FunctionDefinition * funcDef = new FunctionDefinition;
     funcDef->def.name = name;
     funcDef->def.type = DefinitionType::FUNCTION_DEFINITION;
     funcDef->funcType = funcType;
     funcDef->funcStorageType = funcStorageType;
-    funcDef->hasFuncBody = hasFuncBody;
 
     return InsertDefinition(context, &funcDef->def);
 }

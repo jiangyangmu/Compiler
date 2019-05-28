@@ -444,7 +444,7 @@ void SetTargetType(TypeContext * context, Type * type, Type * target)
     {
         ArraySetTarget(context, AsArray(type), target);
     }
-    else if (type->name = POINTER)
+    else if (type->name == POINTER)
     {
         PointerSetTarget(context, AsPointer(type), target);
     }
@@ -638,7 +638,7 @@ bool TypeEqual(Type * a, Type * b)
     if (a->name != b->name)
         return false;
 
-    int propSet = TP_INCOMPLETE /*| TP_CONST*/; // TODO: add TP_CONST
+    int propSet = (a->name == FUNCTION ? 0 : TP_INCOMPLETE) /*| TP_CONST*/; // TODO: add TP_CONST
     if ((a->prop & propSet) != (b->prop & propSet))
         return false;
 
@@ -664,13 +664,13 @@ bool TypeEqual(Type * a, Type * b)
             return false;
         if (!TypeEqual(aFunction->target, bFunction->target))
             return false;
-        for (Type * aParam = aFunction->memberType[0], * bParam = bFunction->memberType[0];
-             aParam || bParam;
+        for (Type ** aParam = aFunction->memberType, ** bParam = bFunction->memberType;
+             *aParam || *bParam;
              ++aParam, ++bParam)
         {
-            if (!aParam || !bParam)
+            if (!(*aParam) || !(*bParam))
                 return false;
-            if (!TypeEqual(aParam, bParam))
+            if (!TypeEqual(*aParam, *bParam))
                 return false;
         }
         return true;

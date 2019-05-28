@@ -142,28 +142,27 @@
     <None Include="fibonacci.c">
       <FileType>CppCode</FileType>
     </None>
-    <None Include="linked_list.c">
-      <FileType>CppCode</FileType>
-    </None>
     <None Include="debug.c">
       <FileType>CppCode</FileType>
     </None>
-    <None Include="pointer.c">
-      <FileType>CppCode</FileType>
-    </None>
   </ItemGroup>
   <ItemGroup>
-    <None Include="array.c">
-      <FileType>CppCode</FileType>
-    </None>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="clib.c">
+    <None Include="libc_api.c">
       <FileType>CppCode</FileType>
     </None>
   </ItemGroup>
   <ItemGroup>
     <None Include="type.c">
+      <FileType>CppCode</FileType>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="data_structure.c">
+      <FileType>CppCode</FileType>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="windows_api.c">
       <FileType>CppCode</FileType>
     </None>
   </ItemGroup>

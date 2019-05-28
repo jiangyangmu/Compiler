@@ -1135,8 +1135,18 @@ Ast * ParseUnaryExpr(TokenIterator & ti)
     {
         Ast * unaryExpr                         = NewAst(UNARY_EXPR);
         unaryExpr->token                        = NEXT();
-        unaryExpr->leftChild                    = ParseUnaryExpr(ti);
-        // TODO: '(' type-name ')'
+
+        if (PEEK_T(Token::LP) && (First(TYPE_SPECIFIER, PEEK2()) || First(TYPE_QUALIFIER, PEEK2())))
+        {
+            EXPECT_T(Token::LP);
+            unaryExpr->leftChild                = ParseTypename(ti);
+            EXPECT_T(Token::RP);
+        }
+        else
+        {
+            unaryExpr->leftChild                = ParseUnaryExpr(ti);
+        }
+
         return unaryExpr;
     }
     else
@@ -1289,7 +1299,6 @@ void DebugPrintAstImpl(Ast * ast, size_t indent)
                                     "function definition",
                                     "declaration",
                                     "declarator initializer",
-                                    "declaration list",
                                     "declarator",
                                     "direct declarator",
                                     "abstract declarator",

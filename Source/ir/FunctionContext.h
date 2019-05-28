@@ -203,6 +203,7 @@ Node * PositiveExpression(FunctionContext * context, Node * expr);
 Node * NegativeExpression(FunctionContext * context, Node * expr);
 
 Node * SizeOfExpression(FunctionContext * context, Node * expr);
+Node * SizeOfExpression(FunctionContext * context, Type * type);
 
 Node * CastExpression(Node * expr, Type * type);
 

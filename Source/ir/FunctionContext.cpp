@@ -683,6 +683,12 @@ Node * SizeOfExpression(FunctionContext * context, Node * expr)
     return ConstantExpression(context, TypeSize(type));;
 }
 
+Node * SizeOfExpression(FunctionContext * context, Type * type)
+{
+    ASSERT(type);
+    return ConstantExpression(context, TypeSize(type));;
+}
+
 Node * CastExpression(Node * expr, Type * type)
 {
     ASSERT(
@@ -725,12 +731,26 @@ Node * CastExpression(Node * expr, Type * type)
         else if (IsIntegral(fromType))
         {
             if (IsIntegral(toType))
+            {
                 node = MakeNode(EXPR_CVT_SI2SI);
+                node->expr.loc.type = NEED_ALLOC;
+            }
             else if (IsFloating(toType))
+            {
                 node = MakeNode(EXPR_CVT_SI2F);
+                node->expr.loc.type = NEED_ALLOC;
+            }
             else if (IsBool(toType))
+            {
                 node = MakeNode(EXPR_CVT_I2B);
-            node->expr.loc.type = NEED_ALLOC;
+                node->expr.loc.type = NEED_ALLOC;
+            }
+            else if (IsPointer(toType))
+            {
+                ASSERT(TypeSize(fromType) == TypeSize(toType));
+                node = MakeNode(EXPR_CVT_REINTERP);
+                node->expr.loc.type = SAME_AS_FIRST_CHILD;
+            }
         }
         else if (IsFloating(fromType))
         {

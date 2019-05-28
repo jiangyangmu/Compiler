@@ -1,13 +1,19 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <Filter Include="Source Files">
+    <Filter Include="Language">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="API">
       <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
       <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
     </Filter>
-    <Filter Include="Header Files">
-      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
-      <Extensions>h;hh;hpp;hxx;hm;inl;inc;ipp;xsd</Extensions>
+    <Filter Include="Misc">
+      <UniqueIdentifier>{859b6e19-165c-4b77-9c26-e2483e7f9098}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Library">
+      <UniqueIdentifier>{d2cadfe0-9d78-4304-8c9a-004357418486}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -60,48 +66,61 @@
       <Filter>Source Files</Filter>
     </None>
     <None Include="pointer.c">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="*.c">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="*.c">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="*.c">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="pointer.c">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="io.c">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="fibonacci.c">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="linked_list.c">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="pointer.c">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="debug.c">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="array.c">
-      <Filter>Source Files</Filter>
-    </None>
-    <None Include="clib.c">
       <Filter>Source Files</Filter>
     </None>
     <None Include="type.c">
       <Filter>Source Files</Filter>
     </None>
+    <None Include="*.c">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="*.c">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="pointer.c">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="io.c">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="fibonacci.c">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="linked_list.c">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="pointer.c">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="debug.c">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="clib.c">
+      <Filter>Source Files</Filter>
+    </None>
+    <None Include="libc_api.c">
+      <Filter>API</Filter>
+    </None>
+    <None Include="windows_api.c">
+      <Filter>API</Filter>
+    </None>
+    <None Include="debug.c">
+      <Filter>Misc</Filter>
+    </None>
+    <None Include="fibonacci.c">
+      <Filter>Misc</Filter>
+    </None>
+    <None Include="io.c">
+      <Filter>Misc</Filter>
+    </None>
+    <None Include="type.c">
+      <Filter>Language</Filter>
+    </None>
+    <None Include="data_structure.c">
+      <Filter>Library</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
-    <Text Include="IncludedSource.txt">
-      <Filter>Source Files</Filter>
-    </Text>
+    <Text Include="IncludedSource.txt" />
   </ItemGroup>
 </Project>

@@ -818,7 +818,8 @@ void AddObjectDefinition(x64Program * program,
 void AddFunctionDefinition(x64Program * program,
                            FunctionDefinition * functionDefinition)
 {
-    if (functionDefinition->funcStorageType == FunctionStorageType::GLOBAL_EXPORT_FUNCTION)
+    ASSERT(functionDefinition->funcStorageType != FunctionStorageType::FORCE_PRIVATE_FUNCTION);
+    if (functionDefinition->funcStorageType == FunctionStorageType::PUBLIC_FUNCTION)
     {
         AddPublic(program, functionDefinition->def.name);
     }
@@ -1124,7 +1125,7 @@ std::string TranslateCallExpression(x64StackLayout * stackLayout,
             Code::CALL(funcLocation);
     }
 
-    if (IsIntegral(outType))
+    if (IsIntegral(outType) || IsPointer(outType))
     {
         // mov outLoc, rax
         s += Code::MOV2(outLoc, RAX, outSize);
@@ -1672,6 +1673,12 @@ std::string TranslateExpression(FunctionContext * context,
             s += LoadSpillAndGetLocation(stackLayout, expression, 0, &inLoc1);
             s += Code::MOV1_RCX(RAX, inLoc1, width);
             s += LoadSpillAndGetLocation(stackLayout, expression, 1, &inLoc2);
+            if (inLoc2.type == INLINE)
+            {
+                s += "mov " + CX(width) + ", " + X64LocationString(inLoc2, width) + "\n";
+                inLoc2.type = REGISTER;
+                inLoc2.registerType = RCX;
+            }
             s +=
                 op + X64LocationString(inLoc2, width) + "\n" +
                 Code::MOV2(outLoc, resultReg, width);
@@ -1944,7 +1951,7 @@ std::string TranslateExpression(FunctionContext * context,
 
         ASSERT(width == inSize1 && width == inSize2);
 
-        int64_t     shiftStep = (expression->type == EXPR_PADDSI)
+        int64_t     shiftStep = (expression->type == EXPR_PADDSI || expression->type == EXPR_PADDUI)
                                 ? static_cast<int64_t>(TypeSize(AsPointer(outType)->target))
                                 : -static_cast<int64_t>(TypeSize(AsPointer(outType)->target));
 

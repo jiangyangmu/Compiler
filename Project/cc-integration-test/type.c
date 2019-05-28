@@ -126,6 +126,10 @@ int expectf(const char * name, float act, float exp)
 }
 
 /* void */
+int void_operations()
+{
+    return 0;
+}
 
 /* char */
 
@@ -334,7 +338,7 @@ int pointer_operations()
 /* struct/union */
 int struct_operations()
 {
-    struct S { int x; char y; long int z; } s;
+    struct S { int x; char y; long int z; } s, s2;
 
     /* member access */
     s.x = 1;
@@ -343,6 +347,15 @@ int struct_operations()
     expect("s.x", s.x, 1);
     expect("s.y", s.y, 2);
     expect("s.z", s.z, 3);
+
+    /* copy */
+    s2.x = 4;
+    s2.y = 5;
+    s2.z = 6;
+    s = s2;
+    expect("s.x", s.x, 4);
+    expect("s.y", s.y, 5);
+    expect("s.z", s.z, 6);
 
     /* sizeof */
     expect("sizeof(S)", sizeof(s), 16);

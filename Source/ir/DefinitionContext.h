@@ -37,18 +37,21 @@ struct ObjectDefinition
     void *              objValue;
 };
 
+// import | local x body x [export]
 enum FunctionStorageType
 {
-    GLOBAL_FUNCTION,
-    GLOBAL_EXPORT_FUNCTION,
+    // has function body
+    PRIVATE_FUNCTION,
+    PUBLIC_FUNCTION,
+    // no function body
     IMPORT_FUNCTION,
+    FORCE_PRIVATE_FUNCTION, // helper
 };
 struct FunctionDefinition
 {
     Definition          def;
     Type *              funcType;
     FunctionStorageType funcStorageType;
-    bool                hasFuncBody;
 };
 
 struct EnumConstDefinition
@@ -90,8 +93,7 @@ Definition * NewObjectDefinition(DefinitionContext * context,
 Definition * NewFunctionDefinition(DefinitionContext * context,
                                    StringRef name,
                                    Type * funcType,
-                                   FunctionStorageType funcStorageType,
-                                   bool hasFuncBody);
+                                   FunctionStorageType funcStorageType);
 
 Definition * NewEnumConstDefinition(DefinitionContext * context,
                                     StringRef name,

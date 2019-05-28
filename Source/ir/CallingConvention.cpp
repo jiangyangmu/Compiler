@@ -11,7 +11,7 @@ bool IsLargeOrIrregularType(Type * type)
 
 bool IsRAXType(Type * type)
 {
-    return IsIntegral(type) && !IsLargeOrIrregularType(type);
+    return (IsIntegral(type) && !IsLargeOrIrregularType(type)) || IsPointer(type);
 }
 
 bool IsXMMType(Type * type)
