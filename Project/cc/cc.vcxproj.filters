@@ -100,6 +100,7 @@
     <None Include="..\..\Source\MOD.md" />
     <None Include="..\..\Test\PROG.md" />
     <None Include="..\..\Source\IR.md" />
+    <None Include="..\..\Source\DEBUG.md" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="IR">

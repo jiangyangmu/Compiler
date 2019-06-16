@@ -3,25 +3,35 @@
 
 namespace Language {
 
-bool IsLargeOrIrregularType(Type * type)
-{
-    size_t size = TypeSize(type);
-    return size > 8 || CountBits(size) != 1;
+enum __ObjectCategory {
+    __NORMAL, // 1,2,4,8 byte object
+    __LARGE_OR_IRREGULAR, // not 1,2,4,8 byte object
+    __VOID,
+};
+
+__ObjectCategory GetObjectCategory(Type * type) {
+    if (IsVoid(type))
+    {
+        return __VOID;
+    }
+    else
+    {
+        size_t size = TypeSize(type);
+        if (size > 8 || CountBits(size) != 1)
+            return __LARGE_OR_IRREGULAR;
+        else
+            return __NORMAL;
+    }
 }
 
 bool IsRAXType(Type * type)
 {
-    return (IsIntegral(type) && !IsLargeOrIrregularType(type)) || IsPointer(type);
+    return (GetObjectCategory(type) == __NORMAL) && (IsIntegral(type) || IsPointer(type));
 }
 
 bool IsXMMType(Type * type)
 {
-    return IsFloating(type) && !IsLargeOrIrregularType(type);
-}
-
-bool IsStackOnlyType(Type * type)
-{
-    return IsLargeOrIrregularType(type);
+    return (GetObjectCategory(type) == __NORMAL) && IsFloating(type);
 }
 
 ParameterPassingCallerProtocol::ParameterPassingCallerProtocol(FunctionType * functionType)
@@ -35,7 +45,8 @@ ParameterPassingCallerProtocol::ParameterPassingCallerProtocol(FunctionType * fu
     isVarList = functionType->isVarList;
 
     Type * returnType = functionType->target;
-    if (IsLargeOrIrregularType(returnType))
+    
+    if (GetObjectCategory(returnType) == __LARGE_OR_IRREGULAR)
     {
         Location loc;
         loc.type = ESP_OFFSET;
@@ -69,7 +80,7 @@ ParameterPassingCallerProtocol::ParameterPassingCallerProtocol(FunctionType * fu
 
             parameterPassedByAddress.push_back(false);
         }
-        else if (!IsLargeOrIrregularType(parameterType) && nextIndex < 4)
+        else if (GetObjectCategory(parameterType) == __NORMAL && nextIndex < 4)
         {
             loc.type = REGISTER;
             loc.offsetValue = (RegisterType)(RCX + nextIndex);
@@ -100,7 +111,7 @@ Location GetDefaultParameterLocation(size_t index, Type * argumentType)
         loc.type = REGISTER;
         loc.offsetValue = (RegisterType)(XMM0 + index);
     }
-    else if (!IsLargeOrIrregularType(argumentType) && index < 4)
+    else if (GetObjectCategory(argumentType) == __NORMAL && index < 4)
     {
         loc.type = REGISTER;
         loc.offsetValue = (RegisterType)(RCX + index);
@@ -177,7 +188,7 @@ ParameterPassingCalleeProtocol::ParameterPassingCalleeProtocol(FunctionType * fu
     size_t nextIndex = 0;
 
     Type * returnType = functionType->target;
-    if (IsLargeOrIrregularType(returnType))
+    if (GetObjectCategory(returnType) == __LARGE_OR_IRREGULAR)
     {
         Location loc;
         loc.type = BP_OFFSET;
@@ -211,7 +222,7 @@ ParameterPassingCalleeProtocol::ParameterPassingCalleeProtocol(FunctionType * fu
 
             parameterPassedByAddress.push_back(false);
         }
-        else if (!IsLargeOrIrregularType(parameterType) && nextIndex < 4)
+        else if (GetObjectCategory(parameterType) == __NORMAL && nextIndex < 4)
         {
             loc.type = REGISTER;
             loc.offsetValue = (RegisterType)(RCX + nextIndex);
@@ -266,18 +277,24 @@ Location GetReturnValueLocation(Type * type)
 {
     Location loc;
 
-    if (IsLargeOrIrregularType(type))
+    switch (GetObjectCategory(type))
     {
-        loc.type = REGISTER_INDIRECT;
-        loc.registerType = RAX;
-    }
-    else
-    {
-        loc.type = REGISTER;
-        if (IsFloating(type))
-            loc.registerType = XMM0;
-        else
+        case __NORMAL:
+            loc.type = REGISTER;
+            if (IsFloating(type))
+                loc.registerType = XMM0;
+            else
+                loc.registerType = RAX;
+            break;
+        case __LARGE_OR_IRREGULAR:
+            loc.type = REGISTER_INDIRECT;
             loc.registerType = RAX;
+            break;
+        case __VOID:
+            loc.type = LOCATION_VOID;
+            break;
+        default:
+            break;
     }
 
     return loc;

@@ -46,6 +46,11 @@ public:
         SyntaxError("TypeSpecifiersBuilder: unexpected token");        \
     else                                                               \
         type_specifier_has_ |= (value);
+#define __check_set_allow_dup(value)                                   \
+    if ((type_specifier_allow_ & (value)) == 0)                        \
+        SyntaxError("TypeSpecifiersBuilder: unexpected token");        \
+    else                                                               \
+        type_specifier_has_ |= (value);
 
         switch (tokenType)
         {
@@ -66,7 +71,7 @@ public:
                 type_specifier_allow_ &= 0x19c; // int, signed, unsigned, short, long
                 break;
             case Token::KW_LONG:
-                __check_set(0x10);
+                __check_set_allow_dup(0x10);
                 type_specifier_allow_ &= 0x1d8; // long, signed, unsigned, int, double
                 break;
             case Token::KW_FLOAT:
@@ -1016,10 +1021,12 @@ void CompileAst(AstCompileContext * context, Ast * ast)
         //      old-complete x new-complete      => error
         //  tag definition
         //      reuse
-        // 2. parent-complete exists
+        // 2. parent exists
         //  type
-        //      parent-complete x new-incomplete => reuse parent-complete
-        //      parent-complete x new-complete   => create new-complete
+        //      parent-complete x new-incomplete    => reuse parent-complete
+        //      parent-incomplete x new-incomplete  => reuse parent-complete
+        //      parent-complete x new-complete      => create new-complete
+        //      parent-incomplete x new-complete    => create new-complete
         //  tag definition
         //      create
         // 3. otherwise
@@ -1046,8 +1053,7 @@ void CompileAst(AstCompileContext * context, Ast * ast)
 
             structOrUnionType = existingTagDefinition->taggedType;
         }
-        else if (existingParentTagDefinition != nullptr &&
-                 !Language::IsIncomplete(existingParentTagDefinition->taggedType))
+        else if (existingParentTagDefinition != nullptr)
         {
             bool isNewIncomplete = (child == nullptr);
 

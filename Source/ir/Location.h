@@ -26,6 +26,7 @@ enum LocationType
     LABEL,              // rename: LOCATION_LABEL
     INLINE,             // rename: LOCATION_INLINE
     REGISTER_INDIRECT,  // rename: LOCATION_REGISTER_INDIRECT
+    LOCATION_VOID,
 
     // help build
     SAME_AS_FIRST_CHILD,
@@ -59,5 +60,5 @@ inline bool IsMemoryLocation(const Location & loc)
 
 inline bool IsXMMLocation(const Location & loc)
 {
-    return loc.type == REGISTER && (XMM0 <= loc.type && loc.type <= XMM3);
+    return loc.type == REGISTER && (XMM0 <= loc.registerType && loc.registerType <= XMM3);
 }

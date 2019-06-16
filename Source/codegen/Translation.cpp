@@ -311,11 +311,8 @@ x64StackLayout * PrepareStack(FunctionContext * context)
     stackLayout->maxSpillZoneSize += 8; // for tmpLoc
     offset = stackLayout->spillZoneEndOffset = offset + stackLayout->maxSpillZoneSize;
 
-    // gap
-    offset = (offset + 15) / 16 * 16;
-
-    // call zone
-    offset = stackLayout->callZoneEndOffset = offset + stackLayout->maxCallZoneSize;
+    // gap + call zone
+    offset = stackLayout->callZoneEndOffset = (offset + stackLayout->maxCallZoneSize + 15) / 16 * 16;
 
     // stack layout
     stackLayout->stackFrameSize = offset;
@@ -863,8 +860,12 @@ std::string X64StringLiteral(const StringRef & stringValue)
         char c = stringValue[i];
         if (c == '\\')
         {
-            ASSERT(stringValue[i + 1] == 'n');
-            s.push_back('\n');
+            switch (stringValue[i + 1])
+            {
+                case 'n': s.push_back('\n'); break;
+                case '"': s.push_back('"'); break;
+                default: ASSERT(false); break;
+            }
             i += 2;
         }
         else
@@ -1135,6 +1136,10 @@ std::string TranslateCallExpression(x64StackLayout * stackLayout,
         // movss outLoc, xmm0
         s += Code::MOVSS2(outLoc, XMM0, outSize);
     }
+    else if (IsVoid(outType))
+    {
+        // do nothing
+    }
     else
     {
         // TODO: support large return value
@@ -1161,8 +1166,10 @@ std::string TranslateExpression(FunctionContext * context,
         return s;
     }
 
+    ASSERT(!IsVoid(expression->expr.type) || expression->type == EXPR_CALL);
+
     Type *      outType = expression->expr.type;
-    size_t      outSize = TypeSize(outType);
+    size_t      outSize = IsVoid(expression->expr.type) ? 0 : TypeSize(outType);
     Location    outLoc = expression->expr.loc;
 
     Location    tmpLoc = GetSpillLocation(stackLayout, 0);
@@ -2170,11 +2177,24 @@ std::string TranslateExpression(FunctionContext * context,
         {
             size_t      width = inSize;
 
-            // mov rax, inLoc
-            // mov outLoc, rax
-            s +=
-                Code::MOV1_RCX(RAX, inLoc, width) +
-                Code::MOV2(outLoc, RAX, width);
+            if (IsXMMLocation(inLoc))
+            {
+                // movss <tmp>, inLoc
+                // mov eax, <tmp>
+                // mov outLoc, rax
+                s +=
+                    Code::MOVSS2(tmpLoc, inLoc.registerType, width) +
+                    Code::MOV1(RAX, tmpLoc, width) +
+                    Code::MOV2(outLoc, RAX, width);
+            }
+            else
+            {
+                // mov rax, inLoc
+                // mov outLoc, rax
+                s +=
+                    Code::MOV1_RCX(RAX, inLoc, width) +
+                    Code::MOV2(outLoc, RAX, width);
+            }
         }
         else
         {
@@ -2357,11 +2377,24 @@ std::string TranslateExpression(FunctionContext * context,
             {
                 size_t      width = inSize;
 
-                // mov rax, inLoc
-                // mov outLoc, rax
-                s +=
-                    Code::MOV1_RCX(RAX, inLoc, width) +
-                    Code::MOV2(outLoc, RAX, width);
+                if (IsXMMLocation(inLoc))
+                {
+                    // movss <tmp>, inLoc
+                    // mov eax, <tmp>
+                    // mov outLoc, rax
+                    s +=
+                        Code::MOVSS2(tmpLoc, inLoc.registerType, width) +
+                        Code::MOV1(RAX, tmpLoc, width) +
+                        Code::MOV2(outLoc, RAX, width);
+                }
+                else
+                {
+                    // mov rax, inLoc
+                    // mov outLoc, rax
+                    s +=
+                        Code::MOV1_RCX(RAX, inLoc, width) +
+                        Code::MOV2(outLoc, RAX, width);
+                }
             }
             else
             {

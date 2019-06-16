@@ -583,12 +583,17 @@ Node * CallExpression(FunctionContext * context,
 
     ASSERT(CheckCallExpression(node));
 
-    Node * dupNode = MakeNode(EXPR_MDUP);
-    dupNode->expr.type = node->expr.type;
-    dupNode->expr.loc.type = NEED_ALLOC;
-    AddChild(dupNode, node);
+    if (!IsVoid(functionType->target))
+    {
+        Node * dupNode = MakeNode(EXPR_MDUP);
+        dupNode->expr.type = node->expr.type;
+        dupNode->expr.loc.type = NEED_ALLOC;
+        AddChild(dupNode, node);
 
-    return dupNode;
+        node = dupNode;
+    }
+
+    return node;
 }
 
 Node * SubscriptExpression(FunctionContext * context,
@@ -1071,7 +1076,8 @@ Node * CmpExpression(FunctionContext * context, NodeType op, Node * a, Node * b)
 }
 Node * EqExpression(FunctionContext * context, Node * a, Node * b)
 {
-    ASSERT(TypeEqual(a->expr.type, b->expr.type)); // arithmetic or same type pointer
+    ASSERT((IsArithmetic(a->expr.type) && IsArithmetic(b->expr.type)) ||
+           TypeEqual(a->expr.type, b->expr.type)); // arithmetic or same type pointer
 
     NodeType cmpType;
 
@@ -1093,7 +1099,8 @@ Node * EqExpression(FunctionContext * context, Node * a, Node * b)
 }
 Node * NeExpression(FunctionContext * context, Node * a, Node * b)
 {
-    ASSERT(TypeEqual(a->expr.type, b->expr.type)); // arithmetic or same type pointer
+    ASSERT((IsArithmetic(a->expr.type) && IsArithmetic(b->expr.type)) ||
+           TypeEqual(a->expr.type, b->expr.type)); // arithmetic or same type pointer
 
     NodeType cmpType;
 
@@ -1227,7 +1234,8 @@ Node * AssignExpression(FunctionContext * context, Node * a, Node * b)
     // arithmetic/struct/union/pointer
     ASSERT(
         TypeEqual(a->expr.type, b->expr.type) ||
-        (IsIntegral(a->expr.type) && IsIntegral(b->expr.type)));
+        (IsIntegral(a->expr.type) && IsIntegral(b->expr.type)) ||
+        (PrintType(a->expr.type), PrintType(b->expr.type), false));
     ASSERT(IsAssignable(a->expr.type));
 
     Node * node = MakeNode(EXPR_MCOPY);

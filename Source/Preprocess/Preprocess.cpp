@@ -3,7 +3,17 @@
 #include "../Util/Common.h"
 #include "../Util/Charset.h"
 
+#include <fstream>
+
 namespace Preprocess {
+
+std::string GetFileContent(const char * fileName)
+{
+    std::ifstream ifs(fileName, std::ifstream::in);
+    //ifs.seekg(3);
+    return std::string(std::istreambuf_iterator<char>(ifs),
+                       std::istreambuf_iterator<char>());
+}
 
 void CharsetCheck(const ByteArray & input)
 {
@@ -94,8 +104,30 @@ SourceContext Preprocess(const ByteArray & input)
         sourceLine.PushBack(byte);
         if (byte == '\n')
         {
-            sourceContext.lines.emplace_back(std::move(sourceLine));
-            ASSERT(sourceLine.Empty());
+            if (StringRef(sourceLine.RawData(), 8) == "#include")
+            {
+                const char * begin, * end;
+                std::string includedFileContent;
+
+                begin = sourceLine.RawData() + 8;
+                while (*begin != '"') ++begin;
+                end = ++begin;
+                while (*end != '"') ++end;
+
+                includedFileContent = GetFileContent(StringRef(begin, end - begin).toString().c_str());
+                
+                ByteArray includedSourceCode(includedFileContent.data(), includedFileContent.size());
+                SourceContext includedContext = Preprocess(includedSourceCode);
+                sourceContext.lines.insert(sourceContext.lines.end(),
+                                           includedContext.lines.begin(),
+                                           includedContext.lines.end());
+                sourceLine.Clear();
+            }
+            else
+            {
+                sourceContext.lines.emplace_back(std::move(sourceLine));
+                ASSERT(sourceLine.Empty());
+            }
         }
     }
     if (!sourceLine.Empty())

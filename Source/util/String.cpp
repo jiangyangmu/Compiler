@@ -72,6 +72,16 @@ char ByteArray::PopBack()
     return c;
 }
 
+void ByteArray::Clear()
+{
+    if (data_)
+    {
+        delete[] data_;
+        data_ = nullptr;
+        size_ = capacity_ = 0;
+    }
+}
+
 char ByteArray::First() const
 {
     assert(size_ > 0);

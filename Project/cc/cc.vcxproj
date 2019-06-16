@@ -54,6 +54,7 @@
     <ClCompile Include="..\..\Source\util\String.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="..\..\Source\DEBUG.md" />
     <None Include="..\..\Source\IR.md" />
     <None Include="..\..\Source\MOD.md" />
     <None Include="..\..\Source\TODO.md" />

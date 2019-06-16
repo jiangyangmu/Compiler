@@ -233,6 +233,7 @@ public:
     // read, write
     void            PushBack(char c);
     char            PopBack();
+    void            Clear();
     char            First() const;
     char            Last() const;
 

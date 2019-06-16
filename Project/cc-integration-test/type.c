@@ -1,7 +1,7 @@
 int putchar(int ch);
 int puts(const char * fmt);
 int printf(const char * fmt, ...);
-int PrintInt(int i)
+int print_int(int i)
 {
     int d;
     int m;
@@ -31,7 +31,7 @@ int PrintInt(int i)
 
     return 0;
 }
-int PrintHex(int * p)
+int print_hex(int * p)
 {
     long int i;
     long int d;
@@ -56,8 +56,7 @@ int PrintHex(int * p)
 
     return 0;
 }
-
-int PrintFloat(float f)
+int print_flt(float f)
 {
     int i;
     if (f < 0.0)
@@ -66,7 +65,7 @@ int PrintFloat(float f)
         f = -f;
     }
     i = (int)f;
-    PrintInt(i);
+    print_int(i);
     putchar('.');
     putchar('0');
     return 0;
@@ -86,9 +85,9 @@ int expect(const char * name, int act, int exp)
         printf("\n FAIL: ");
         printf(name);
         printf(" is ");
-        PrintInt(act);
+        print_int(act);
         printf(", expect ");
-        PrintInt(exp);
+        print_int(exp);
         printf("\n\n");
     }
 
@@ -101,9 +100,9 @@ int expectp(const char * name, int * act, int * exp)
         printf("\n FAIL: ");
         printf(name);
         printf(" is ");
-        PrintHex(act);
+        print_hex(act);
         printf(", expect ");
-        PrintHex(exp);
+        print_hex(exp);
         printf("\n\n");
     }
 
@@ -116,9 +115,9 @@ int expectf(const char * name, float act, float exp)
         printf("\n FAIL: ");
         printf(name);
         printf(" is ");
-        PrintFloat(act);
+        print_flt(act);
         printf(", expect ");
-        PrintFloat(exp);
+        print_flt(exp);
         printf("\n\n");
     }
 

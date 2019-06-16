@@ -1,93 +1,11 @@
-/* helper function */
-int     putchar(int ch);
-int     printf(const char * fmt, ...);
-int     PrintInt(int i)
-{
-    int d;
-    int m;
-    int ten;
+#include "api.h"
 
-    ten = 10;
-
-    m = 1000000000;
-    d = 0;
-
-    while (m >= 1 && d == 0)
-    {
-        d = i / m;
-        i = i % m;
-        m = m / ten;
-    }
-
-    putchar(d + '0');
-
-    while (m >= 1)
-    {
-        d = i / m;
-        i = i % m;
-        m = m / ten;
-        putchar(d + '0');
-    }
-
-    return 0;
-}
-int     PrintHex(void * p)
-{
-    long int i;
-    long int d;
-    long int s;
-
-    putchar('0');
-    putchar('x');
-
-    i = (long int)p;
-    s = 60;
-    d = 0;
-
-    while (s >= 0)
-    {
-        d = (i >> s) & 15;
-        s = s - 4;
-        if (d < 10)
-            putchar(d + '0');
-        else
-            putchar(d - 10 + 'a');
-    }
-
-    return 0;
-}
 /* error handling */
-int     exit(int status);
-int     MyError(const char * msg)
+void MyError(const char * msg)
 {
-    printf("[ERROR] ");
-    printf(msg);
-    printf("\n");
-    exit(0);
-
-    return 0;
-}
-/* memory allocation */
-void *  malloc(unsigned long int size);
-int     free(void * ptr);
-void *  MyAlloc(unsigned long int size)
-{
-    void * p;
-    p = malloc(size);
-    printf("malloc ");
-    PrintInt(size);
-    printf(" at ");
-    PrintHex(p);
-    printf("\n");
-    return p;
-}
-int     MyFree(void * ptr)
-{
-    printf("free ");
-    PrintHex(ptr);
-    printf("\n");
-    free(ptr);
-    return 0;
+    StdPrintf("[ERROR] %s\n", msg);
+    ProcExit(0);
+    return;
 }
 
 /* singly linked list */
@@ -104,26 +22,23 @@ struct SListNode {
 int Print_SList(struct SList * list)
 {
     struct SListNode * node;
+    struct SListNode * first, * last;
 
-    printf("List size = ");
-    PrintInt(list->size);
-    printf(", elements = [");
+    StdPrintf("SList size = %d, elements = [", list->size);
     for (node = list->first;
          node != (struct SListNode *)(long)0;
          node = node->next)
     {
-        PrintInt(node->value);
-        printf(", ");
+        StdPrintf("%d, ", node->value);
     }
-    printf("]");
+    StdPrintf("]");
     if (list->size > 0)
     {
-        printf(", first = ");
-        PrintHex(list->first);
-        printf(", last = ");
-        PrintHex(list->last);
+        first = list->first;
+        last = list->last;
+        StdPrintf(", first = 0x%016p, last = 0x%016p", first, last);
     }
-    printf("\n");
+    StdPrintf("\n");
 
     return 0;
 }
@@ -131,7 +46,7 @@ int Print_SList(struct SList * list)
 struct SList * Create_SList()
 {
     struct SList * list;
-    list = (struct SList *)MyAlloc(sizeof(struct SList));
+    list = (struct SList *)Alloc(sizeof(struct SList));
     list->first = (struct SListNode *)(long)0;
     list->last = (struct SListNode *)(long)0;
     list->size = 0;
@@ -147,9 +62,9 @@ int Destroy_SList(struct SList * list)
     {
         curr = next;
         next = next->next;
-        MyFree(curr);
+        Free(curr);
     }
-    MyFree(list);
+    Free(list);
 
     return 0;
 }
@@ -164,7 +79,7 @@ int SList_PushFront(struct SList * list, int val)
     struct SListNode * node;
     struct SListNode * p;
 
-    node = (struct SListNode *)MyAlloc(sizeof(struct SListNode));
+    node = (struct SListNode *)Alloc(sizeof(struct SListNode));
     node->value = val;
 
     p = list->first;
@@ -196,7 +111,7 @@ int SList_PopFront(struct SList * list)
         list->last = (struct SListNode *)(long)0;
 
         val = node->value;
-        MyFree(node);
+        Free(node);
 
         list->size = list->size - 1;
 
@@ -210,7 +125,7 @@ int SList_PopFront(struct SList * list)
         list->first = p;
 
         val = node->value;
-        MyFree(node);
+        Free(node);
 
         list->size = list->size - 1;
 
@@ -222,7 +137,7 @@ int SList_PushBack(struct SList * list, int val)
     struct SListNode * node;
     struct SListNode * p;
 
-    node = (struct SListNode *)MyAlloc(sizeof(struct SListNode));
+    node = (struct SListNode *)Alloc(sizeof(struct SListNode));
     node->value = val;
     node->next = (struct SListNode *)(long)0;
 
@@ -259,7 +174,7 @@ int SList_PopBack(struct SList * list)
         list->last = (struct SListNode *)(long)0;
 
         val = node->value;
-        MyFree(node);
+        Free(node);
 
         list->size = list->size - 1;
 
@@ -279,7 +194,7 @@ int SList_PopBack(struct SList * list)
         list->last = p;
 
         val = node->value;
-        MyFree(node);
+        Free(node);
 
         list->size = list->size - 1;
 
@@ -325,7 +240,7 @@ int SList_InsertAfter(struct SList * list, struct SListNode * curr, int val)
 
     next = curr->next;
 
-    node = (struct SListNode *)MyAlloc(sizeof(struct SListNode));
+    node = (struct SListNode *)Alloc(sizeof(struct SListNode));
     node->value = val;
 
     curr->next = node;
@@ -350,7 +265,7 @@ int SList_RemoveAfter(struct SList * list, struct SListNode * curr)
     else
         next = (struct SListNode *)(long)0;
 
-    MyFree(node);
+    Free(node);
 
     curr->next = next;
 
@@ -380,20 +295,17 @@ int Test_SList()
         Print_SList(list);
     }
 
-    printf("Iteration ");
+    StdPrintf("Iteration ");
     for (node = SList_Begin(list);
          node != SList_End(list);
          node = SList_Next(node))
     {
-        PrintInt(node->value);
-        printf(", ");
+        StdPrintf("%d, ", node->value);
     }
-    printf("\n");
+    StdPrintf("\n");
 
     node = SList_Find(list, 5);
-    printf("Find 5 = ");
-    PrintInt(node->value);
-    printf("\n");
+    StdPrintf("Find 5 = %d\n", node->value);
 
     SList_InsertAfter(list, node, 100);
     Print_SList(list);
@@ -403,17 +315,13 @@ int Test_SList()
     for (i = 0; i < 4; ++i)
     {
         val = SList_PopFront(list);
-        printf("PopFront = ");
-        PrintInt(val);
-        printf("\n");
+        StdPrintf("PopFront = %d\n", val);
         Print_SList(list);
     }
     for (i = 4; i < 8; ++i)
     {
         val = SList_PopBack(list);
-        printf("PopBack = ");
-        PrintInt(val);
-        printf("\n");
+        StdPrintf("PopBack = %d\n", val);
         Print_SList(list);
     }
 
@@ -440,17 +348,14 @@ int Print_DList(struct DList * list)
 
     guard = list->guard;
 
-    printf("List size = ");
-    PrintInt(list->size);
-    printf(", elements = [");
+    StdPrintf("DList size = %d, elements = [", list->size);
     for (node = guard->next;
          node != guard;
          node = node->next)
     {
-        PrintInt(node->value);
-        printf(", ");
+        StdPrintf("%d, ", node->value);
     }
-    printf("]\n");
+    StdPrintf("]\n");
 
     return 0;
 }
@@ -460,10 +365,10 @@ struct DList * Create_DList()
     struct DList * list;
     struct DListNode * guard;
 
-    list = (struct DList *)MyAlloc(sizeof(struct DList));
+    list = (struct DList *)Alloc(sizeof(struct DList));
     list->size = 0;
 
-    guard = (struct DListNode *)MyAlloc(sizeof(struct DListNode));
+    guard = (struct DListNode *)Alloc(sizeof(struct DListNode));
     guard->prev = guard;
     guard->next = guard;
     guard->value = 0;
@@ -482,10 +387,10 @@ int Destroy_DList(struct DList * list)
     {
         curr = next;
         next = next->next;
-        MyFree(curr);
+        Free(curr);
     }
-    MyFree(guard);
-    MyFree(list);
+    Free(guard);
+    Free(list);
 
     return 0;
 }
@@ -500,7 +405,7 @@ int DList_PushFront(struct DList * list, int val)
     struct DListNode * node;
     struct DListNode * curr, *next;
 
-    node = (struct DListNode *)MyAlloc(sizeof(struct DListNode));
+    node = (struct DListNode *)Alloc(sizeof(struct DListNode));
     node->value = val;
 
     curr = list->guard;
@@ -536,7 +441,7 @@ int DList_PopFront(struct DList * list)
         next->prev = curr;
 
         val = node->value;
-        MyFree(node);
+        Free(node);
 
         list->size = list->size - 1;
 
@@ -548,7 +453,7 @@ int DList_PushBack(struct DList * list, int val)
     struct DListNode * node;
     struct DListNode * curr, *next;
 
-    node = (struct DListNode *)MyAlloc(sizeof(struct DListNode));
+    node = (struct DListNode *)Alloc(sizeof(struct DListNode));
     node->value = val;
 
     next = list->guard;
@@ -584,7 +489,7 @@ int DList_PopBack(struct DList * list)
         next->prev = curr;
 
         val = node->value;
-        MyFree(node);
+        Free(node);
 
         list->size = list->size - 1;
 
@@ -628,17 +533,13 @@ int Print_Vector(struct Vector * vec)
 {
     int i;
 
-    printf("Vector capacity = ");
-    PrintInt(vec->capacity);
-    printf(", size = ");
-    PrintInt(vec->size);
-    printf(", elements = [");
+    StdPrintf("Vector capacity = %d, size = %d, elements = [",
+              vec->capacity, vec->size);
     for (i = 0; i < vec->size; ++i)
     {
-        PrintInt(vec->data[i]);
-        printf(", ");
+        StdPrintf("%d, ", vec->data[i]);
     }
-    printf("]\n");
+    StdPrintf("]\n");
 
     return 0;
 }
@@ -647,7 +548,7 @@ struct Vector * Create_Vector()
 {
     struct Vector * vec;
 
-    vec = (struct Vector *)MyAlloc(sizeof(struct Vector));
+    vec = (struct Vector *)Alloc(sizeof(struct Vector));
     vec->capacity = 0;
     vec->data = (int *)(long)0;
     vec->size = 0;
@@ -658,9 +559,9 @@ int Destroy_Vector(struct Vector * vec)
 {
     if (vec->data != (int *)(long)0)
     {
-        MyFree(vec->data);
+        Free(vec->data);
     }
-    MyFree(vec);
+    Free(vec);
 
     return 0;
 }
@@ -682,7 +583,7 @@ int __Vector_Expand(struct Vector * vec, int capacity)
 
     if (vec->capacity < capacity)
     {
-        data = (int *)MyAlloc(sizeof(int) * capacity);
+        data = (int *)Alloc(sizeof(int) * capacity);
 
         if (vec->data != (int *)(long)0)
         {
@@ -691,7 +592,7 @@ int __Vector_Expand(struct Vector * vec, int capacity)
                 val = vec->data[i];
                 data[i] = val;
             }
-            MyFree(vec->data);
+            Free(vec->data);
         }
         vec->data = data;
         vec->capacity = capacity;
@@ -808,42 +709,37 @@ int Test_Vector()
     Vector_PopBack(vec);
     Print_Vector(vec);
 
-    printf("Get ");
+    StdPrintf("Get ");
     for (i = 0; i < 10; ++i)
     {
-        PrintInt(Vector_Get(vec, i));
-        printf(", ");
+        StdPrintf("%d, ", Vector_Get(vec, i));
     }
-    printf("\n");
-    printf("Iteration ");
+    StdPrintf("\nIteration ");
     for (p = Vector_Begin(vec);
          p != Vector_End(vec);
          p = Vector_Next(vec, p))
     {
-        PrintInt(*p);
-        printf(", ");
+        StdPrintf("%d, ", *p);
     }
-    printf("\n");
-    printf("Find ");
+    StdPrintf("\nFind ");
     for (i = 5; i < 15; ++i)
     {
-        PrintInt(i);
-        printf(" = ");
+        StdPrintf("%d = ", i);
         if (Vector_Find(vec, i) != Vector_End(vec))
-            printf("true, ");
+            StdPrintf("true, ");
         else
-            printf("false, ");
+            StdPrintf("false, ");
     }
-    printf("\n");
+    StdPrintf("\n");
 
-    printf("Set * 2 => ");
+    StdPrintf("Set * 2 => ");
     for (i = 0; i < 10; ++i)
     {
         Vector_Set(vec, i, i * 2);
     }
     Print_Vector(vec);
 
-    printf("SetRange 100 => ");
+    StdPrintf("SetRange 100 => ");
     Vector_SetRange(vec, 0, 10, 100);
     Print_Vector(vec);
 
@@ -868,24 +764,20 @@ int __Print_TreeSetImpl(struct TreeSetNode * node)
 {
     if (node != (struct TreeSetNode *)(long)0)
     {
-        printf("(");
+        StdPrintf("(");
         __Print_TreeSetImpl(node->left);
-        printf(", ");
-        PrintInt(node->value);
-        printf(", ");
+        StdPrintf(", %d, ", node->value);
         __Print_TreeSetImpl(node->right);
-        printf(")");
+        StdPrintf(")");
     }
 
     return 0;
 }
 int Print_TreeSet(struct TreeSet * set)
 {
-    printf("TreeSet size = ");
-    PrintInt(set->size);
-    printf(", elements = [");
+    StdPrintf("TreeSet size = %d, elements = [", set->size);
     __Print_TreeSetImpl(set->root);
-    printf("]\n");
+    StdPrintf("]\n");
     return 0;
 }
 
@@ -893,7 +785,7 @@ struct TreeSet * Create_TreeSet()
 {
     struct TreeSet * set;
 
-    set = (struct TreeSet *)MyAlloc(sizeof(struct TreeSet));
+    set = (struct TreeSet *)Alloc(sizeof(struct TreeSet));
     set->root = (struct TreeSetNode *)(long)0;
     set->size = 0;
 
@@ -906,7 +798,7 @@ int __Destroy_TreeSetImpl(struct TreeSetNode * node)
     {
         __Destroy_TreeSetImpl(node->left);
         __Destroy_TreeSetImpl(node->right);
-        MyFree(node);
+        Free(node);
     }
 
     return 0;
@@ -914,7 +806,7 @@ int __Destroy_TreeSetImpl(struct TreeSetNode * node)
 int Destroy_TreeSet(struct TreeSet * set)
 {
     __Destroy_TreeSetImpl(set->root);
-    MyFree(set);
+    Free(set);
 
     return 0;
 }
@@ -926,7 +818,7 @@ int __TreeSet_InsertImpl(struct TreeSetNode ** p, int val)
 
     if (*p == (struct TreeSetNode *)(long)0)
     {
-        node = (struct TreeSetNode *)MyAlloc(sizeof(struct TreeSetNode));
+        node = (struct TreeSetNode *)Alloc(sizeof(struct TreeSetNode));
         node->left = (struct TreeSetNode *)(long)(0);
         node->right = (struct TreeSetNode *)(long)(0);
         node->value = val;
@@ -1033,7 +925,7 @@ int __TreeSet_RemoveImpl(struct TreeSetNode ** p, int val)
 
                 prevNode = __TreeSet_MoveLeftUp(prev);
                 currNode = __TreeSet_Replace(curr, prevNode);
-                MyFree(currNode);
+                Free(currNode);
             }
             else if (*next != (struct TreeSetNode *)(long)0)
             {
@@ -1044,11 +936,11 @@ int __TreeSet_RemoveImpl(struct TreeSetNode ** p, int val)
 
                 nextNode = __TreeSet_MoveRightUp(next);
                 currNode = __TreeSet_Replace(curr, nextNode);
-                MyFree(currNode);
+                Free(currNode);
             }
             else
             {
-                MyFree(*p);
+                Free(*p);
                 *p = (struct TreeSetNode *)(long)0;
             }
 
@@ -1120,17 +1012,16 @@ int Test_TreeSet()
         TreeSet_Insert(set, i + 1);
         Print_TreeSet(set);
     }
-    printf("Find ");
+    StdPrintf("Find ");
     for (i = 5; i < 15; ++i)
     {
-        PrintInt(i);
-        printf(" = ");
+        StdPrintf("%d = ", i);
         if (TreeSet_Find(set, i) != TreeSet_End(set))
-            printf("true, ");
+            StdPrintf("true, ");
         else
-            printf("false, ");
+            StdPrintf("false, ");
     }
-    printf("\n");
+    StdPrintf("\n");
     for (i = 0; i < 10; ++i)
     {
         TreeSet_Remove(set, i + 1);
@@ -1173,17 +1064,16 @@ int Test_TreeSet()
     TreeSet_Insert(set, 7);
     TreeSet_Insert(set, 9);
     Print_TreeSet(set);
-    printf("Find ");
+    StdPrintf("Find ");
     for (i = 5; i < 15; ++i)
     {
-        PrintInt(i);
-        printf(" = ");
+        StdPrintf("%d = ", i);
         if (TreeSet_Find(set, i) != TreeSet_End(set))
-            printf("true, ");
+            StdPrintf("true, ");
         else
-            printf("false, ");
+            StdPrintf("false, ");
     }
-    printf("\n");
+    StdPrintf("\n");
     for (i = 0; i < 10; ++i)
     {
         TreeSet_Remove(set, 10 - i);
@@ -1212,26 +1102,22 @@ int Print_HashSet(struct HashSet * set)
     struct Vector * bucketData;
     int bucketIndex;
 
-    printf("HashSet size = ");
-    PrintInt(set->size);
-    printf(", total buckets = ");
-    PrintInt(set->totalCount);
-    printf(", used buckets = ");
-    PrintInt(set->usedCount);
-    printf(", buckets = [\n");
+    StdPrintf("HashSet size = %d, total buckets = %d, ",
+              set->size,
+              set->totalCount);
+    StdPrintf("used buckets = %d, buckets = [\n",
+              set->usedCount);
     for (bucketIndex = 0; bucketIndex < set->totalCount; ++bucketIndex)
     {
         bucket = set->buckets + bucketIndex;
         bucketData = bucket->data;
         if (bucketData->size > 0)
         {
-            printf("  ");
-            PrintInt(bucketIndex);
-            printf(": ");
+            StdPrintf("  %d: ", bucketIndex);
             Print_Vector(bucketData);
         }
     }
-    printf("]\n");
+    StdPrintf("]\n");
 
     return 0;
 }
@@ -1240,7 +1126,7 @@ struct HashSet * Create_HashSet()
 {
     struct HashSet * set;
 
-    set = (struct HashSet *)MyAlloc(sizeof(struct HashSet));
+    set = (struct HashSet *)Alloc(sizeof(struct HashSet));
     set->buckets = (struct HashSetBucket *)(long)0;
     set->totalCount = 0;
     set->usedCount = 0;
@@ -1262,9 +1148,9 @@ int Destroy_HashSet(struct HashSet * set)
             Destroy_Vector(bucketData);
         }
 
-        MyFree(set->buckets);
+        Free(set->buckets);
     }
-    MyFree(set);
+    Free(set);
 
     return 0;
 }
@@ -1330,7 +1216,7 @@ int __HashSet_Rehash(struct HashSet * set)
     {
         newSet = Create_HashSet();
         newTotalCount = 16 + set->totalCount * 2;
-        newBuckets = (struct HashSetBucket *)MyAlloc(sizeof(struct HashSetBucket) * newTotalCount);
+        newBuckets = (struct HashSetBucket *)Alloc(sizeof(struct HashSetBucket) * newTotalCount);
         newSet->buckets = newBuckets;
         newSet->totalCount = newTotalCount;
         newSet->usedCount = 0;

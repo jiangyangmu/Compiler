@@ -209,7 +209,7 @@ static inline const char * StringLiteralEnd(const char * start) {
         return start;
     ++end;
 
-    do
+    while (*end != '"')
     {
         if (*end == EOL)
             return start;
@@ -223,7 +223,7 @@ static inline const char * StringLiteralEnd(const char * start) {
         }
         else // non escape character
             ++end;
-    } while (*end != '"');
+    };
     ++end;
 
     return end;
@@ -411,14 +411,29 @@ Token::Type OperatorPunctuatorType(StringRef text) {
 
 static inline double EvalFloat(StringRef text) {
     // TODO implement EvalFloat()
-    int i = 0;
+    int digits = 0;
+    double factor = 1.0;
+    bool afterDot = false;
+
     for (char c : text)
     {
-        if (!isdigit(c))
+        if (isdigit(c))
+        {
+            digits = digits * 10 + (c - '0');
+            if (afterDot)
+                factor *= 10.0;
+        }
+        else if (c == '.')
+        {
+            ASSERT(afterDot == false);
+            afterDot = true;
+        }
+        else
+        {
             break;
-        i = i * 10 + (c - '0');
+        }
     }
-    return (double)i;
+    return (double)digits / factor;
 }
 
 static inline int EvalInt(StringRef text) {

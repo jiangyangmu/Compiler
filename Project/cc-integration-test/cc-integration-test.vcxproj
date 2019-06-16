@@ -147,11 +147,7 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <None Include="libc_api.c">
-      <FileType>CppCode</FileType>
-    </None>
-  </ItemGroup>
-  <ItemGroup>
+    <None Include="LIBC.md" />
     <None Include="type.c">
       <FileType>CppCode</FileType>
     </None>
@@ -162,9 +158,17 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <None Include="windows_api.c">
+    <None Include="libc.c">
       <FileType>CppCode</FileType>
     </None>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="api.c">
+      <FileType>CppCode</FileType>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="api.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Target Name="CC_ComputeInputOutputFiles">
@@ -180,9 +184,10 @@
   </Target>
   <Target Name="CC_Compile" DependsOnTargets="PreBuildEvent;CC_ComputeInputOutputFiles">
     <Exec Command="echo  Compiling: %(CC_CSource.Identity) &amp; ..\..\Build\cc.exe %(CC_CSource.Identity) &gt; %(CC_CSource.LogFileName)" />
+    <Exec Command="cl.exe /c /Zi /nologo /W3 /WX- /diagnostics:classic /sdl /Od /D _MBCS /RTC1 /MTd /GS /fp:precise /permissive- /Zc:wchar_t /Zc:forScope /Zc:inline /Fox64\Debug\ /Fdx64\Debug\vc141.pdb /Gd /TC /FC /errorReport:prompt api.c" />
   </Target>
   <Target Name="CC_Link" DependsOnTargets="CC_Compile" BeforeTargets="PostBuildEvent">
-    <Exec Command="ml64.exe /nologo /Zi /W3 /errorReport:prompt %(CC_AsmSource.Identity) /link /OUT:%(CC_AsmSource.ExecutableFileName) /NXCOMPAT /PDB:%(CC_AsmSource.PDBFileName) /DYNAMICBASE legacy_stdio_definitions.lib msvcrtd.lib vcruntimed.lib ucrtd.lib kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /DEBUG:FASTLINK /MACHINE:X64 /INCREMENTAL /ERRORREPORT:PROMPT /NOLOGO /TLBID:1" />
+    <Exec Command="ml64.exe /nologo /Zi /W3 /errorReport:prompt %(CC_AsmSource.Identity) x64\Debug\api.obj /link /OUT:%(CC_AsmSource.ExecutableFileName) /NXCOMPAT /PDB:%(CC_AsmSource.PDBFileName) /DYNAMICBASE legacy_stdio_definitions.lib msvcrtd.lib vcruntimed.lib ucrtd.lib kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /DEBUG:FASTLINK /MACHINE:X64 /INCREMENTAL /ERRORREPORT:PROMPT /NOLOGO /TLBID:1" />
   </Target>
   <Target Name="CC_Run" AfterTargets="CC_Link">
     <Exec Command="echo  Running %(CC_Executable.Identity)... &amp; cmd /V /C %(CC_Executable.Identity) ^&amp; echo  Exit code = !errorlevel!" IgnoreExitCode="true" EchoOff="true">
