@@ -747,9 +747,9 @@ void AddToBSSSegment(x64Program * program,
         program->publicLabels.push_back(label.toString());
     }
 
-    // <label> <align-string> 0<size/align>H DUP
+    // <label> <align-string> 0<size/align>H DUP (?)
     program->bssSegment +=
-        label.toString() + " " + SizeToX64TypeString(align) + " 0" + IntegerToHexString(size / align) + "H DUP\n";
+        label.toString() + " " + SizeToX64TypeString(align) + " " + IntegerToHexString(size / align) + " DUP (?)\n";
 }
 
 void AddToDATASegment(x64Program * program,

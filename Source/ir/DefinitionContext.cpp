@@ -235,7 +235,7 @@ DefinitionLocation FindDefinitionLocation(DefinitionContext * currentContext,
                     break;
                 }
             }
-            if (searchParent)
+            if (!location && searchParent)
                 context = context->parent;
             else
                 break;

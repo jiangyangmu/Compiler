@@ -1267,7 +1267,7 @@ void CompileAst(AstCompileContext * context, Ast * ast)
     else if (ast->type == COMPOUND_STMT)
     {
         Language::DefinitionContext * blockDefinitionContext = NewDefinitionContext(context,
-                                                                                       Language::BLOCK_SCOPE);
+                                                                                    Language::BLOCK_SCOPE);
 
         EnterDefinitionContext(context, blockDefinitionContext);
 

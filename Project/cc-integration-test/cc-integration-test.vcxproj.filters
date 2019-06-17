@@ -16,6 +16,9 @@
     <Filter Include="Test_API">
       <UniqueIdentifier>{f0e8f03e-5256-4b28-9abc-f3dbe790b7b3}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Test_Program">
+      <UniqueIdentifier>{5174567d-697d-4b47-a04f-7b82f97c2e87}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <None Include="io.c">
@@ -38,6 +41,10 @@
     </None>
     <None Include="api.c">
       <Filter>_api</Filter>
+    </None>
+    <None Include="LIBC.md" />
+    <None Include="greedy_snake.c">
+      <Filter>Test_Program</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>

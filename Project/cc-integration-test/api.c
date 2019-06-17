@@ -1,11 +1,23 @@
 #include "api.h"
 
+#include <assert.h>
+#include <ctype.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <math.h>
 #include <time.h>
 #include <stdarg.h>
+
+#define OpenFile WinOpenFile
+#define ReadFile WinReadFile
+#define WriteFile WinWriteFile
+#define GetFileSize WinGetFileSize
+#include <windows.h>
+#undef OpenFile
+#undef ReadFile
+#undef WriteFile
+#undef GetFileSize
 
 struct FileHandle * OpenFile(const char * filename, const char * mode)
 {
@@ -185,6 +197,105 @@ int GetChar(struct InputStreamHandle * inputStreamHandle)
 }
 */
 
+static DWORD                gSavedConsoleMode = 0;
+
+typedef void (*KeyboardEventProc)(int /*isKeyDown*/, unsigned int /*keyCode*/);
+static KeyboardEventProc    gKeyboardEventProc = NULL;
+
+static INPUT_RECORD         gInputRecordBuf[64];
+static DWORD                gInputRecordNum;
+
+void Console_EnterWindowMode()
+{
+    HANDLE hStdin = GetStdHandle(STD_INPUT_HANDLE);
+    if (!GetConsoleMode(hStdin, &gSavedConsoleMode) ||
+        !SetConsoleMode(hStdin, ENABLE_WINDOW_INPUT | ENABLE_MOUSE_INPUT | ENABLE_PROCESSED_INPUT))
+    {
+        printf("Console: fail to enter window mode.\n");
+        exit(1);
+    }
+}
+void Console_ExitWindowMode()
+{
+    HANDLE hStdin = GetStdHandle(STD_INPUT_HANDLE);
+    if (!SetConsoleMode(hStdin, gSavedConsoleMode))
+    {
+        printf("Console: fail to exit window mode.\n");
+        exit(1);
+    }
+}
+
+int Console_HasMessage()
+{
+    DWORD inputRecordNum;
+
+    if (!GetNumberOfConsoleInputEvents(GetStdHandle(STD_INPUT_HANDLE),
+                                      &inputRecordNum))
+    {
+        printf("Console: HasMessage failed.\n");
+        exit(1);
+    }
+
+    return inputRecordNum != 0 ? 1 : 0;
+}
+
+int Console_GetMessage()
+{
+    gInputRecordNum = 0;
+    if (!ReadConsoleInput(GetStdHandle(STD_INPUT_HANDLE),
+                          gInputRecordBuf,
+                          sizeof(gInputRecordBuf) / sizeof(INPUT_RECORD),
+                          &gInputRecordNum))
+    {
+        printf("Console: fail to get messages.\n");
+        return -1;
+    }
+
+    return 0;
+}
+
+void Console_DispatchMessage()
+{
+    if (gInputRecordNum == 0)
+        return;
+
+    for (DWORD i = 0; i < gInputRecordNum; i++)
+    {
+        switch (gInputRecordBuf[i].EventType)
+        {
+            case KEY_EVENT:
+                if (gKeyboardEventProc)
+                {
+                    gKeyboardEventProc(gInputRecordBuf[i].Event.KeyEvent.bKeyDown,
+                                       gInputRecordBuf[i].Event.KeyEvent.wVirtualKeyCode);
+                }
+                break;
+            case MOUSE_EVENT:
+                //MouseEventProc(irInBuf[i].Event.MouseEvent);
+                break;
+            case WINDOW_BUFFER_SIZE_EVENT:
+                //ResizeEventProc(irInBuf[i].Event.WindowBufferSizeEvent);
+                break;
+            case FOCUS_EVENT:
+            case MENU_EVENT:
+            default:
+                break;
+        }
+    }
+
+    gInputRecordNum = 0;
+}
+void Console_SetKeyboardEventProc(void(*proc)(int, unsigned int))
+{
+    gKeyboardEventProc = (KeyboardEventProc)proc;
+}
+void Console_SetMouseEventProc()
+{
+}
+void Console_SetWindowBufferSizeEventProc()
+{
+}
+
 void MemSet(void * begin, void * end, char value)
 {
     if (end > begin)
@@ -216,6 +327,11 @@ int CStrCmp(const char * s1, const char * s2)
 void CStrCpy(const char * from, char * to)
 {
     strcpy_s(to, strlen(from) + 1, from);
+}
+
+int Random()
+{
+    return rand();
 }
 
 float FltCeil(float f)
@@ -280,13 +396,13 @@ void * Alloc(unsigned long int size)
 {
     void * p;
     p = malloc(size);
-    printf("malloc 0x%016p, size = %lu\n", p, size);
+    /*printf("malloc 0x%016p, size = %lu\n", p, size);*/
     return p;
 }
 
 int Free(void * ptr)
 {
-    printf("free   0x%016p\n", ptr);
+    /*printf("free   0x%016p\n", ptr);*/
     free(ptr);
     return 0;
 }
@@ -296,6 +412,9 @@ long GetClock()
     return clock();
 }
 
+#ifdef GetCurrentTime
+#undef GetCurrentTime
+#endif
 long long GetCurrentTime()
 {
     time_t now;
@@ -315,4 +434,68 @@ int ProcAtExit(void(*func)())
 {
     atexit((void(*)(void))func);
     return 0;
+}
+
+void ThreadSleep(int ms)
+{
+    Sleep(ms);
+}
+
+struct ThreadHandle * Create_Thread(unsigned long (*func)(void *), void * param)
+{
+    DWORD threadId;
+    HANDLE hThread;
+    hThread = CreateThread(NULL, 1 << 16 /* 64KB */, func, param, 0, &threadId);
+    if (hThread == NULL)
+    {
+        printf("create thread failed.\n");
+        exit(1);
+    }
+    return (struct ThreadHandle *)hThread;
+}
+
+void Join_Thread(struct ThreadHandle * threadHandle)
+{
+    if (WaitForSingleObject((HANDLE)threadHandle, INFINITE) != WAIT_OBJECT_0 ||
+        !CloseHandle(threadHandle))
+    {
+        printf("join thread failed.\n");
+        exit(1);
+    }
+}
+
+struct MutexHandle * Create_Mutex()
+{
+    HANDLE hMutex;
+    hMutex = CreateMutex(NULL, FALSE, NULL);
+    if (hMutex == NULL)
+    {
+        printf("create mutex failed.\n");
+        exit(1);
+    }
+    return (struct MutexHandle *)hMutex;
+}
+void Destroy_Mutex(struct MutexHandle * mutexHandle)
+{
+    if (CloseHandle((HANDLE)mutexHandle))
+    {
+        printf("destroy mutex failed.\n");
+        exit(1);
+    }
+}
+void Lock_Mutex(struct MutexHandle * mutexHandle)
+{
+    if (WaitForSingleObject((HANDLE)mutexHandle, INFINITE) != WAIT_OBJECT_0)
+    {
+        printf("lock mutex failed.\n");
+        exit(1);
+    }
+}
+void Unlock_Mutex(struct MutexHandle * mutexHandle)
+{
+    if (!ReleaseMutex((HANDLE)mutexHandle))
+    {
+        printf("unlock mutex failed.\n");
+        exit(1);
+    }
 }

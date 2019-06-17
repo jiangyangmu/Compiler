@@ -497,6 +497,27 @@ int DList_PopBack(struct DList * list)
     }
 }
 
+/* TODO: add test */
+struct DListNode * DList_Begin(struct DList * list)
+{
+    struct DListNode * n;
+    n = list->guard;
+    n = n->next;
+    return n;
+}
+struct DListNode * DList_End(struct DList * list)
+{
+    return list->guard;
+}
+struct DListNode * DList_Next(struct DList * list, struct DListNode * p)
+{
+    return p->next;
+}
+int                DList_Get(struct DListNode * p)
+{
+    return p->value;
+}
+
 int Test_DList()
 {
     struct DList * list;
@@ -627,6 +648,25 @@ int Vector_PopBack(struct Vector * vec)
     val = vec->data[i];
 
     return val;
+}
+/* TODO: add test */
+int Vector_Resize(struct Vector * vec, int newSize, int fill)
+{
+    int i;
+
+    if (vec->capacity < newSize)
+    {
+        __Vector_Expand(vec, newSize);
+    }
+    
+    for (i = vec->size; i < newSize; ++i)
+    {
+        vec->data[i] = fill;
+    }
+
+    vec->size = newSize;
+
+    return 0;
 }
 
 int Vector_Get(struct Vector * vec, int index)
@@ -1334,6 +1374,7 @@ int Test_HashSet()
     return 0;
 }
 
+/*
 int main()
 {
     Test_SList();
@@ -1344,3 +1385,4 @@ int main()
 
     return 0;
 }
+*/

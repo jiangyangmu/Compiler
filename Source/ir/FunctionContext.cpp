@@ -286,11 +286,15 @@ Node * IdExpression(FunctionContext * context,
                                                id,
                                                DefinitionContextNamespace::ID_NAMESPACE,
                                                true);
-    ASSERT(definition &&
-        (
-            definition->type == OBJECT_DEFINITION ||
-            definition->type == FUNCTION_DEFINITION
-            ));
+
+    ASSERT(definition);
+    
+    if (definition->type == ENUM_CONST_DEFINITION)
+    {
+        return ConstantExpression(context, AsEnumConstDefinition(definition)->enumConstValue);
+    }
+
+    ASSERT(definition->type == OBJECT_DEFINITION || definition->type == FUNCTION_DEFINITION);
 
     Node * node = MakeNode(EXPR_DATA);
 

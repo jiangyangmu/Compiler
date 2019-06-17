@@ -67,6 +67,15 @@ int                         GetChar(struct InputStreamHandle * inputStreamHandle
     Console Subsystem
 */
 
+void            Console_EnterWindowMode();
+int             Console_HasMessage();
+int             Console_GetMessage();
+void            Console_DispatchMessage();
+void            Console_SetKeyboardEventProc(void(*keyboardEventProc)(int _isKeyDown, unsigned int _keyCode));
+void            Console_SetMouseEventProc();
+void            Console_SetWindowBufferSizeEventProc();
+void            Console_ExitWindowMode();
+
 /*
     Memory blob, C string
 */
@@ -86,6 +95,8 @@ void                CStrCpy(const char * from, char * to);
 */
 
 /* int, float, math */
+int     Random();
+
 float   FltCeil(float f);
 float   FltFloor(float f);
 float   FltMod(float numer, float denom);
@@ -126,14 +137,28 @@ long        GetClock();
 long long   GetCurrentTime();
 
 /*
-    Process
+    Process, Thread
     
     [error handling]
     exit, atexit
     abort
+
+    sleep
 */
 void    ProcAbort();
 void    ProcExit(int status);
 int     ProcAtExit(void(*func)());
+
+void    ThreadSleep(int ms);
+
+struct ThreadHandle;
+struct ThreadHandle *   Create_Thread(unsigned long(*func)(void * _p), void * param);
+void                    Join_Thread(struct ThreadHandle * threadHandle);
+
+struct MutexHandle;
+struct MutexHandle * Create_Mutex();
+void Destroy_Mutex(struct MutexHandle * mutexHandle);
+void Lock_Mutex(struct MutexHandle * mutexHandle);
+void Unlock_Mutex(struct MutexHandle * mutexHandle);
 
 /* assertion */

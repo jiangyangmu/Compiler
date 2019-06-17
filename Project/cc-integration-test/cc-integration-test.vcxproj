@@ -170,6 +170,11 @@
   <ItemGroup>
     <ClInclude Include="api.h" />
   </ItemGroup>
+  <ItemGroup>
+    <None Include="greedy_snake.c">
+      <FileType>CppCode</FileType>
+    </None>
+  </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Target Name="CC_ComputeInputOutputFiles">
     <ReadLinesFromFile File="@(CC_IncludedSourceFile)">

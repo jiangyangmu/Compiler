@@ -48,17 +48,21 @@ ByteArray RemoveComments(const ByteArray & input)
         // toggle in comment state
         if (in + 1 < inEnd)
         {
-            if (*in == '/' && *(in + 1) == '*')
+            if (!inComment && *in == '/' && *(in + 1) == '*')
             {
                 inComment = true;
                 in += 2;
                 continue;
             }
-            else if (*in == '*' && *(in + 1) == '/')
+            else if (inComment && *in == '*' && *(in + 1) == '/')
             {
                 inComment = false;
                 in += 2;
                 continue;
+            }
+            else if (!inComment && *in == '/' && *(in + 1) == '/')
+            {
+                ASSERT("C++ comment not allowed" && false);
             }
         }
 
