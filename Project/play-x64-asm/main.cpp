@@ -49,6 +49,11 @@ int puts(const char *);
 int putchar(int ch);
 int puti(int i);
 
+void ASMPrintf();
+
+extern int bssi4;
+extern long long bssi8;
+
 }
 
 std::string FloatToHexString(float f)
@@ -127,6 +132,11 @@ int main(int argc, char *argv[])
     puti(1);
 
     printf("this is C printf()\n");
+
+    // ASMPrintf();
+
+    printf("bssi4 = %d\n", bssi4);
+    printf("bssi8 = %lld\n", bssi8);
 
     return 0;
 }
