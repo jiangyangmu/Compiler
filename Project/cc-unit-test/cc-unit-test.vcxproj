@@ -19,15 +19,12 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\Source\ir\Ast.cpp" />
-    <ClCompile Include="..\..\Source\lex\tokenizer.cpp" />
+    <ClCompile Include="..\..\Source\Memory\Span.cpp" />
     <ClCompile Include="..\..\Source\testing\testing_main.cpp" />
-    <ClCompile Include="..\..\Test\AstUnitTest.cpp" />
-    <ClCompile Include="..\..\Test\lex_test.cpp" />
+    <ClCompile Include="..\..\Test\UnitTest_Memory.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\Source\ir\Ast.h" />
-    <ClInclude Include="..\..\Source\lex\tokenizer.h" />
+    <ClInclude Include="..\..\Source\Memory\Span.h" />
     <ClInclude Include="..\..\Source\testing\tester.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">

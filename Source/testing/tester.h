@@ -69,16 +69,32 @@ private:
         TesterClassName##TestCaseName##_instance;                \
     void TesterClassName##TestCaseName::run()
 
-#define EXPECT_EQ(actual, expect)                                             \
+#define EXPECT_EQ(left, right)                                                \
     do                                                                        \
     {                                                                         \
-        auto __e = (expect);                                                  \
-        auto __a = (actual);                                                  \
-        if (!((__e) == (__a)))                                                \
+        auto __l = (left);                                                    \
+        auto __r = (right);                                                   \
+        if (!((__l) == (__r)))                                                \
         {                                                                     \
-            std::cerr << "Expect: " << (__e) << std::endl                     \
-                      << "Actual: " << (__a) << std::endl                     \
-                      << "\tat " << __FILE__ << ":" << __LINE__ << std::endl; \
+            std::cerr << "Expr:  (" #left ") == (" #right ")" << std::endl    \
+                      << "  at " << __FILE__ << ":" << __LINE__ << std::endl  \
+                      << "Left:  " << (__l) << std::endl                      \
+                      << "Right: " << (__r) << std::endl;                     \
+            TestRunner::Get().SetError(true);                                 \
+        }                                                                     \
+    } while (false)
+
+#define EXPECT_NE(left, right)                                                \
+    do                                                                        \
+    {                                                                         \
+        auto __l = (left);                                                    \
+        auto __r = (right);                                                   \
+        if (!((__l) != (__r)))                                                \
+        {                                                                     \
+            std::cerr << "Expr:  (" #left ") == (" #right ")" << std::endl    \
+                      << "  at " << __FILE__ << ":" << __LINE__ << std::endl  \
+                      << "Left:  " << (__l) << std::endl                      \
+                      << "Right: " << (__r) << std::endl;                     \
             TestRunner::Get().SetError(true);                                 \
         }                                                                     \
     } while (false)
