@@ -13,6 +13,11 @@ struct Span {
     size_t nPage;
 };
 
+struct SpanDescriptor {
+    const void * cpvMemBegin;
+    size_t nPage;
+};
+
 class SpanCtrlBlock;
 
 class SpanFreeList
@@ -30,10 +35,37 @@ public:
         o.psHead = nullptr;
     }
 
+    // Sorted by memory begin address.
     void    Insert(Span * ps);
     void    Insert(void * pvMemBegin, size_t nPage);
     Span *  Pop();
     bool    Empty() const;
+
+public:
+    class ForwardIterator {
+    public:
+        ForwardIterator();
+        explicit ForwardIterator(const Span * cpsCurr);
+
+        ForwardIterator(const ForwardIterator &) = default;
+        ForwardIterator(ForwardIterator &&) = default;
+        ForwardIterator & operator = (const ForwardIterator &) = default;
+        ForwardIterator & operator = (ForwardIterator &&) = default;
+
+        ForwardIterator & operator ++ ();
+        ForwardIterator   operator ++ (int);
+
+        bool              operator == (const ForwardIterator & o);
+        bool              operator != (const ForwardIterator & o);
+
+        SpanDescriptor    operator * ();
+
+    private:
+        const Span * cpsCurr;
+    };
+
+    ForwardIterator Begin() const { return ForwardIterator(psHead); }
+    ForwardIterator End() const { return ForwardIterator(nullptr); }
 
 private:
     SpanFreeList(const SpanFreeList & o) = delete;
@@ -41,8 +73,72 @@ private:
 
     Span * psHead;
 
-    friend class SpanView;
-    friend class SpanCtrlBlock; // TODO: remove
+    friend class SpanCtrlBlock;
+};
+
+class LazySpanFreeList
+{
+public:
+    LazySpanFreeList(void * pvLazySpan, size_t nLazySpanPage)
+        : psHead(nullptr), pvLazySpan(pvLazySpan), nLazySpanPage(nLazySpanPage)
+    {
+    }
+    LazySpanFreeList(LazySpanFreeList && o)
+        : psHead(o.psHead)
+    {
+        o.psHead = nullptr;
+    }
+    LazySpanFreeList & operator = (LazySpanFreeList && o)
+    {
+        psHead = o.psHead;
+        o.psHead = nullptr;
+    }
+
+    // Sorted by memory begin address.
+    void    Insert(Span * ps);
+    void    Insert(void * pvMemBegin, size_t nPage);
+    Span *  Pop();
+    bool    Empty() const;
+
+    bool    HasLazySpan() const;
+
+public:
+    class ForwardIterator {
+    public:
+        ForwardIterator();
+        ForwardIterator(const void * cpvLazySpan, size_t nLazySpanPage, const Span * cpsHead, bool bBegin);
+
+        ForwardIterator(const ForwardIterator &) = default;
+        ForwardIterator(ForwardIterator &&) = default;
+        ForwardIterator & operator = (const ForwardIterator &) = default;
+        ForwardIterator & operator = (ForwardIterator &&) = default;
+
+        ForwardIterator & operator ++ ();
+        ForwardIterator   operator ++ (int);
+
+        bool              operator == (const ForwardIterator & o);
+        bool              operator != (const ForwardIterator & o);
+
+        SpanDescriptor    operator * ();
+
+    private:
+        SpanDescriptor sdLazySpan;
+        const Span * cpsHead;
+        const Span * cpsCurr;
+    };
+
+    ForwardIterator Begin() const { return ForwardIterator(pvLazySpan, nLazySpanPage, psHead, true); }
+    ForwardIterator End() const { return ForwardIterator(pvLazySpan, nLazySpanPage, psHead, false); }
+
+private:
+    LazySpanFreeList(const LazySpanFreeList & o) = delete;
+    LazySpanFreeList & operator = (const LazySpanFreeList & o) = delete;
+
+    Span * psHead;
+    void * pvLazySpan;
+    size_t nLazySpanPage;
+
+    friend class SpanCtrlBlock;
 };
 
 // Front-end of SCB.
@@ -66,30 +162,12 @@ public:
 
     const void * MemBegin() const;
 
-private:
-    SpanAllocator() = default;
-    SpanAllocator(const SpanAllocator &) = delete;
-    SpanAllocator & operator = (const SpanAllocator &) = delete;
-
-    SpanCtrlBlock * pscb;
-
-    friend SpanAllocator CreateSpanAllocator(size_t nReservedPage);
-    friend SpanAllocator CreateSpanAllocator(void * pvMemBegin, size_t nPage);
-    friend class SpanView;
-};
-
-// nReservedPage must be power of 2, at least 16
-SpanAllocator CreateSpanAllocator(size_t nReservedPage);
-SpanAllocator CreateSpanAllocator(void * pvMemBegin, size_t nPage);
-
-// Iterate Spans in SpanFreeList or SpanAllocator.
-class SpanView {
 public:
     class ForwardIterator {
     public:
         ForwardIterator();
-        ForwardIterator(const SpanFreeList * psflBegin, const SpanFreeList * psflEnd, const SpanFreeList * psflCurr);
-        
+        ForwardIterator(const LazySpanFreeList * psflBegin, const LazySpanFreeList * psflEnd, const LazySpanFreeList * psflCurr);
+
         ForwardIterator(const ForwardIterator &) = default;
         ForwardIterator(ForwardIterator &&) = default;
         ForwardIterator & operator = (const ForwardIterator &) = default;
@@ -100,31 +178,52 @@ public:
 
         bool              operator == (const ForwardIterator & o);
         bool              operator != (const ForwardIterator & o);
-        
-        const Span *      operator * ();
+
+        SpanDescriptor    operator * ();
 
     private:
-        const SpanFreeList * cpsflBegin;
-        const SpanFreeList * cpsflEnd;
-        const SpanFreeList * cpsflCurr;
-        const Span * cpsCurr;
+        const LazySpanFreeList * cpsflBegin;
+        const LazySpanFreeList * cpsflEnd;
+        const LazySpanFreeList * cpsflCurr;
+        LazySpanFreeList::ForwardIterator fiCurr;
     };
 
+    ForwardIterator Begin() const;
+    ForwardIterator End() const;
+
+private:
+    SpanAllocator() = default;
+    SpanAllocator(const SpanAllocator &) = delete;
+    SpanAllocator & operator = (const SpanAllocator &) = delete;
+
+    SpanCtrlBlock * pscb;
+
+    friend SpanAllocator CreateSpanAllocator(size_t nReservedPage);
+    friend SpanAllocator CreateSpanAllocator(void * pvMemBegin, size_t nPage);
+};
+
+// nReservedPage must be power of 2, at least 16
+SpanAllocator CreateSpanAllocator(size_t nReservedPage);
+SpanAllocator CreateSpanAllocator(void * pvMemBegin, size_t nPage);
+
+// Adapter. T = {SpanFreeList, LazySpanFreeList, SpanAllocator}
+template <typename T>
+class SpanView {
+public:
     SpanView() = default;
-    SpanView(const SpanFreeList & sfl);
-    SpanView(const SpanAllocator & sa);
+    SpanView(const T & obj) : beginIterator(obj.Begin()), endIterator(obj.End()) {}
 
     SpanView(const SpanView &) = default;
     SpanView(SpanView &&) = default;
     SpanView & operator = (const SpanView &) = default;
     SpanView & operator = (SpanView &&) = default;
 
-    ForwardIterator begin() { return beginIterator; }
-    ForwardIterator end() { return endIterator; }
+    typename T::ForwardIterator begin() { return beginIterator; }
+    typename T::ForwardIterator end() { return endIterator; }
 
 private:
-    ForwardIterator beginIterator;
-    ForwardIterator endIterator;
+    typename T::ForwardIterator beginIterator;
+    typename T::ForwardIterator endIterator;
 };
 
 }

@@ -55,7 +55,7 @@ ReserveAddressSpaceAndCommitPages(size_t nReservedPage)
     lpvBase = VirtualAlloc(
         NULL,                       // System selects address
         nReservedPage * PAGE_SIZE,  // Size of allocation
-        MEM_COMMIT,
+        MEM_RESERVE | MEM_COMMIT,
         PAGE_READWRITE);
     if (lpvBase == NULL)
         ErrorExit(("ReserveAddressSpaceAndCommitPages failed."));
@@ -97,24 +97,6 @@ CommitPage(void * pvMemBegin, size_t nPage)
         ErrorExit(("CommitPage failed.\n"));
 }
 
-static inline
-void
-TestAndCommitPage(void * pvMemBegin, size_t nPage)
-{
-    printf(("TestAndCommitPage: %p %zd pages.\n"), pvMemBegin, nPage);
-    ErrorExit(("TestAndCommitPage not implemented.\n"));
-    //__try
-    //{
-    //    // Test read/write.
-    //    char byte;
-    //    byte = *(char *)pvMemBegin;
-    //    *(char *)pvMemBegin = byte;
-    //}
-    //__except (PageFaultExceptionFilter(GetExceptionCode()))
-    //{
-    //}
-}
-
 // Safe to call over uncommited pages.
 static
 void
@@ -134,6 +116,7 @@ DecommitPage(void * pvMemBegin, size_t nPage)
 // ===========================================================================
 // Span: split
 // SpanFreeList: init, push, pop, empty
+// LazySpanFreeList: init, push, pop, empty
 // ===========================================================================
 
 Span *
@@ -208,6 +191,64 @@ SpanFreeList::Empty() const
     return psHead == nullptr;
 }
 
+
+void
+LazySpanFreeList::Insert(Span * ps)
+{
+    Span ** ppsInsert;
+
+    ppsInsert = &psHead;
+    while (*ppsInsert != nullptr && *ppsInsert < ps)
+    {
+        ppsInsert = &(*ppsInsert)->psNext;
+    }
+    ps->psNext = *ppsInsert;
+    *ppsInsert = ps;
+}
+
+void
+LazySpanFreeList::Insert(void * pvMemBegin, size_t nPage)
+{
+    Span * ps;
+    ps = (Span *)pvMemBegin;
+    ps->nPage = nPage;
+    Insert(ps);
+}
+
+Span *
+LazySpanFreeList::Pop()
+{
+    if (!psHead)
+    {
+        ASSERT(pvLazySpan);
+        
+        CommitPage(pvLazySpan, nLazySpanPage);
+        
+        psHead          = (Span *)pvLazySpan;
+        psHead->psNext  = nullptr;
+        psHead->nPage   = nLazySpanPage;
+        
+        pvLazySpan      = nullptr;
+        nLazySpanPage   = 0;
+    }
+
+    Span * ps;
+    ps = psHead;
+    psHead = psHead->psNext;
+    return ps;
+}
+
+bool
+LazySpanFreeList::Empty() const
+{
+    return psHead == nullptr && pvLazySpan == nullptr;
+}
+
+bool LazySpanFreeList::HasLazySpan() const
+{
+    return pvLazySpan != nullptr;
+}
+
 // ===========================================================================
 // SpanCtrlBlock: init, alloc, free
 // ===========================================================================
@@ -223,11 +264,13 @@ public:
         }
     }
 
-    // Return first SFL with >=nPage Span, or nullptr.
-    SpanFreeList * FindFirst(size_t nPage);
-
     void * Alloc(size_t nPage);
     void   Free(void * pvMemBegin, size_t nPage);
+    
+    // Helper for Alloc/Free.
+
+    // Return first SFL with >=nPage Span, or nullptr.
+    LazySpanFreeList * FindFreeList(size_t nPage);
 
     void * MemBegin()
     {
@@ -242,13 +285,12 @@ public:
     // Memory
     size_t nTotalPage;
     bool bOwnMemory;
-    // TODO: Lazy commit
 
     // 2^12, 2^13, ..., 2^25 byte
     // 1,    2,    ..., 8192 page
     // 4KB,  8KB,  ..., 32MB
     size_t nSpanFreeList;
-    SpanFreeList vsfl[14];
+    LazySpanFreeList vsfl[14];
 };
 
 SpanCtrlBlock *
@@ -265,8 +307,8 @@ CreateSpanCtrlBlock(void * pvMemBegin, size_t nPage, bool bOwnMemory)
 
     // Init free lists.
 
-    SpanFreeList * psfl;
-    SpanFreeList * psflEnd;
+    LazySpanFreeList * psfl;
+    LazySpanFreeList * psflEnd;
     size_t nSpanPage;
 
     psfl        = pscb->vsfl;
@@ -277,26 +319,38 @@ CreateSpanCtrlBlock(void * pvMemBegin, size_t nPage, bool bOwnMemory)
          psfl < psflEnd;
          ++psfl, nSpanPage <<= 1)
     {
-        new (psfl) SpanFreeList();
-
-        psfl->Insert(
-            PAGE_BEGIN(pvMemBegin, nPage - (nSpanPage << 1)),
-            nSpanPage
-        );
+        if (bOwnMemory)
+        {
+            new (psfl) LazySpanFreeList(
+                PAGE_BEGIN(pvMemBegin, nPage - (nSpanPage << 1)),
+                nSpanPage
+            );
+        }
+        else
+        {
+            new (psfl) LazySpanFreeList(
+                nullptr,
+                0
+            );
+            psfl->Insert(
+                PAGE_BEGIN(pvMemBegin, nPage - (nSpanPage << 1)),
+                nSpanPage
+            );
+        }
     }
 
     return pscb;
 }
 
-SpanFreeList *
-SpanCtrlBlock::FindFirst(size_t nPage)
+LazySpanFreeList *
+SpanCtrlBlock::FindFreeList(size_t nPage)
 {
-    SpanFreeList * psfl;
-    SpanFreeList * psflEnd;
+    LazySpanFreeList * psfl;
+    LazySpanFreeList * psflEnd;
     
     psfl    = vsfl + IntLog2(nPage);
     psflEnd = vsfl + nSpanFreeList;
-    
+
     while (psfl->Empty() && psfl < psflEnd)
         ++psfl;
 
@@ -309,17 +363,17 @@ SpanCtrlBlock::Alloc(size_t nPage)
 {
     // L Find-Pop A, (Split AB, L Down, L Insert B)*, A
 
-    SpanFreeList * psfl;
+    LazySpanFreeList * psfl;
     Span * ps;
     Span * psSecond;
 
-    psfl = FindFirst(nPage);
+    psfl = FindFreeList(nPage);
     if (psfl == nullptr)
         return nullptr;
 
     ps = psfl->Pop();
     // psfl: N-Page Span Free List
-    // ps: Free N-Page Span
+    // ps:   Free N-Page Span
 
     while (nPage < ps->nPage)
     {
@@ -329,7 +383,7 @@ SpanCtrlBlock::Alloc(size_t nPage)
         psfl->Insert(psSecond);
 
         // psfl: N-Page Span Free List
-        // ps: Free N-Page Span
+        // ps:   Free N-Page Span
     }
 
     return (void *)ps;
@@ -352,9 +406,10 @@ SpanCtrlBlock::Free(void * pvMemBegin, size_t nPage)
     // L Find B/AB, Merge IB, Extract IB => I, L Up, ...
     // L Find /A/B/AB, Insert I
 
-    SpanFreeList * psfl;
+    LazySpanFreeList * psfl;
 
     psfl = vsfl + IntLog2(nPage);
+    ASSERT(!psfl->HasLazySpan());
     if (psfl->Empty())
     {
         psfl->Insert(pvMemBegin, nPage);
@@ -367,32 +422,51 @@ SpanCtrlBlock::Free(void * pvMemBegin, size_t nPage)
     ps->nPage = nPage;
     ps->psNext = nullptr;
 
-    Span ** ppsLastLess;
-    Span ** ppsFirstGreater;
+    LazySpanFreeList::ForwardIterator fiLastLess;
+    LazySpanFreeList::ForwardIterator fiFirstGreater;
 
     while (true)
     {
-        ppsLastLess = nullptr;
-        ppsFirstGreater = &psfl->psHead;
+        // psfl: Non-empty N-Page Span Free List
+        // ps:   Free N-Page Span
 
-        while (*ppsFirstGreater != nullptr && *ppsFirstGreater < pvMemBegin)
+        fiLastLess      = psfl->End();
+        fiFirstGreater  = psfl->Begin();
+        while (fiFirstGreater != psfl->End() && (*fiFirstGreater).cpvMemBegin < pvMemBegin)
         {
-            ppsLastLess = ppsFirstGreater;
-            ppsFirstGreater = &(*ppsFirstGreater)->psNext;
+            fiLastLess      = fiFirstGreater;
+            ++fiFirstGreater;
         }
 
-        if (ppsLastLess &&
-            *ppsLastLess &&
+        if (fiLastLess != psfl->End() &&
             !IsEvenPage(MemBegin(), pvMemBegin, ps->nPage) &&
-            (ps = MergeSpan(*ppsLastLess, ps)) != nullptr)
+            (ps = MergeSpan((Span *)(*fiLastLess).cpvMemBegin, ps)) != nullptr)
         {
-            *ppsLastLess = (*ppsLastLess)->psNext;
+            // Extract merged span.
+            Span * psLastLess;
+            Span ** ppsLastLess;
+
+            psLastLess = (Span *)(*fiLastLess).cpvMemBegin;
+            for (ppsLastLess = &psfl->psHead;
+                 *ppsLastLess != psLastLess;
+                 ppsLastLess = &(*ppsLastLess)->psNext)
+            {}
+            *ppsLastLess = psLastLess->psNext;
         }
-        else if (*ppsFirstGreater &&
+        else if (fiFirstGreater != psfl->End() &&
                  IsEvenPage(MemBegin(), pvMemBegin, ps->nPage) &&
-                 (ps = MergeSpan(ps, *ppsFirstGreater)) != nullptr)
+                 (ps = MergeSpan(ps, (Span *)(*fiFirstGreater).cpvMemBegin)) != nullptr)
         {
-            *ppsFirstGreater = (*ppsFirstGreater)->psNext;
+            // Extract merged span.
+            Span * psFirstGreater;
+            Span ** ppsFirstGreater;
+
+            psFirstGreater = (Span *)(*fiFirstGreater).cpvMemBegin;
+            for (ppsFirstGreater = &psfl->psHead;
+                 *ppsFirstGreater != psFirstGreater;
+                 ppsFirstGreater = &(*ppsFirstGreater)->psNext)
+            {}
+            *ppsFirstGreater = psFirstGreater->psNext;
         }
         else
             break;
@@ -400,8 +474,22 @@ SpanCtrlBlock::Free(void * pvMemBegin, size_t nPage)
         ++psfl;
     }
 
-    ps->psNext          = *ppsFirstGreater;
-    *ppsFirstGreater    = ps;
+    if (fiFirstGreater == psfl->End())
+    {
+        ASSERT(psfl->psHead == nullptr);
+        psfl->psHead    = ps;
+        ps->psNext      = nullptr;
+    }
+    else
+    {
+        Span ** ppsFirstGreater;
+        for (ppsFirstGreater = &psfl->psHead;
+             *ppsFirstGreater != (Span *)(*fiFirstGreater).cpvMemBegin;
+             ppsFirstGreater = &(*ppsFirstGreater)->psNext)
+        {}
+        ps->psNext          = *ppsFirstGreater;
+        *ppsFirstGreater    = ps;
+    }
 }
 
 
@@ -456,47 +544,34 @@ const void * SpanAllocator::MemBegin() const
     return pscb->MemBegin();
 }
 
+
 // ===========================================================================
-// SpanView
+// SpanFreeList::ForwardIterator
+// LazySpanFreeList::ForwardIterator
+// SpanAllocator::ForwardIterator
 // ===========================================================================
 
-SpanView::ForwardIterator::ForwardIterator()
-    : cpsflBegin(nullptr), cpsflEnd(nullptr), cpsflCurr(nullptr), cpsCurr(nullptr)
+
+SpanFreeList::ForwardIterator::ForwardIterator()
+    : cpsCurr(nullptr)
 {
 }
 
-SpanView::ForwardIterator::ForwardIterator(const SpanFreeList * psflBegin, const SpanFreeList * psflEnd, const SpanFreeList * psflCurr)
-    : cpsflBegin(psflBegin), cpsflEnd(psflEnd), cpsflCurr(psflCurr)
+SpanFreeList::ForwardIterator::ForwardIterator(const Span * cpsCurr)
+    : cpsCurr(cpsCurr)
 {
-    cpsCurr = cpsflCurr->psHead;
-    while (cpsCurr == nullptr && cpsflCurr < cpsflEnd)
-    {
-        ++cpsflCurr;
-        cpsCurr = cpsflCurr->psHead;
-    }
 }
 
-SpanView::ForwardIterator &
-SpanView::ForwardIterator::operator ++ ()
+SpanFreeList::ForwardIterator &
+SpanFreeList::ForwardIterator::operator ++ ()
 {
-    if (cpsflCurr < cpsflEnd)
-    {
-        // Curr in free list or first non-null in Curr free lists.
-        if (cpsCurr)
-        {
-            cpsCurr = cpsCurr->psNext;
-        }
-        while (cpsCurr == nullptr && cpsflCurr < cpsflEnd)
-        {
-            ++cpsflCurr;
-            cpsCurr = cpsflCurr->psHead;
-        }
-    }
+    if (cpsCurr)
+        cpsCurr = cpsCurr->psNext;
     return *this;
 }
 
-SpanView::ForwardIterator
-SpanView::ForwardIterator::operator ++ (int)
+SpanFreeList::ForwardIterator
+SpanFreeList::ForwardIterator::operator ++ (int)
 {
     ForwardIterator tmp(*this);
     operator++();
@@ -504,39 +579,163 @@ SpanView::ForwardIterator::operator ++ (int)
 }
 
 bool
-SpanView::ForwardIterator::operator == (const ForwardIterator & o)
+SpanFreeList::ForwardIterator::operator == (const ForwardIterator & o)
 {
-    ASSERT(cpsflBegin == o.cpsflBegin && cpsflEnd == o.cpsflEnd);
     return cpsCurr == o.cpsCurr;
 }
 
 bool
-SpanView::ForwardIterator::operator != (const ForwardIterator & o)
+SpanFreeList::ForwardIterator::operator != (const ForwardIterator & o)
 {
     return !operator==(o);
 }
 
-const Span *
-SpanView::ForwardIterator::operator * ()
+SpanDescriptor
+SpanFreeList::ForwardIterator::operator * ()
 {
     ASSERT(cpsCurr);
-    return cpsCurr;
+    SpanDescriptor sd;
+    sd.cpvMemBegin  = cpsCurr;
+    sd.nPage        = cpsCurr->nPage;
+    return sd;
 }
 
-SpanView::SpanView(const SpanFreeList & sfl)
-    : beginIterator(&sfl, &sfl + 1, &sfl),
-      endIterator(&sfl, &sfl + 1, &sfl + 1)
+
+LazySpanFreeList::ForwardIterator::ForwardIterator()
+    : cpsHead(nullptr), cpsCurr(nullptr)
+{
+    sdLazySpan.cpvMemBegin  = nullptr;
+    sdLazySpan.nPage        = 0;
+}
+
+LazySpanFreeList::ForwardIterator::ForwardIterator(const void * cpvLazySpan, size_t nLazySpanPage, const Span * cpsHead, bool bBegin)
+    : cpsHead(cpsHead)
+{
+    sdLazySpan.cpvMemBegin  = cpvLazySpan;
+    sdLazySpan.nPage        = cpvLazySpan ? nLazySpanPage : 0;
+    this->cpsCurr           = bBegin
+                                ? (cpvLazySpan ? (const Span *)cpvLazySpan : cpsHead)
+                                : nullptr;
+}
+
+LazySpanFreeList::ForwardIterator &
+LazySpanFreeList::ForwardIterator::operator ++ ()
+{
+    if (cpsCurr == (const Span *)sdLazySpan.cpvMemBegin)
+        cpsCurr = cpsHead;
+    else if (cpsCurr != nullptr)
+        cpsCurr = cpsCurr->psNext;
+    return *this;
+}
+
+LazySpanFreeList::ForwardIterator
+LazySpanFreeList::ForwardIterator::operator ++ (int)
+{
+    ForwardIterator tmp(*this);
+    operator++();
+    return tmp;
+}
+
+bool
+LazySpanFreeList::ForwardIterator::operator == (const ForwardIterator & o)
+{
+    ASSERT(sdLazySpan.cpvMemBegin == o.sdLazySpan.cpvMemBegin && cpsHead == o.cpsHead);
+    return cpsCurr == o.cpsCurr;
+}
+
+bool
+LazySpanFreeList::ForwardIterator::operator != (const ForwardIterator & o)
+{
+    return !operator==(o);
+}
+
+SpanDescriptor
+LazySpanFreeList::ForwardIterator::operator * ()
+{
+    ASSERT(cpsCurr);
+    if (cpsCurr == (const Span *)sdLazySpan.cpvMemBegin)
+    {
+        return sdLazySpan;
+    }
+    else
+    {
+        SpanDescriptor sd;
+        sd.cpvMemBegin  = cpsCurr;
+        sd.nPage        = cpsCurr->nPage;
+        return sd;
+    }
+}
+
+
+SpanAllocator::ForwardIterator::ForwardIterator()
+    : cpsflBegin(nullptr), cpsflEnd(nullptr), cpsflCurr(nullptr), fiCurr()
 {
 }
 
-SpanView::SpanView(const SpanAllocator & sa)
-    : beginIterator(sa.pscb->vsfl,
-                    sa.pscb->vsfl + sa.pscb->nSpanFreeList,
-                    sa.pscb->vsfl),
-      endIterator(sa.pscb->vsfl,
-                  sa.pscb->vsfl + sa.pscb->nSpanFreeList,
-                  sa.pscb->vsfl + sa.pscb->nSpanFreeList)
+SpanAllocator::ForwardIterator::ForwardIterator(const LazySpanFreeList * psflBegin, const LazySpanFreeList * psflEnd, const LazySpanFreeList * psflCurr)
+    : cpsflBegin(psflBegin), cpsflEnd(psflEnd), cpsflCurr(psflCurr)
 {
+    fiCurr = cpsflCurr->Begin();
+    while (fiCurr == cpsflCurr->End() &&
+           cpsflCurr != cpsflEnd)
+    {
+        ++cpsflCurr, fiCurr = cpsflCurr->Begin();
+    }
+}
+
+SpanAllocator::ForwardIterator &
+SpanAllocator::ForwardIterator::operator ++ ()
+{
+    if (fiCurr != cpsflCurr->End())
+    {
+        ++fiCurr;
+        while (fiCurr == cpsflCurr->End() &&
+               cpsflCurr != cpsflEnd)
+        {
+            ++cpsflCurr, fiCurr = cpsflCurr->Begin();
+        }
+    }
+    return *this;
+}
+
+SpanAllocator::ForwardIterator
+SpanAllocator::ForwardIterator::operator ++ (int)
+{
+    ForwardIterator tmp(*this);
+    operator++();
+    return tmp;
+}
+
+bool
+SpanAllocator::ForwardIterator::operator == (const ForwardIterator & o)
+{
+    ASSERT(cpsflBegin == o.cpsflBegin && cpsflEnd == o.cpsflEnd);
+    return cpsflCurr == o.cpsflCurr && fiCurr == o.fiCurr;
+}
+
+bool
+SpanAllocator::ForwardIterator::operator != (const ForwardIterator & o)
+{
+    return !operator==(o);
+}
+
+SpanDescriptor
+SpanAllocator::ForwardIterator::operator * ()
+{
+    ASSERT(fiCurr != cpsflCurr->End());
+    return *fiCurr;
+}
+
+SpanAllocator::ForwardIterator
+SpanAllocator::Begin() const
+{
+    return ForwardIterator(pscb->vsfl, pscb->vsfl + pscb->nSpanFreeList, pscb->vsfl);
+}
+
+SpanAllocator::ForwardIterator
+SpanAllocator::End() const
+{
+    return ForwardIterator(pscb->vsfl, pscb->vsfl + pscb->nSpanFreeList, pscb->vsfl + pscb->nSpanFreeList);
 }
 
 }
