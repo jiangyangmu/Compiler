@@ -195,3 +195,18 @@ private:
                       << std::endl;                                   \
         }                                                             \
     } while (false)
+
+#define ASSERT_EQ(left, right)                                                \
+    do                                                                        \
+    {                                                                         \
+        auto __l = (left);                                                    \
+        auto __r = (right);                                                   \
+        if (!((__l) == (__r)))                                                \
+        {                                                                     \
+            std::cerr << "Expr:  (" #left ") == (" #right ")" << std::endl    \
+                      << "  at " << __FILE__ << ":" << __LINE__ << std::endl  \
+                      << "Left:  " << (__l) << std::endl                      \
+                      << "Right: " << (__r) << std::endl;                     \
+            assert(false);                                                    \
+        }                                                                     \
+    } while (false)

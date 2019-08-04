@@ -2,8 +2,8 @@
 
 #include <vector>
 
-#include "../Util/Common.h"
-#include "../Util/String.h"
+#include "../Base/Common.h"
+#include "../Base/String.h"
 #include "../Preprocess/Preprocess.h"
 
 class Token {

@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../Util/Common.h"
+#include "../Base/Common.h"
 #include "../IR/TypeContext.h"
 
 namespace Language {

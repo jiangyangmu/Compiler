@@ -19,50 +19,65 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="..\..\Source\codegen\AstCompiler.h" />
-    <ClInclude Include="..\..\Source\codegen\Translation.h" />
+    <ClInclude Include="..\..\Source\Base\Bit.h" />
+    <ClInclude Include="..\..\Source\Base\Charset.h" />
+    <ClInclude Include="..\..\Source\Base\common.h" />
+    <ClInclude Include="..\..\Source\Base\Integer.h" />
+    <ClInclude Include="..\..\Source\Base\logging.h" />
+    <ClInclude Include="..\..\Source\Base\String.h" />
+    <ClInclude Include="..\..\Source\CodeGeneration\AstCompiler.h" />
+    <ClInclude Include="..\..\Source\CodeGeneration\Translation.h" />
     <ClInclude Include="..\..\Source\ir\CallingConvention.h" />
     <ClInclude Include="..\..\Source\ir\ConstantContext.h" />
     <ClInclude Include="..\..\Source\ir\DefinitionContext.h" />
     <ClInclude Include="..\..\Source\ir\FunctionContext.h" />
     <ClInclude Include="..\..\Source\ir\Location.h" />
     <ClInclude Include="..\..\Source\ir\TypeContext.h" />
-    <ClInclude Include="..\..\Source\logging\logging.h" />
-    <ClInclude Include="..\..\Source\Parser\AstParser.h" />
-    <ClInclude Include="..\..\Source\Parser\TokenParser.h" />
+    <ClInclude Include="..\..\Source\Memory\Allocate.h" />
+    <ClInclude Include="..\..\Source\Memory\FreeListAllocator.h" />
+    <ClInclude Include="..\..\Source\Memory\Address.h" />
+    <ClInclude Include="..\..\Source\Memory\Span.h" />
+    <ClInclude Include="..\..\Source\Parse\AstParser.h" />
+    <ClInclude Include="..\..\Source\Parse\TokenParser.h" />
     <ClInclude Include="..\..\Source\Preprocess\Preprocess.h" />
-    <ClInclude Include="..\..\Source\util\Bit.h" />
-    <ClInclude Include="..\..\Source\util\Charset.h" />
-    <ClInclude Include="..\..\Source\util\common.h" />
-    <ClInclude Include="..\..\Source\util\Integer.h" />
-    <ClInclude Include="..\..\Source\util\String.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\Source\codegen\AstCompiler.cpp" />
-    <ClCompile Include="..\..\Source\codegen\Translation.cpp" />
+    <ClCompile Include="..\..\Source\Base\Charset.cpp" />
+    <ClCompile Include="..\..\Source\Base\logging.cpp" />
+    <ClCompile Include="..\..\Source\Base\String.cpp" />
+    <ClCompile Include="..\..\Source\CodeGeneration\AstCompiler.cpp" />
+    <ClCompile Include="..\..\Source\CodeGeneration\Translation.cpp" />
+    <ClCompile Include="..\..\Source\CompilerMain.cpp" />
     <ClCompile Include="..\..\Source\ir\CallingConvention.cpp" />
     <ClCompile Include="..\..\Source\ir\ConstantContext.cpp" />
     <ClCompile Include="..\..\Source\ir\DefinitionContext.cpp" />
     <ClCompile Include="..\..\Source\ir\FunctionContext.cpp" />
     <ClCompile Include="..\..\Source\ir\TypeContext.cpp" />
-    <ClCompile Include="..\..\Source\logging\logging.cpp" />
-    <ClCompile Include="..\..\Source\main.cpp" />
-    <ClCompile Include="..\..\Source\Parser\AstParser.cpp" />
-    <ClCompile Include="..\..\Source\Parser\TokenParser.cpp" />
+    <ClCompile Include="..\..\Source\Memory\FreeListAllocator.cpp" />
+    <ClCompile Include="..\..\Source\Memory\Span.cpp" />
+    <ClCompile Include="..\..\Source\Parse\AstParser.cpp" />
+    <ClCompile Include="..\..\Source\Parse\TokenParser.cpp" />
     <ClCompile Include="..\..\Source\Preprocess\Preprocess.cpp" />
-    <ClCompile Include="..\..\Source\util\Charset.cpp" />
-    <ClCompile Include="..\..\Source\util\String.cpp" />
+    <None Include="..\..\Test\SampleProgram\Program.c">
+      <FileType>CppCode</FileType>
+    </None>
+    <None Include="..\..\Test\SampleProgram\Simple.c">
+      <FileType>CppCode</FileType>
+    </None>
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\..\Source\DEBUG.md" />
-    <None Include="..\..\Source\IR.md" />
-    <None Include="..\..\Source\MOD.md" />
-    <None Include="..\..\Source\TODO.md" />
-    <None Include="..\..\Test\PROG.md" />
+    <None Include="..\..\Document\DEBUG.md" />
+    <None Include="..\..\Document\IR.md" />
+    <None Include="..\..\Document\LIBC.md" />
+    <None Include="..\..\Document\MOD.md" />
+    <None Include="..\..\Document\MOD_mem.md" />
+    <None Include="..\..\Document\MOD_vm.md" />
+    <None Include="..\..\Document\PROG.md" />
+    <None Include="..\..\Document\TODO.md" />
+    <None Include="..\..\Document\TODO_mem.md" />
   </ItemGroup>
   <ItemGroup>
-    <Text Include="..\..\Source\ir\BNF.txt" />
-    <Text Include="..\..\Test\Simple.txt" />
+    <Text Include="..\..\Document\AstBNF.txt" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{DDAE5B18-7E5C-4827-9485-288273BE3AEB}</ProjectGuid>

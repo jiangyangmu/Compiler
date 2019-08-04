@@ -1,7 +1,7 @@
 #include "Preprocess.h"
 
-#include "../Util/Common.h"
-#include "../Util/Charset.h"
+#include "../Base/Common.h"
+#include "../Base/Charset.h"
 
 #include <fstream>
 

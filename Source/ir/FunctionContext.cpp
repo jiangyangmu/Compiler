@@ -1,7 +1,7 @@
 #include "FunctionContext.h"
 
 #include "CallingConvention.h"
-#include "../Util/Bit.h"
+#include "../Base/Bit.h"
 
 namespace Language {
 

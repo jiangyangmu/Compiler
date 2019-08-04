@@ -3,7 +3,7 @@
 #include "ConstantContext.h"
 #include "DefinitionContext.h"
 #include "Location.h"
-#include "../Util/Integer.h"
+#include "../Base/Integer.h"
 
 namespace Language {
 

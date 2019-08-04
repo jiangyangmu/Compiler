@@ -19,13 +19,16 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <ClCompile Include="..\..\Source\Memory\FreeListAllocator.cpp" />
     <ClCompile Include="..\..\Source\Memory\Span.cpp" />
-    <ClCompile Include="..\..\Source\testing\testing_main.cpp" />
+    <ClCompile Include="..\..\Source\UnitTest\UnitTestMain.cpp" />
     <ClCompile Include="..\..\Test\UnitTest_Memory.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <ClInclude Include="..\..\Source\Memory\Address.h" />
+    <ClInclude Include="..\..\Source\Memory\FreeListAllocator.h" />
     <ClInclude Include="..\..\Source\Memory\Span.h" />
-    <ClInclude Include="..\..\Source\testing\tester.h" />
+    <ClInclude Include="..\..\Source\UnitTest\UnitTest.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{CF738DCF-56CF-4A46-9093-ACF110713206}</ProjectGuid>
@@ -83,7 +86,7 @@
     <LinkIncremental>true</LinkIncremental>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
-    <LinkIncremental>true</LinkIncremental>
+    <LinkIncremental>false</LinkIncremental>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
@@ -102,6 +105,7 @@
     <Link>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
+      <Profile>true</Profile>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
@@ -120,6 +124,7 @@
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>true</GenerateDebugInformation>
       <GenerateMapFile>true</GenerateMapFile>
+      <Profile>true</Profile>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">

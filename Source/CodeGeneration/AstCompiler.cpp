@@ -4,7 +4,7 @@
 #include <deque>
 
 #include "AstCompiler.h"
-#include "../Logging/Logging.h"
+#include "../Base/Logging.h"
 
 AstCompileContext * CreateAstCompileContext()
 {

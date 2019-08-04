@@ -1,12 +1,9 @@
 #pragma once
 
-#include "../Util/Integer.h"
+#include "../Base/Integer.h"
+#include "Address.h"
 
 namespace LowLevel {
-
-constexpr size_t PAGE_SIZE = 4096;              // 4KB
-constexpr int    PAGE_SIZE_BITS = 12;
-//constexpr size_t NUM_PAGE_PER_SPAN = 16 * 1024; // 64MB
 
 struct Span {
     Span * psNext;
@@ -161,6 +158,7 @@ public:
     void    Free(void * pvMemBegin, size_t nPage);
 
     const void * MemBegin() const;
+    bool Contains(const void * pvAddr) const;
 
 public:
     class ForwardIterator {
@@ -198,13 +196,18 @@ private:
 
     SpanCtrlBlock * pscb;
 
-    friend SpanAllocator CreateSpanAllocator(size_t nReservedPage);
-    friend SpanAllocator CreateSpanAllocator(void * pvMemBegin, size_t nPage);
+    friend SpanAllocator   CreateSpanAllocator(size_t nReservedPage);
+    friend SpanAllocator   CreateSpanAllocator(void * pvMemBegin, size_t nPage);
+    friend SpanAllocator * GetDefaultSpanAllocator();
 };
 
+// constexpr size_t DEFAULT_NUM_PAGE_PER_SPAN = 16 * 1024; // 64MB
+constexpr size_t DEFAULT_NUM_PAGE_PER_SPAN = 4; // 1MB
+
 // nReservedPage must be power of 2, at least 16
-SpanAllocator CreateSpanAllocator(size_t nReservedPage);
-SpanAllocator CreateSpanAllocator(void * pvMemBegin, size_t nPage);
+SpanAllocator   CreateSpanAllocator(size_t nReservedPage);
+SpanAllocator   CreateSpanAllocator(void * pvMemBegin, size_t nPage);
+SpanAllocator * GetDefaultSpanAllocator();
 
 // Adapter. T = {SpanFreeList, LazySpanFreeList, SpanAllocator}
 template <typename T>

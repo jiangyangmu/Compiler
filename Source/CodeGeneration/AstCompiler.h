@@ -1,6 +1,6 @@
 #pragma once
 
-#include "../Parser/AstParser.h"
+#include "../Parse/AstParser.h"
 #include "../IR/DefinitionContext.h"
 #include "../IR/TypeContext.h"
 #include "../IR/FunctionContext.h"

@@ -6,12 +6,12 @@
 #include <vector>
 #include <streambuf>
 
-#include "Util/Common.h"
-#include "Util/String.h"
+#include "Base/Common.h"
+#include "Base/String.h"
 #include "Preprocess/Preprocess.h"
-#include "Parser/AstParser.h"
-#include "CodeGen/AstCompiler.h"
-#include "CodeGen/Translation.h"
+#include "Parse/AstParser.h"
+#include "CodeGeneration/AstCompiler.h"
+#include "CodeGeneration/Translation.h"
 
 using namespace std;
 
@@ -121,8 +121,8 @@ int main(int argc, char *argv[])
     }
     else
     {
-        std::cout << "Input: " << "C:\\Users\\celsi\\Documents\\Github\\cc\\Test\\Simple.txt" << std::endl;
-        std::string sourceCode = GetFileContent("C:\\Users\\celsi\\Documents\\Github\\cc\\Test\\Simple.txt");
+        std::cout << "Input: " << "C:\\Users\\celsi\\Documents\\Github\\cc\\Test\\SampleProgram\\Simple.c" << std::endl;
+        std::string sourceCode = GetFileContent("C:\\Users\\celsi\\Documents\\Github\\cc\\Test\\SampleProgram\\Simple.c");
         (void)Compile(sourceCode);
     }
     return 0;

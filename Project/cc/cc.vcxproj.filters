@@ -1,38 +1,14 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <ClInclude Include="..\..\Source\logging\logging.h">
-      <Filter>Util</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Source\util\String.h">
-      <Filter>Util</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Source\util\Integer.h">
-      <Filter>Util</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\Source\ir\Location.h">
       <Filter>IR</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Source\codegen\AstCompiler.h">
-      <Filter>CodeGeneration</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Source\util\Bit.h">
-      <Filter>Util</Filter>
     </ClInclude>
     <ClInclude Include="..\..\Source\ir\CallingConvention.h">
       <Filter>IR</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Source\codegen\Translation.h">
-      <Filter>CodeGeneration</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\Source\Preprocess\Preprocess.h">
-      <Filter>Preproc</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Source\util\common.h">
-      <Filter>Util</Filter>
-    </ClInclude>
-    <ClInclude Include="..\..\Source\util\Charset.h">
-      <Filter>Util</Filter>
+      <Filter>Preprocess</Filter>
     </ClInclude>
     <ClInclude Include="..\..\Source\ir\TypeContext.h">
       <Filter>IR</Filter>
@@ -46,35 +22,55 @@
     <ClInclude Include="..\..\Source\ir\FunctionContext.h">
       <Filter>IR</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Source\Parser\AstParser.h">
-      <Filter>Parser</Filter>
+    <ClInclude Include="..\..\Source\Memory\Span.h">
+      <Filter>Memory</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Source\Parser\TokenParser.h">
-      <Filter>Parser</Filter>
+    <ClInclude Include="..\..\Source\Memory\Allocate.h">
+      <Filter>Memory</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\Memory\FreeListAllocator.h">
+      <Filter>Memory</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\Memory\Address.h">
+      <Filter>Memory</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\CodeGeneration\AstCompiler.h">
+      <Filter>CodeGeneration</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\CodeGeneration\Translation.h">
+      <Filter>CodeGeneration</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\Base\Bit.h">
+      <Filter>Base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\Base\Charset.h">
+      <Filter>Base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\Base\common.h">
+      <Filter>Base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\Base\Integer.h">
+      <Filter>Base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\Base\logging.h">
+      <Filter>Base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\Base\String.h">
+      <Filter>Base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\Parse\AstParser.h">
+      <Filter>Parse</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\Parse\TokenParser.h">
+      <Filter>Parse</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="..\..\Source\main.cpp" />
-    <ClCompile Include="..\..\Source\logging\logging.cpp">
-      <Filter>Util</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Source\codegen\AstCompiler.cpp">
-      <Filter>CodeGeneration</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Source\codegen\Translation.cpp">
-      <Filter>CodeGeneration</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\Source\ir\CallingConvention.cpp">
       <Filter>IR</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Source\Preprocess\Preprocess.cpp">
-      <Filter>Preproc</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Source\util\String.cpp">
-      <Filter>Util</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Source\util\Charset.cpp">
-      <Filter>Util</Filter>
+      <Filter>Preprocess</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Source\ir\TypeContext.cpp">
       <Filter>IR</Filter>
@@ -88,19 +84,34 @@
     <ClCompile Include="..\..\Source\ir\FunctionContext.cpp">
       <Filter>IR</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Source\Parser\AstParser.cpp">
-      <Filter>Parser</Filter>
+    <ClCompile Include="..\..\Source\Memory\Span.cpp">
+      <Filter>Memory</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Source\Parser\TokenParser.cpp">
-      <Filter>Parser</Filter>
+    <ClCompile Include="..\..\Source\Memory\FreeListAllocator.cpp">
+      <Filter>Memory</Filter>
     </ClCompile>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="..\..\Source\TODO.md" />
-    <None Include="..\..\Source\MOD.md" />
-    <None Include="..\..\Test\PROG.md" />
-    <None Include="..\..\Source\IR.md" />
-    <None Include="..\..\Source\DEBUG.md" />
+    <ClCompile Include="..\..\Source\CodeGeneration\AstCompiler.cpp">
+      <Filter>CodeGeneration</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\CodeGeneration\Translation.cpp">
+      <Filter>CodeGeneration</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\Base\Charset.cpp">
+      <Filter>Base</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\Base\logging.cpp">
+      <Filter>Base</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\Base\String.cpp">
+      <Filter>Base</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\Parse\AstParser.cpp">
+      <Filter>Parse</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\Parse\TokenParser.cpp">
+      <Filter>Parse</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\CompilerMain.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="IR">
@@ -109,25 +120,63 @@
     <Filter Include="CodeGeneration">
       <UniqueIdentifier>{4493f16a-2ae3-43d5-a0f7-bdd44a5a117c}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Util">
-      <UniqueIdentifier>{6f481897-d87c-4b8c-8723-169db4bcf41b}</UniqueIdentifier>
-    </Filter>
     <Filter Include="TestProgram">
       <UniqueIdentifier>{59b13598-559f-4567-9a35-1ee130d76635}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Preproc">
-      <UniqueIdentifier>{852f7727-a09e-425f-a7ae-622b50d8a239}</UniqueIdentifier>
+    <Filter Include="Memory">
+      <UniqueIdentifier>{3dfe2bf4-06b2-4b30-a348-9e5c8a10a3fd}</UniqueIdentifier>
     </Filter>
-    <Filter Include="Parser">
+    <Filter Include="Doc">
+      <UniqueIdentifier>{7c4f0d56-b319-4fec-8209-56b4c478af82}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Base">
+      <UniqueIdentifier>{6f481897-d87c-4b8c-8723-169db4bcf41b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Parse">
       <UniqueIdentifier>{84354ce6-3e42-4a96-b0b2-e97732922331}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Preprocess">
+      <UniqueIdentifier>{852f7727-a09e-425f-a7ae-622b50d8a239}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <Text Include="..\..\Test\Simple.txt">
+    <None Include="..\..\Document\DEBUG.md">
+      <Filter>Doc</Filter>
+    </None>
+    <None Include="..\..\Document\IR.md">
+      <Filter>Doc</Filter>
+    </None>
+    <None Include="..\..\Document\LIBC.md">
+      <Filter>Doc</Filter>
+    </None>
+    <None Include="..\..\Document\MOD.md">
+      <Filter>Doc</Filter>
+    </None>
+    <None Include="..\..\Document\MOD_mem.md">
+      <Filter>Doc</Filter>
+    </None>
+    <None Include="..\..\Document\MOD_vm.md">
+      <Filter>Doc</Filter>
+    </None>
+    <None Include="..\..\Document\PROG.md">
+      <Filter>Doc</Filter>
+    </None>
+    <None Include="..\..\Document\TODO.md">
+      <Filter>Doc</Filter>
+    </None>
+    <None Include="..\..\Document\TODO_mem.md">
+      <Filter>Doc</Filter>
+    </None>
+    <None Include="..\..\Test\SampleProgram\Program.c">
       <Filter>TestProgram</Filter>
-    </Text>
-    <Text Include="..\..\Source\ir\BNF.txt">
-      <Filter>IR</Filter>
+    </None>
+    <None Include="..\..\Test\SampleProgram\Simple.c">
+      <Filter>TestProgram</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="..\..\Document\AstBNF.txt">
+      <Filter>Parse</Filter>
     </Text>
   </ItemGroup>
 </Project>

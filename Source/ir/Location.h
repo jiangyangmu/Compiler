@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../util/Integer.h"
-#include "../ir/DefinitionContext.h"
+#include "../Base/Integer.h"
+#include "../IR/DefinitionContext.h"
 
 enum RegisterType
 {

@@ -1,7 +1,7 @@
 #pragma once
 
-#include "../Util/String.h"
-#include "../Util/Integer.h"
+#include "../Base/String.h"
+#include "../Base/Integer.h"
 
 #include <vector>
 #include <map>

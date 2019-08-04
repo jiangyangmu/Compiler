@@ -1,5 +1,6 @@
-#include "testing/tester.h"
+#include "../Source/Testing/Tester.h"
 
+/*
 #include "lex/tokenizer.h"
 
 class LexTest : public Tester {
@@ -13,10 +14,17 @@ public:
         tokenizer_.compile(scanner_);
         return tokenizer_.getIterator();
     }
+    void CheckFileEnd(TokenIterator tokens) {
+        EXPECT_EQ(tokens.has(), true);
+        EXPECT_EQ(tokens.peek().type, Token::FILE_END);
+        tokens.next();
+        EXPECT_EQ(tokens.has(), false);
+    }
     std::vector<Token::Type> Types(TokenIterator tokens) {
         std::vector<Token::Type> result;
-        while (tokens.has())
+        while (tokens.has() && tokens.peek().type != Token::FILE_END)
             result.push_back(tokens.next().type);
+        CheckFileEnd(tokens);
         return result;
     }
     std::vector<Token::Type> Types(std::initializer_list<Token::Type> types) {
@@ -25,11 +33,12 @@ public:
     std::vector<std::pair<Token::Type, StringRef>> TypesAndTexts(
         TokenIterator tokens) {
         std::vector<std::pair<Token::Type, StringRef>> result;
-        while (tokens.has())
+        while (tokens.has() && tokens.peek().type != Token::FILE_END)
         {
             Token token = tokens.next();
             result.emplace_back(token.type, token.text);
         }
+        CheckFileEnd(tokens);
         return result;
     }
     std::vector<std::pair<Token::Type, StringRef>> TypesAndTexts(
@@ -40,11 +49,12 @@ public:
     std::vector<std::pair<Token::Type, double>> TypesAndFValue(
         TokenIterator tokens) {
         std::vector<std::pair<Token::Type, double>> result;
-        while (tokens.has())
+        while (tokens.has() && tokens.peek().type != Token::FILE_END)
         {
             Token token = tokens.next();
             result.emplace_back(token.type, token.fval);
         }
+        CheckFileEnd(tokens);
         return result;
     }
     std::vector<std::pair<Token::Type, double>> TypesAndFValue(
@@ -54,11 +64,12 @@ public:
     std::vector<std::pair<Token::Type, int>> TypesAndIValue(
         TokenIterator tokens) {
         std::vector<std::pair<Token::Type, int>> result;
-        while (tokens.has())
+        while (tokens.has() && tokens.peek().type != Token::FILE_END)
         {
             Token token = tokens.next();
             result.emplace_back(token.type, token.ival);
         }
+        CheckFileEnd(tokens);
         return result;
     }
     std::vector<std::pair<Token::Type, int>> TypesAndIValue(
@@ -68,11 +79,12 @@ public:
     std::vector<std::pair<Token::Type, int>> TypesAndCValue(
         TokenIterator tokens) {
         std::vector<std::pair<Token::Type, int>> result;
-        while (tokens.has())
+        while (tokens.has() && tokens.peek().type != Token::FILE_END)
         {
             Token token = tokens.next();
             result.emplace_back(token.type, token.cval);
         }
+        CheckFileEnd(tokens);
         return result;
     }
     std::vector<std::pair<Token::Type, int>> TypesAndCValue(
@@ -158,3 +170,4 @@ TEST_F(LexTest, Char) {
     EXPECT_EQ_LIST(TypesAndCValue(Tokens("'a'")),
                    TypesAndCValue({{Token::CONST_CHAR, 'a'}}));
 }
+*/

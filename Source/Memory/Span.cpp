@@ -5,7 +5,7 @@
 #include <cstdio>
 #include <cassert>
 
-#include "../Util/Common.h"
+#include "../Base/Common.h"
 
 namespace LowLevel {
 
@@ -408,6 +408,9 @@ SpanCtrlBlock::Free(void * pvMemBegin, size_t nPage)
 
     LazySpanFreeList * psfl;
 
+    ASSERT(PageBegin(pvMemBegin) == pvMemBegin);
+    ASSERT(MemBegin() <= pvMemBegin && pvMemBegin < MemEnd());
+
     psfl = vsfl + IntLog2(nPage);
     ASSERT(!psfl->HasLazySpan());
     if (psfl->Empty())
@@ -523,6 +526,22 @@ SpanAllocator CreateSpanAllocator(void * pvMemBegin, size_t nPage)
 
     return sa;
 }
+
+SpanAllocator * GetDefaultSpanAllocator()
+{
+    static SpanAllocator sa;
+
+    if (sa.pscb == nullptr)
+    {
+        new (&sa) SpanAllocator(
+            CreateSpanAllocator(DEFAULT_NUM_PAGE_PER_SPAN)
+        );
+        ASSERT(sa.pscb);
+    }
+
+    return &sa;
+}
+
 SpanAllocator::~SpanAllocator()
 {
     if (pscb)
@@ -544,6 +563,11 @@ const void * SpanAllocator::MemBegin() const
     return pscb->MemBegin();
 }
 
+
+bool SpanAllocator::Contains(const void * pvAddr) const
+{
+    return pscb->MemBegin() <= pvAddr && pvAddr < pscb->MemEnd();
+}
 
 // ===========================================================================
 // SpanFreeList::ForwardIterator

@@ -1,6 +1,6 @@
 #include "TypeContext.h"
-#include "../Util/Common.h"
-#include "../Util/Bit.h"
+#include "../Base/Common.h"
+#include "../Base/Bit.h"
 
 namespace Language {
 

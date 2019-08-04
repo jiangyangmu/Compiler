@@ -1,7 +1,7 @@
 #include "Translation.h"
 
 #include "../IR/CallingConvention.h"
-#include "../Util/Bit.h"
+#include "../Base/Bit.h"
 
 namespace Language
 {

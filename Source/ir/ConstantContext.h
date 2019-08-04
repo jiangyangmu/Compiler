@@ -1,7 +1,7 @@
 #pragma once
 
 #include "Location.h"
-#include "../Util/String.h"
+#include "../Base/String.h"
 
 namespace Language {
 
