@@ -64,6 +64,12 @@
     <ClInclude Include="..\..\Source\Parse\TokenParser.h">
       <Filter>Parse</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\Source\Base\ErrorHandling.h">
+      <Filter>Base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\Parse\ParseMacros.h">
+      <Filter>Parse</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\Source\ir\CallingConvention.cpp">

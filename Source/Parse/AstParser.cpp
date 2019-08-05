@@ -1,5 +1,9 @@
 #include "AstParser.h"
 
+#include <iostream>
+
+#include "../Base/common.h"
+
 Ast * NewAst(AstType type)
 {
     Ast * ast = new Ast;
@@ -16,14 +20,6 @@ Ast * NewAst(AstType type, Token token)
     return ast;
 }
 
-// always valid assertion
-#define ASSERT(e)                                                          \
-    (void)((!!(e)) ||                                                      \
-           (_wassert(                                                      \
-                _CRT_WIDE(#e), _CRT_WIDE(__FILE__), (unsigned)(__LINE__)), \
-            0))
-
-#define ARRAY_SIZE(a) (sizeof(a) / sizeof((a)[0]))
 bool Contains(Token::Type type,
               const Token::Type * types,size_t size)
 {
@@ -47,7 +43,7 @@ bool First(AstType at, const Token & token)
                                         Token::KW_AUTO,
                                         Token::KW_REGISTER,
                                     };
-        return Contains(type, first, ARRAY_SIZE(first));
+        return Contains(type, first, ELEMENT_COUNT(first));
     }
     else if (at == TYPE_QUALIFIER)
     {
@@ -55,7 +51,7 @@ bool First(AstType at, const Token & token)
                                         Token::KW_CONST,
                                         Token::KW_VOLATILE,
                                     };
-        return Contains(type, first, ARRAY_SIZE(first));
+        return Contains(type, first, ELEMENT_COUNT(first));
     }
     else if (at == TYPE_SPECIFIER)
     {
@@ -74,7 +70,7 @@ bool First(AstType at, const Token & token)
                                         Token::KW_ENUM,
                                         //Token::ID,  // must be a type name
                                     };
-        return Contains(type, first, ARRAY_SIZE(first));
+        return Contains(type, first, ELEMENT_COUNT(first));
     }
     else if (at == DECLARATION_SPECIFIERS)
     {
@@ -89,7 +85,7 @@ bool First(AstType at, const Token & token)
                                         Token::LP,
                                         Token::ID,
                                     };
-        return Contains(type, first, ARRAY_SIZE(first));
+        return Contains(type, first, ELEMENT_COUNT(first));
     }
     else if (at == ABSTRACT_DECLARATOR)
     {
@@ -98,7 +94,7 @@ bool First(AstType at, const Token & token)
                                         Token::LP,
                                         Token::LSB,
                                     };
-        return Contains(type, first, ARRAY_SIZE(first));
+        return Contains(type, first, ELEMENT_COUNT(first));
     }
     else if (at == DECLARATION)
     {
@@ -111,7 +107,7 @@ bool First(AstType at, const Token & token)
                                         Token::KW_CASE,
                                         Token::KW_DEFAULT,
                                     };
-        return Contains(type, first, ARRAY_SIZE(first));
+        return Contains(type, first, ELEMENT_COUNT(first));
     }
     else if (at == COMPOUND_STMT)
     {
@@ -128,7 +124,7 @@ bool First(AstType at, const Token & token)
                                         Token::KW_IF,
                                         Token::KW_SWITCH,
                                     };
-        return Contains(type, first, ARRAY_SIZE(first));
+        return Contains(type, first, ELEMENT_COUNT(first));
     }
     else if (at == ITERATION_STMT)
     {
@@ -137,7 +133,7 @@ bool First(AstType at, const Token & token)
                                         Token::KW_DO,
                                         Token::KW_FOR,
                                     };
-        return Contains(type, first, ARRAY_SIZE(first));
+        return Contains(type, first, ELEMENT_COUNT(first));
     }
     else if (at == JUMP_STMT)
     {
@@ -147,7 +143,7 @@ bool First(AstType at, const Token & token)
                                         Token::KW_BREAK,
                                         Token::KW_RETURN,
                                     };
-        return Contains(type, first, ARRAY_SIZE(first));
+        return Contains(type, first, ELEMENT_COUNT(first));
     }
     else if (at == STMT)
     {
@@ -177,7 +173,7 @@ bool First(AstType at, const Token & token)
                                         Token::CONST_FLOAT,
                                         Token::STRING,
                                     };
-        return Contains(type, first, ARRAY_SIZE(first));
+        return Contains(type, first, ELEMENT_COUNT(first));
     }
     ASSERT(false);
     return false;
@@ -1377,7 +1373,7 @@ void DebugPrintAstImpl(Ast * ast, size_t indent)
     {
         for (size_t i = 0; i < indent; ++i)
             std::cout << ' ';
-        assert((unsigned)ast->type < sizeof(astTypeString) / sizeof(void *));
+        ASSERT((unsigned)ast->type < sizeof(astTypeString) / sizeof(void *));
         std::cout << astTypeString[(unsigned)ast->type];
         if (ast->type == IDENTIFIER)
         {

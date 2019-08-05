@@ -47,7 +47,7 @@ typedef std::vector<std::pair<size_t, const void *>> SpanVector;
         for (auto i : v2) std::cerr << "\t{ " << i.nPage << ", " << i.cpvMemBegin << " }\n"; \
         std::cerr << std::endl; \
         TestRunner::Get().SetError(true); \
-        assert(false); \
+        std::exit(EXIT_FAILURE); \
     } \
 } while (false);
 

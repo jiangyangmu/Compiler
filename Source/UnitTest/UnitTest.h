@@ -207,6 +207,6 @@ private:
                       << "  at " << __FILE__ << ":" << __LINE__ << std::endl  \
                       << "Left:  " << (__l) << std::endl                      \
                       << "Right: " << (__r) << std::endl;                     \
-            assert(false);                                                    \
+            std::exit(EXIT_FAILURE);                                          \
         }                                                                     \
     } while (false)

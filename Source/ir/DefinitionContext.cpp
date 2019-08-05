@@ -1,5 +1,7 @@
 #include "DefinitionContext.h"
 
+#include <iostream>
+
 namespace Language {
 
 ObjectDefinition * AsObjectDefinition(Definition * definition)

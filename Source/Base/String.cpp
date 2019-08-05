@@ -39,7 +39,7 @@ ByteArray::ByteArray(ByteArray && other) : data_(other.data_), size_(other.size_
 
 ByteArray::ByteArray(const char * data, size_t size)
 {
-    assert(size > 0);
+    ASSERT(size > 0);
     data_ = new char[size];
     size_ = capacity_ = size;
     CopyBytes(data, data_, size);
@@ -84,13 +84,13 @@ void ByteArray::Clear()
 
 char ByteArray::First() const
 {
-    assert(size_ > 0);
+    ASSERT(size_ > 0);
     return *data_;
 }
 
 char ByteArray::Last() const
 {
-    assert(size_ > 0);
+    ASSERT(size_ > 0);
     return *(data_ + size_ - 1);
 }
 
@@ -114,7 +114,7 @@ void ByteArray::Reserve(size_t capacity)
 
 void ByteArray::SetSize(size_t size)
 {
-    assert(size <= capacity_);
+    ASSERT(size <= capacity_);
 
     size_ = size;
 }

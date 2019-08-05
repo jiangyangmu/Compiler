@@ -1,16 +1,17 @@
 #pragma once
 
-#include <cassert>
 #include <cstring>
 #include <string>
 #include <iterator>
+
+#include "ErrorHandling.h"
 
 class StringBuf
 {
 public:
     explicit StringBuf(const char *data)
     {
-        assert(data != nullptr);
+        ASSERT(data != nullptr);
 
         size_t count = static_cast<size_t>(strlen(data));
         char *data2 = new char[count + 1];
@@ -24,7 +25,7 @@ public:
 
     StringBuf(const char *data, size_t n)
     {
-        assert(data != nullptr);
+        ASSERT(data != nullptr);
 
         size_t count = static_cast<size_t>(strlen(data));
         count = (count > n) ? n : count;
@@ -89,7 +90,7 @@ public:
     }
     StringRef(const char *data)
     {
-        assert(data != nullptr);
+        ASSERT(data != nullptr);
 
         begin_ = data;
         end_ = data + strlen(begin_);
@@ -97,7 +98,7 @@ public:
     // fast or safety ? fast
     StringRef(const char *data, size_t n)
     {
-        assert(data != nullptr);
+        ASSERT(data != nullptr);
 
         begin_ = data;
         end_ = data + n;
@@ -124,13 +125,13 @@ public:
 
     char front() const
     {
-        assert(!empty());
+        ASSERT(!empty());
         return *begin_;
     }
 
     char back() const
     {
-        assert(!empty());
+        ASSERT(!empty());
         return *(end_ - 1);
     }
 
@@ -159,7 +160,7 @@ public:
 
     char operator[](size_t offset) const
     {
-        assert((begin_ + offset) < end_);
+        ASSERT((begin_ + offset) < end_);
         return begin_[offset];
     }
 
@@ -181,7 +182,7 @@ public:
 
     friend bool operator==(const StringRef &s1, const char *s2)
     {
-        assert(s2 != nullptr);
+        ASSERT(s2 != nullptr);
 
         const char *p1 = s1.begin_, *p2 = s2;
         while (p1 != s1.end_ && *p2 != '\0')

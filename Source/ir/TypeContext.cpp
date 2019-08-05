@@ -1,4 +1,7 @@
 #include "TypeContext.h"
+
+#include <iostream>
+
 #include "../Base/Common.h"
 #include "../Base/Bit.h"
 

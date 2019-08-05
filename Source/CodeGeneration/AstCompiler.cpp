@@ -5,6 +5,7 @@
 
 #include "AstCompiler.h"
 #include "../Base/Logging.h"
+#include "../Parse/ParseMacros.h"
 
 AstCompileContext * CreateAstCompileContext()
 {
@@ -112,7 +113,7 @@ public:
 
 #undef __check_set
 
-        assert((~type_specifier_allow_ & type_specifier_has_) == 0);
+        ASSERT((~type_specifier_allow_ & type_specifier_has_) == 0);
     }
 
     Language::Type * Build(Language::TypeContext * context) {
@@ -120,7 +121,7 @@ public:
             return builtType;
 
         if (type_specifier_has_ & 0xe00) // struct/union/enum/typedef
-            return builtType = (CHECK(m_Type != 0), m_Type);   // TODO: copy?
+            return builtType = (ASSERT(m_Type != 0), m_Type);   // TODO: copy?
         else if (type_specifier_has_ == 0x1) // void
             return builtType = &Language::MakeVoid(context)->type;
         else if (type_specifier_has_ == 0x2) // char

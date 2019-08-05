@@ -441,7 +441,7 @@ static inline int EvalInt(StringRef text) {
     int i = 0;
     for (char c : text)
     {
-        CHECK(isdigit(c));
+        ASSERT(isdigit(c));
         i = i * 10 + (c - '0');
     }
     return i;
@@ -449,7 +449,7 @@ static inline int EvalInt(StringRef text) {
 
 static inline int EvalChar(StringRef text) {
     // TODO implement EvalChar()
-    assert((text.size() == 3 && text[0] == '\'' && text[2] == '\'') ||
+    ASSERT((text.size() == 3 && text[0] == '\'' && text[2] == '\'') ||
            (text == "'\\n'"));
     if (text.size() == 3 && text[0] == '\'' && text[2] == '\'')
         return text[1];
@@ -465,7 +465,7 @@ static inline Token RecognizeToken(const char * start,
     token.text = StringRef(start, end - start);
     token.type = Token::UNKNOWN;
 
-    assert(info.category != TokenRecog::UNKNOWN);
+    ASSERT(info.category != TokenRecog::UNKNOWN);
     switch (info.category)
     {
         case TokenRecog::ID:
@@ -508,17 +508,17 @@ bool TokenIterator::has() const {
 }
 
 Token TokenIterator::next() {
-    assert(i_ < tokens_.size());
+    ASSERT(i_ < tokens_.size());
     return tokens_[i_++];
 }
 
 Token TokenIterator::peek() const {
-    assert(i_ < tokens_.size());
+    ASSERT(i_ < tokens_.size());
     return tokens_[i_];
 }
 
 Token TokenIterator::peekN(int n) const {
-    assert(i_ + n < tokens_.size());
+    ASSERT(i_ + n < tokens_.size());
     return tokens_[i_ + n];
 }
 
@@ -542,7 +542,7 @@ std::vector<Token> Tokenize(Preprocess::SourceContext & sourceContext)
                 break;
             end = TokenEnd(start, &info);
             // ERROR: invalid character sequence if fail.
-            assert(end > start);
+            ASSERT(end > start);
             
             // Recognize.
             Token token = RecognizeToken(start, end, info);

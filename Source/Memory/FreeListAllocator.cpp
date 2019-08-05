@@ -105,7 +105,7 @@ FreeListPageList_Pop(FreeListPage ** ppflpHead)
 {
     FreeListPage * pflp;
 
-    CHECK(ppflpHead);
+    ASSERT(ppflpHead);
     
     if (*ppflpHead)
     {

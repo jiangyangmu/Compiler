@@ -22,6 +22,7 @@
     <ClInclude Include="..\..\Source\Base\Bit.h" />
     <ClInclude Include="..\..\Source\Base\Charset.h" />
     <ClInclude Include="..\..\Source\Base\common.h" />
+    <ClInclude Include="..\..\Source\Base\ErrorHandling.h" />
     <ClInclude Include="..\..\Source\Base\Integer.h" />
     <ClInclude Include="..\..\Source\Base\logging.h" />
     <ClInclude Include="..\..\Source\Base\String.h" />
@@ -38,6 +39,7 @@
     <ClInclude Include="..\..\Source\Memory\Address.h" />
     <ClInclude Include="..\..\Source\Memory\Span.h" />
     <ClInclude Include="..\..\Source\Parse\AstParser.h" />
+    <ClInclude Include="..\..\Source\Parse\ParseMacros.h" />
     <ClInclude Include="..\..\Source\Parse\TokenParser.h" />
     <ClInclude Include="..\..\Source\Preprocess\Preprocess.h" />
   </ItemGroup>

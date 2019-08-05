@@ -136,6 +136,7 @@
   </ItemGroup>
   <ItemGroup>
     <Text Include="IncludedSource.txt" />
+    <None Include="..\..\DevLog\LIBC.md" />
     <None Include="io.c">
       <FileType>CppCode</FileType>
     </None>
@@ -147,7 +148,6 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <None Include="LIBC.md" />
     <None Include="type.c">
       <FileType>CppCode</FileType>
     </None>

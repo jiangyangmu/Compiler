@@ -1,9 +1,10 @@
 #include "Preprocess.h"
 
+#include <fstream>
+#include <iostream>
+
 #include "../Base/Common.h"
 #include "../Base/Charset.h"
-
-#include <fstream>
 
 namespace Preprocess {
 

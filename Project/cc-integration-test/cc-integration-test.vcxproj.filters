@@ -42,10 +42,10 @@
     <None Include="api.c">
       <Filter>_api</Filter>
     </None>
-    <None Include="LIBC.md" />
     <None Include="greedy_snake.c">
       <Filter>Test_Program</Filter>
     </None>
+    <None Include="..\..\DevLog\LIBC.md" />
   </ItemGroup>
   <ItemGroup>
     <Text Include="IncludedSource.txt" />
