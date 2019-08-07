@@ -1,9 +1,280 @@
 #include "../Source/UnitTest/UnitTest.h"
 
-#include "../Source/Memory/Span.h"
+#include "../Source/Memory/SpanAllocator.h"
 #include "../Source/Memory/FreeListAllocator.h"
 
 using namespace LowLevel;
+
+std::ostream & operator << (std::ostream & o, const SpanFreeList::ForwardIterator &) { return o; }
+std::ostream & operator << (std::ostream & o, const SpanFreeList::Position &) { return o; }
+
+TEST(SpanFreeList_Create)
+{
+    SpanFreeList sfl;
+
+    auto begin = sfl.Begin();
+    auto end = sfl.End();
+    EXPECT_EQ(begin, end);
+
+    auto beginPos = sfl.BeginPos();
+    auto endPos = sfl.EndPos();
+    EXPECT_EQ(beginPos, endPos);
+    EXPECT_EQ(beginPos.HasValue(), false);
+    EXPECT_EQ(endPos.HasValue(), false);
+
+    EXPECT_EQ(sfl.Empty(), true);
+}
+
+TEST(SpanFreeList_BeginEnd)
+{
+    SpanFreeList sfl;
+
+    Span s1;
+    {
+        s1.nPage  = 1;
+        s1.psNext = nullptr;
+        sfl.Insert(&s1);
+
+        auto begin = sfl.Begin();
+        auto end = sfl.End();
+
+        EXPECT_EQ((*begin).cpvMemBegin, &s1);
+        EXPECT_EQ((*begin).nPage, 1);
+
+        ++begin;
+        EXPECT_EQ(begin, end);
+    }
+
+    Span s2;
+    {
+        s2.nPage = 2;
+        s2.psNext = nullptr;
+        sfl.Insert(&s2);
+
+        auto begin = sfl.Begin();
+        auto end = sfl.End();
+
+        EXPECT_EQ((*begin).cpvMemBegin, &s1);
+        EXPECT_EQ((*begin).nPage, 1);
+
+        ++begin;
+        EXPECT_EQ((*begin).cpvMemBegin, &s2);
+        EXPECT_EQ((*begin).nPage, 2);
+
+        ++begin;
+        EXPECT_EQ(begin, end);
+    }
+}
+
+TEST(SpanFreeList_BeginEndFindPos)
+{
+    SpanFreeList sfl;
+
+    Span s1;
+    {
+        s1.nPage = 1;
+        s1.psNext = nullptr;
+
+        sfl.Insert(&s1);
+
+        auto beginPos = sfl.BeginPos();
+        auto endPos = sfl.EndPos();
+
+        EXPECT_EQ(beginPos.HasValue(), true);
+        EXPECT_EQ(beginPos.GetValue().cpvMemBegin, &s1);
+        EXPECT_EQ(beginPos.GetValue().nPage, 1);
+        EXPECT_EQ(sfl.FindPos(&s1), beginPos);
+
+        ++beginPos;
+        EXPECT_EQ(beginPos, endPos);
+    }
+
+    Span s2;
+    {
+        s2.nPage = 2;
+        s2.psNext = nullptr;
+        sfl.Insert(&s2);
+
+        auto beginPos = sfl.BeginPos();
+        auto endPos = sfl.EndPos();
+
+        EXPECT_EQ(beginPos.HasValue(), true);
+        EXPECT_EQ(beginPos.GetValue().cpvMemBegin, &s1);
+        EXPECT_EQ(beginPos.GetValue().nPage, 1);
+        EXPECT_EQ(sfl.FindPos(&s1), beginPos);
+        EXPECT_EQ(sfl.FindPosBefore(sfl.FindPos(&s2)), beginPos);
+
+        ++beginPos;
+        EXPECT_EQ(beginPos.HasValue(), true);
+        EXPECT_EQ(beginPos.GetValue().cpvMemBegin, &s2);
+        EXPECT_EQ(beginPos.GetValue().nPage, 2);
+        EXPECT_EQ(sfl.FindPos(&s2), beginPos);
+
+        ++beginPos;
+        EXPECT_EQ(beginPos, endPos);
+    }
+}
+
+TEST(SpanFreeList_InsertRemovePop)
+{
+    SpanFreeList sfl;
+    
+    Span s1;
+    s1.nPage = 1;
+    s1.psNext = nullptr;
+
+    Span s2;
+    s2.nPage = 2;
+    s2.psNext = nullptr;
+
+    Span s3;
+    s3.nPage = 4;
+    s3.psNext = nullptr;
+
+    Span s4;
+    s3.nPage = 8;
+    s3.psNext = nullptr;
+
+    sfl.Insert(&s1);
+    sfl.Insert(&s2);
+    sfl.Insert(&s3);
+    sfl.Insert(&s4);
+
+    {
+        Span * ps = sfl.Remove(sfl.FindPos(&s2));
+        EXPECT_EQ(ps, &s2);
+
+        auto begin = sfl.Begin();
+        auto end = sfl.End();
+
+        EXPECT_EQ((*begin).cpvMemBegin, &s1);
+        EXPECT_EQ((*begin).nPage, 1);
+
+        ++begin;
+        EXPECT_EQ((*begin).cpvMemBegin, &s3);
+        EXPECT_EQ((*begin).nPage, 4);
+
+        ++begin;
+        EXPECT_EQ((*begin).cpvMemBegin, &s4);
+        EXPECT_EQ((*begin).nPage, 8);
+
+        ++begin;
+        EXPECT_EQ(begin, end);
+    }
+
+    {
+        Span * ps = sfl.Remove(sfl.FindPos(&s4));
+        EXPECT_EQ(ps, &s4);
+
+        auto begin = sfl.Begin();
+        auto end = sfl.End();
+
+        EXPECT_EQ((*begin).cpvMemBegin, &s1);
+        EXPECT_EQ((*begin).nPage, 1);
+
+        ++begin;
+        EXPECT_EQ((*begin).cpvMemBegin, &s3);
+        EXPECT_EQ((*begin).nPage, 4);
+
+        ++begin;
+        EXPECT_EQ(begin, end);
+    }
+
+    {
+        Span * ps = sfl.Remove(sfl.FindPos(&s1));
+        EXPECT_EQ(ps, &s1);
+
+        auto begin = sfl.Begin();
+        auto end = sfl.End();
+
+        EXPECT_EQ((*begin).cpvMemBegin, &s3);
+        EXPECT_EQ((*begin).nPage, 4);
+
+        ++begin;
+        EXPECT_EQ(begin, end);
+    }
+
+    {
+        Span * ps = sfl.Remove(sfl.FindPos(&s3));
+        EXPECT_EQ(ps, &s3);
+
+        auto begin = sfl.Begin();
+        auto end = sfl.End();
+
+        EXPECT_EQ(begin, end);
+        EXPECT_EQ(sfl.Empty(), true);
+    }
+
+    sfl.Insert(&s1);
+    sfl.Insert(&s2);
+    sfl.Insert(&s3);
+    sfl.Insert(&s4);
+
+    {
+        Span * ps = sfl.Pop();
+        EXPECT_EQ(ps, &s1);
+
+        auto begin = sfl.Begin();
+        auto end = sfl.End();
+
+        EXPECT_EQ((*begin).cpvMemBegin, &s2);
+        EXPECT_EQ((*begin).nPage, 2);
+
+        ++begin;
+        EXPECT_EQ((*begin).cpvMemBegin, &s3);
+        EXPECT_EQ((*begin).nPage, 4);
+
+        ++begin;
+        EXPECT_EQ((*begin).cpvMemBegin, &s4);
+        EXPECT_EQ((*begin).nPage, 8);
+
+        ++begin;
+        EXPECT_EQ(begin, end);
+    }
+
+    {
+        Span * ps = sfl.Pop();
+        EXPECT_EQ(ps, &s2);
+
+        auto begin = sfl.Begin();
+        auto end = sfl.End();
+
+        EXPECT_EQ((*begin).cpvMemBegin, &s3);
+        EXPECT_EQ((*begin).nPage, 4);
+
+        ++begin;
+        EXPECT_EQ((*begin).cpvMemBegin, &s4);
+        EXPECT_EQ((*begin).nPage, 8);
+
+        ++begin;
+        EXPECT_EQ(begin, end);
+    }
+
+    {
+        Span * ps = sfl.Pop();
+        EXPECT_EQ(ps, &s3);
+
+        auto begin = sfl.Begin();
+        auto end = sfl.End();
+
+        EXPECT_EQ((*begin).cpvMemBegin, &s4);
+        EXPECT_EQ((*begin).nPage, 8);
+
+        ++begin;
+        EXPECT_EQ(begin, end);
+    }
+
+    {
+        Span * ps = sfl.Pop();
+        EXPECT_EQ(ps, &s4);
+
+        auto begin = sfl.Begin();
+        auto end = sfl.End();
+
+        EXPECT_EQ(begin, end);
+        EXPECT_EQ(sfl.Empty(), true);
+    }
+}
 
 /*
     Span Allocator Test Cases
@@ -57,7 +328,7 @@ TEST(SpanAllocator_Create)
 
     void * vPage[16];
     {
-        char * pcMemBegin = (char *)sa.MemBegin();
+        char * pcMemBegin = (char *)sa.AddrBegin();
         for (int i = 0; i < 16; ++i)
             vPage[i] = (void *)(pcMemBegin + i * PAGE_SIZE);
     }
@@ -76,7 +347,7 @@ TEST(SpanAllocator_AllocFree)
 
     void * vPage[16];
     {
-        char * pcMemBegin = (char *)sa.MemBegin();
+        char * pcMemBegin = (char *)sa.AddrBegin();
         for (int i = 0; i < 16; ++i)
             vPage[i] = (void *)(pcMemBegin + i * PAGE_SIZE);
     }
@@ -391,7 +662,7 @@ TEST(SpanAllocator_AllocFree2)
     void * vPage[nFreePage];
     void * vPageToFree[nFreePage];
     {
-        char * pcMemBegin = (char *)sa.MemBegin();
+        char * pcMemBegin = (char *)sa.AddrBegin();
         for (int i = 0; i < nFreePage; ++i)
         {
             vPageToFree[i] = vPage[i] = (void *)(pcMemBegin + i * PAGE_SIZE);
@@ -488,7 +759,7 @@ public:
 
     void Alloc(void * pvBlkBegin)
     {
-        if(GetDefaultSpanAllocator()->Contains(pvBlkBegin))
+        if(GetDefaultSpanAllocator()->IsOwnerOf(pvBlkBegin))
         {
             if (!Aligned(pvBlkBegin))
                 vmUnalignedAlloc.at(PageIndex(pvBlkBegin)).insert(pvBlkBegin);
@@ -500,7 +771,7 @@ public:
 
     void Free(void * pvBlkBegin)
     {
-        if (GetDefaultSpanAllocator()->Contains(pvBlkBegin))
+        if (GetDefaultSpanAllocator()->IsOwnerOf(pvBlkBegin))
         {
             if (!Aligned(pvBlkBegin))
                 vmUnalignedFree.at(PageIndex(pvBlkBegin)).insert(pvBlkBegin);
@@ -567,7 +838,7 @@ private:
     }
     size_t PageIndex(void * pv)
     {
-        return ((char *)PageBegin(pv) - (char *)GetDefaultSpanAllocator()->MemBegin()) >> PAGE_SIZE_BITS;
+        return ((char *)PageBegin(pv) - (char *)GetDefaultSpanAllocator()->AddrBegin()) >> PAGE_SIZE_BITS;
     }
 
     size_t nPage;

@@ -70,6 +70,15 @@
     <ClInclude Include="..\..\Source\Parse\ParseMacros.h">
       <Filter>Parse</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\Source\Base\LinkedList.h">
+      <Filter>Base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\Memory\SpanFreeList.h">
+      <Filter>Memory</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\Memory\SpanAllocator.h">
+      <Filter>Memory</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\Source\ir\CallingConvention.cpp">
@@ -89,9 +98,6 @@
     </ClCompile>
     <ClCompile Include="..\..\Source\ir\FunctionContext.cpp">
       <Filter>IR</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Source\Memory\Span.cpp">
-      <Filter>Memory</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Source\Memory\FreeListAllocator.cpp">
       <Filter>Memory</Filter>
@@ -118,6 +124,15 @@
       <Filter>Parse</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Source\CompilerMain.cpp" />
+    <ClCompile Include="..\..\Source\Memory\SpanFreeList.cpp">
+      <Filter>Memory</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\Memory\SpanAllocator.cpp">
+      <Filter>Memory</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\Memory\Span.cpp">
+      <Filter>Memory</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="IR">
@@ -146,42 +161,42 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\..\Document\DEBUG.md">
-      <Filter>Doc</Filter>
-    </None>
-    <None Include="..\..\Document\IR.md">
-      <Filter>Doc</Filter>
-    </None>
-    <None Include="..\..\Document\LIBC.md">
-      <Filter>Doc</Filter>
-    </None>
-    <None Include="..\..\Document\MOD.md">
-      <Filter>Doc</Filter>
-    </None>
-    <None Include="..\..\Document\MOD_mem.md">
-      <Filter>Doc</Filter>
-    </None>
-    <None Include="..\..\Document\MOD_vm.md">
-      <Filter>Doc</Filter>
-    </None>
-    <None Include="..\..\Document\PROG.md">
-      <Filter>Doc</Filter>
-    </None>
-    <None Include="..\..\Document\TODO.md">
-      <Filter>Doc</Filter>
-    </None>
-    <None Include="..\..\Document\TODO_mem.md">
-      <Filter>Doc</Filter>
-    </None>
     <None Include="..\..\Test\SampleProgram\Program.c">
       <Filter>TestProgram</Filter>
     </None>
     <None Include="..\..\Test\SampleProgram\Simple.c">
       <Filter>TestProgram</Filter>
     </None>
+    <None Include="..\..\DevLog\DEBUG.md">
+      <Filter>Doc</Filter>
+    </None>
+    <None Include="..\..\DevLog\IR.md">
+      <Filter>Doc</Filter>
+    </None>
+    <None Include="..\..\DevLog\LIBC.md">
+      <Filter>Doc</Filter>
+    </None>
+    <None Include="..\..\DevLog\MOD.md">
+      <Filter>Doc</Filter>
+    </None>
+    <None Include="..\..\DevLog\MOD_mem.md">
+      <Filter>Doc</Filter>
+    </None>
+    <None Include="..\..\DevLog\MOD_vm.md">
+      <Filter>Doc</Filter>
+    </None>
+    <None Include="..\..\DevLog\PROG.md">
+      <Filter>Doc</Filter>
+    </None>
+    <None Include="..\..\DevLog\TODO.md">
+      <Filter>Doc</Filter>
+    </None>
+    <None Include="..\..\DevLog\TODO_mem.md">
+      <Filter>Doc</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
-    <Text Include="..\..\Document\AstBNF.txt">
+    <Text Include="..\..\DevLog\AstBNF.txt">
       <Filter>Parse</Filter>
     </Text>
   </ItemGroup>

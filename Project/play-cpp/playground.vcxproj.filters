@@ -21,5 +21,8 @@
     <ClInclude Include="CxxException.h">
       <Filter>Category</Filter>
     </ClInclude>
+    <ClInclude Include="PositionLinkedList.h">
+      <Filter>Category</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>

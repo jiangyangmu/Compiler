@@ -21,6 +21,8 @@
   <ItemGroup>
     <ClCompile Include="..\..\Source\Memory\FreeListAllocator.cpp" />
     <ClCompile Include="..\..\Source\Memory\Span.cpp" />
+    <ClCompile Include="..\..\Source\Memory\SpanAllocator.cpp" />
+    <ClCompile Include="..\..\Source\Memory\SpanFreeList.cpp" />
     <ClCompile Include="..\..\Source\UnitTest\UnitTestMain.cpp" />
     <ClCompile Include="..\..\Test\UnitTest_Memory.cpp" />
   </ItemGroup>
@@ -28,6 +30,8 @@
     <ClInclude Include="..\..\Source\Memory\Address.h" />
     <ClInclude Include="..\..\Source\Memory\FreeListAllocator.h" />
     <ClInclude Include="..\..\Source\Memory\Span.h" />
+    <ClInclude Include="..\..\Source\Memory\SpanAllocator.h" />
+    <ClInclude Include="..\..\Source\Memory\SpanFreeList.h" />
     <ClInclude Include="..\..\Source\UnitTest\UnitTest.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">

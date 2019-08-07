@@ -24,6 +24,7 @@
     <ClInclude Include="..\..\Source\Base\common.h" />
     <ClInclude Include="..\..\Source\Base\ErrorHandling.h" />
     <ClInclude Include="..\..\Source\Base\Integer.h" />
+    <ClInclude Include="..\..\Source\Base\LinkedList.h" />
     <ClInclude Include="..\..\Source\Base\logging.h" />
     <ClInclude Include="..\..\Source\Base\String.h" />
     <ClInclude Include="..\..\Source\CodeGeneration\AstCompiler.h" />
@@ -38,6 +39,8 @@
     <ClInclude Include="..\..\Source\Memory\FreeListAllocator.h" />
     <ClInclude Include="..\..\Source\Memory\Address.h" />
     <ClInclude Include="..\..\Source\Memory\Span.h" />
+    <ClInclude Include="..\..\Source\Memory\SpanAllocator.h" />
+    <ClInclude Include="..\..\Source\Memory\SpanFreeList.h" />
     <ClInclude Include="..\..\Source\Parse\AstParser.h" />
     <ClInclude Include="..\..\Source\Parse\ParseMacros.h" />
     <ClInclude Include="..\..\Source\Parse\TokenParser.h" />
@@ -57,9 +60,20 @@
     <ClCompile Include="..\..\Source\ir\TypeContext.cpp" />
     <ClCompile Include="..\..\Source\Memory\FreeListAllocator.cpp" />
     <ClCompile Include="..\..\Source\Memory\Span.cpp" />
+    <ClCompile Include="..\..\Source\Memory\SpanAllocator.cpp" />
+    <ClCompile Include="..\..\Source\Memory\SpanFreeList.cpp" />
     <ClCompile Include="..\..\Source\Parse\AstParser.cpp" />
     <ClCompile Include="..\..\Source\Parse\TokenParser.cpp" />
     <ClCompile Include="..\..\Source\Preprocess\Preprocess.cpp" />
+    <None Include="..\..\DevLog\DEBUG.md" />
+    <None Include="..\..\DevLog\IR.md" />
+    <None Include="..\..\DevLog\LIBC.md" />
+    <None Include="..\..\DevLog\MOD.md" />
+    <None Include="..\..\DevLog\MOD_mem.md" />
+    <None Include="..\..\DevLog\MOD_vm.md" />
+    <None Include="..\..\DevLog\PROG.md" />
+    <None Include="..\..\DevLog\TODO.md" />
+    <None Include="..\..\DevLog\TODO_mem.md" />
     <None Include="..\..\Test\SampleProgram\Program.c">
       <FileType>CppCode</FileType>
     </None>
@@ -68,18 +82,7 @@
     </None>
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\..\Document\DEBUG.md" />
-    <None Include="..\..\Document\IR.md" />
-    <None Include="..\..\Document\LIBC.md" />
-    <None Include="..\..\Document\MOD.md" />
-    <None Include="..\..\Document\MOD_mem.md" />
-    <None Include="..\..\Document\MOD_vm.md" />
-    <None Include="..\..\Document\PROG.md" />
-    <None Include="..\..\Document\TODO.md" />
-    <None Include="..\..\Document\TODO_mem.md" />
-  </ItemGroup>
-  <ItemGroup>
-    <Text Include="..\..\Document\AstBNF.txt" />
+    <Text Include="..\..\DevLog\AstBNF.txt" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{DDAE5B18-7E5C-4827-9485-288273BE3AEB}</ProjectGuid>

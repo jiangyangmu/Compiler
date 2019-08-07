@@ -2,7 +2,7 @@
 
 #include "../Base/Bit.h"
 
-#include "Span.h"
+#include "SpanAllocator.h"
 
 namespace LowLevel {
 

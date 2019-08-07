@@ -1,11 +1,11 @@
 ﻿<?xml version="1.0" encoding="utf-8"?>
 <Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
   <ItemGroup>
-    <Filter Include="Include">
-      <UniqueIdentifier>{93c969f6-13e7-4a00-9b48-dd1f8fd8fbbe}</UniqueIdentifier>
-    </Filter>
     <Filter Include="Test">
       <UniqueIdentifier>{d6757d8c-10ff-43a3-9602-ad791a088361}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Source">
+      <UniqueIdentifier>{93c969f6-13e7-4a00-9b48-dd1f8fd8fbbe}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -13,27 +13,39 @@
       <Filter>Test</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Source\Memory\Span.cpp">
-      <Filter>Include</Filter>
+      <Filter>Source</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Source\Memory\FreeListAllocator.cpp">
-      <Filter>Include</Filter>
+      <Filter>Source</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Source\UnitTest\UnitTestMain.cpp">
-      <Filter>Include</Filter>
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\Memory\SpanAllocator.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\Memory\SpanFreeList.cpp">
+      <Filter>Source</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\Source\Memory\Span.h">
-      <Filter>Include</Filter>
+      <Filter>Source</Filter>
     </ClInclude>
     <ClInclude Include="..\..\Source\Memory\FreeListAllocator.h">
-      <Filter>Include</Filter>
+      <Filter>Source</Filter>
     </ClInclude>
     <ClInclude Include="..\..\Source\Memory\Address.h">
-      <Filter>Include</Filter>
+      <Filter>Source</Filter>
     </ClInclude>
     <ClInclude Include="..\..\Source\UnitTest\UnitTest.h">
-      <Filter>Include</Filter>
+      <Filter>Source</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\Memory\SpanAllocator.h">
+      <Filter>Source</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\Memory\SpanFreeList.h">
+      <Filter>Source</Filter>
     </ClInclude>
   </ItemGroup>
 </Project>
