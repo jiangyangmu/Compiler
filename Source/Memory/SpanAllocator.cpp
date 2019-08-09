@@ -1,114 +1,11 @@
 #include "SpanAllocator.h"
 
-#include <windows.h>
-#include <tchar.h>
-#include <cstdio>
-#include <cassert>
+#include "Win/Allocate.h"
 
 namespace LowLevel {
 
 #define PAGE_BEGIN(base, index) \
     (void *)((char *)(base) + (index) * PAGE_SIZE)
-
-// ===========================================================================
-// AddressSpace: reserve, release
-// Page: commit, decommit
-// ===========================================================================
-
-VOID
-ErrorExit(const char * lpMsg)
-{
-    printf(("Error! %s with error code of %ld.\n"),
-           lpMsg, GetLastError());
-    exit(0);
-}
-
-static
-void *
-ReserveAddressSpace(size_t nReservedPage)
-{
-    printf(("ReserveAddressSpace: %zd pages. "), nReservedPage);
-
-    LPVOID lpvBase;
-    lpvBase = VirtualAlloc(
-        NULL,                       // System selects address
-        nReservedPage * PAGE_SIZE,  // Size of allocation
-        MEM_RESERVE,                // Allocate reserved pages
-        PAGE_NOACCESS);             // Protection = no access
-    if (lpvBase == NULL)
-        ErrorExit(("ReserveAddressSpace failed."));
-
-    printf("%p\n", lpvBase);
-
-    return lpvBase;
-}
-
-static
-void *
-ReserveAddressSpaceAndCommitPages(size_t nReservedPage)
-{
-    printf(("ReserveAddressSpaceAndCommitPages: %zd pages. "), nReservedPage);
-
-    LPVOID lpvBase;
-    lpvBase = VirtualAlloc(
-        NULL,                       // System selects address
-        nReservedPage * PAGE_SIZE,  // Size of allocation
-        MEM_RESERVE | MEM_COMMIT,
-        PAGE_READWRITE);
-    if (lpvBase == NULL)
-        ErrorExit(("ReserveAddressSpaceAndCommitPages failed."));
-
-    printf("%p\n", lpvBase);
-
-    return lpvBase;
-}
-
-// Also decommits all pages.
-static
-void
-ReleaseAddressSpace(void * pvMemBegin, size_t nReservedPage)
-{
-    printf(("ReleasePage: %p %zd pages.\n"), pvMemBegin, nReservedPage);
-
-    BOOL bSuccess;
-    bSuccess = VirtualFree(
-        pvMemBegin,    // Base address of block
-        0,             // Bytes of committed pages
-        MEM_RELEASE);  // Decommit the pages
-    if (!bSuccess)
-        ErrorExit(("ReleasePage failed.\n"));
-}
-
-void
-CommitPage(void * pvMemBegin, size_t nPage)
-{
-    printf(("CommitPage: %p %zd pages.\n"), pvMemBegin, nPage);
-
-    LPVOID lpvResult;
-    lpvResult = VirtualAlloc(
-        pvMemBegin,         // Next page to commit
-        nPage * PAGE_SIZE,  // Page size, in bytes
-        MEM_COMMIT,         // Allocate a committed page
-        PAGE_READWRITE);    // Read/write access
-    if (lpvResult == NULL)
-        ErrorExit(("CommitPage failed.\n"));
-}
-
-// Safe to call over uncommited pages.
-static
-void
-DecommitPage(void * pvMemBegin, size_t nPage)
-{
-    printf(("DecommitPage: %p %zd pages.\n"), pvMemBegin, nPage);
-
-    BOOL bSuccess;
-    bSuccess = VirtualFree(
-        pvMemBegin,
-        nPage * PAGE_SIZE,
-        MEM_DECOMMIT);
-    if (!bSuccess)
-        ErrorExit(("DecommitPage failed.\n"));
-}
 
 // ===========================================================================
 // SpanCtrlBlock: init, alloc, free
@@ -132,7 +29,7 @@ public:
     // Helper for Alloc/Free.
 
     // Return first SFL with >=nPage Span, or nullptr.
-    LazySpanFreeList * FindFreeList(size_t nPage);
+    SpanFreeList * FindFreeList(size_t nPage);
 
     void * MemBegin()
     {
@@ -152,7 +49,7 @@ private:
     // 1,    2,    ..., 8192 page
     // 4KB,  8KB,  ..., 32MB
     size_t nSpanFreeList;
-    LazySpanFreeList vsfl[14];
+    SpanFreeList vsfl[14];
 
     friend class SpanAllocator; // TODO - SpanCtrlBlock: remove friend SpanAllocator
     friend SpanCtrlBlock * CreateSpanCtrlBlock(void * pvMemBegin, size_t nPage, bool bOwnMemory);
@@ -172,8 +69,8 @@ CreateSpanCtrlBlock(void * pvMemBegin, size_t nPage, bool bOwnMemory)
 
     // Init free lists.
 
-    LazySpanFreeList * psfl;
-    LazySpanFreeList * psflEnd;
+    SpanFreeList * psfl;
+    SpanFreeList * psflEnd;
     size_t nSpanPage;
 
     psfl = pscb->vsfl;
@@ -184,34 +81,21 @@ CreateSpanCtrlBlock(void * pvMemBegin, size_t nPage, bool bOwnMemory)
          psfl < psflEnd;
          ++psfl, nSpanPage <<= 1)
     {
-        if (bOwnMemory)
-        {
-            new (psfl) LazySpanFreeList(
-                PAGE_BEGIN(pvMemBegin, nPage - (nSpanPage << 1)),
-                nSpanPage
-            );
-        }
-        else
-        {
-            new (psfl) LazySpanFreeList(
-                nullptr,
-                0
-            );
-            psfl->Insert(
-                PAGE_BEGIN(pvMemBegin, nPage - (nSpanPage << 1)),
-                nSpanPage
-            );
-        }
+        new (psfl) SpanFreeList();
+        psfl->Insert(
+            PAGE_BEGIN(pvMemBegin, nPage - (nSpanPage << 1)),
+            nSpanPage
+        );
     }
 
     return pscb;
 }
 
-LazySpanFreeList *
+SpanFreeList *
 SpanCtrlBlock::FindFreeList(size_t nPage)
 {
-    LazySpanFreeList * psfl;
-    LazySpanFreeList * psflEnd;
+    SpanFreeList * psfl;
+    SpanFreeList * psflEnd;
 
     psfl = vsfl + IntLog2(nPage);
     psflEnd = vsfl + nSpanFreeList;
@@ -228,7 +112,7 @@ SpanCtrlBlock::Alloc(size_t nPage)
 {
     // L Find-Pop A, (Split AB, L Down, L Insert B)*, A
 
-    LazySpanFreeList * psfl;
+    SpanFreeList * psfl;
     Span * ps;
     Span * psSecond;
 
@@ -271,13 +155,12 @@ SpanCtrlBlock::Free(void * pvMemBegin, size_t nPage)
     // L Find B/AB, Merge IB, Extract IB => I, L Up, ...
     // L Find /A/B/AB, Insert I
 
-    LazySpanFreeList * psfl;
+    SpanFreeList * psfl;
 
     ASSERT(PageBegin(pvMemBegin) == pvMemBegin);
     ASSERT(MemBegin() <= pvMemBegin && pvMemBegin < MemEnd());
 
     psfl = vsfl + IntLog2(nPage);
-    ASSERT(!psfl->HasLazySpan());
     if (psfl->Empty())
     {
         psfl->Insert(pvMemBegin, nPage);
@@ -290,8 +173,8 @@ SpanCtrlBlock::Free(void * pvMemBegin, size_t nPage)
     ps->nPage = nPage;
     ps->psNext = nullptr;
 
-    LazySpanFreeList::ForwardIterator fiLastLess;
-    LazySpanFreeList::ForwardIterator fiFirstGreater;
+    SpanFreeList::ForwardIterator fiLastLess;
+    SpanFreeList::ForwardIterator fiFirstGreater;
 
     while (true)
     {
@@ -491,7 +374,7 @@ SpanAllocator::ForwardIterator::ForwardIterator()
 {
 }
 
-SpanAllocator::ForwardIterator::ForwardIterator(const LazySpanFreeList * psflBegin, const LazySpanFreeList * psflEnd, const LazySpanFreeList * psflCurr)
+SpanAllocator::ForwardIterator::ForwardIterator(const SpanFreeList * psflBegin, const SpanFreeList * psflEnd, const SpanFreeList * psflCurr)
     : cpsflBegin(psflBegin), cpsflEnd(psflEnd), cpsflCurr(psflCurr)
 {
     fiCurr = cpsflCurr->Begin();

@@ -27,6 +27,9 @@
     <ClCompile Include="..\..\Source\Memory\SpanFreeList.cpp">
       <Filter>Source</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\Source\Memory\Win\Allocate.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\Source\Memory\Span.h">
@@ -45,6 +48,9 @@
       <Filter>Source</Filter>
     </ClInclude>
     <ClInclude Include="..\..\Source\Memory\SpanFreeList.h">
+      <Filter>Source</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\Memory\Win\Allocate.h">
       <Filter>Source</Filter>
     </ClInclude>
   </ItemGroup>

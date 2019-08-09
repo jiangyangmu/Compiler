@@ -5,15 +5,6 @@
 namespace LowLevel {
 
 Span *
-SpanStart(Span ** pNextSpanAddr)
-{
-    char * pc;
-    pc = (char *)*pNextSpanAddr;
-    pc -= offsetof(Span, psNext);
-    return (Span *)pc;
-}
-
-Span *
 SplitSpan(Span * ps)
 {
     Span * psSecond;

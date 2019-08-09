@@ -6,7 +6,14 @@
 using namespace LowLevel;
 
 std::ostream & operator << (std::ostream & o, const SpanFreeList::ForwardIterator &) { return o; }
-std::ostream & operator << (std::ostream & o, const SpanFreeList::Position &) { return o; }
+std::ostream & operator << (std::ostream & o, const SpanFreeList::Position & p)
+{
+    if (p.HasPointedSpan())
+        o << p.GetPointedSpan() << " " << p.GetPointedSpan()->nPage;
+    else
+        o << "null";
+    return o;
+}
 
 TEST(SpanFreeList_Create)
 {
@@ -19,8 +26,8 @@ TEST(SpanFreeList_Create)
     auto beginPos = sfl.BeginPos();
     auto endPos = sfl.EndPos();
     EXPECT_EQ(beginPos, endPos);
-    EXPECT_EQ(beginPos.HasValue(), false);
-    EXPECT_EQ(endPos.HasValue(), false);
+    EXPECT_EQ(beginPos.HasPointedSpan(), false);
+    EXPECT_EQ(endPos.HasPointedSpan(), false);
 
     EXPECT_EQ(sfl.Empty(), true);
 }
@@ -80,9 +87,9 @@ TEST(SpanFreeList_BeginEndFindPos)
         auto beginPos = sfl.BeginPos();
         auto endPos = sfl.EndPos();
 
-        EXPECT_EQ(beginPos.HasValue(), true);
-        EXPECT_EQ(beginPos.GetValue().cpvMemBegin, &s1);
-        EXPECT_EQ(beginPos.GetValue().nPage, 1);
+        EXPECT_EQ(beginPos.HasPointedSpan(), true);
+        EXPECT_EQ(beginPos.GetPointedSpan(), &s1);
+        EXPECT_EQ(beginPos.GetPointedSpan()->nPage, 1);
         EXPECT_EQ(sfl.FindPos(&s1), beginPos);
 
         ++beginPos;
@@ -98,16 +105,16 @@ TEST(SpanFreeList_BeginEndFindPos)
         auto beginPos = sfl.BeginPos();
         auto endPos = sfl.EndPos();
 
-        EXPECT_EQ(beginPos.HasValue(), true);
-        EXPECT_EQ(beginPos.GetValue().cpvMemBegin, &s1);
-        EXPECT_EQ(beginPos.GetValue().nPage, 1);
+        EXPECT_EQ(beginPos.HasPointedSpan(), true);
+        EXPECT_EQ(beginPos.GetPointedSpan(), &s1);
+        EXPECT_EQ(beginPos.GetPointedSpan()->nPage, 1);
         EXPECT_EQ(sfl.FindPos(&s1), beginPos);
         EXPECT_EQ(sfl.FindPosBefore(sfl.FindPos(&s2)), beginPos);
 
         ++beginPos;
-        EXPECT_EQ(beginPos.HasValue(), true);
-        EXPECT_EQ(beginPos.GetValue().cpvMemBegin, &s2);
-        EXPECT_EQ(beginPos.GetValue().nPage, 2);
+        EXPECT_EQ(beginPos.HasPointedSpan(), true);
+        EXPECT_EQ(beginPos.GetPointedSpan(), &s2);
+        EXPECT_EQ(beginPos.GetPointedSpan()->nPage, 2);
         EXPECT_EQ(sfl.FindPos(&s2), beginPos);
 
         ++beginPos;
@@ -132,8 +139,8 @@ TEST(SpanFreeList_InsertRemovePop)
     s3.psNext = nullptr;
 
     Span s4;
-    s3.nPage = 8;
-    s3.psNext = nullptr;
+    s4.nPage = 8;
+    s4.psNext = nullptr;
 
     sfl.Insert(&s1);
     sfl.Insert(&s2);

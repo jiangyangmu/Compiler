@@ -24,7 +24,6 @@
     <ClInclude Include="..\..\Source\Base\common.h" />
     <ClInclude Include="..\..\Source\Base\ErrorHandling.h" />
     <ClInclude Include="..\..\Source\Base\Integer.h" />
-    <ClInclude Include="..\..\Source\Base\LinkedList.h" />
     <ClInclude Include="..\..\Source\Base\logging.h" />
     <ClInclude Include="..\..\Source\Base\String.h" />
     <ClInclude Include="..\..\Source\CodeGeneration\AstCompiler.h" />
@@ -41,6 +40,7 @@
     <ClInclude Include="..\..\Source\Memory\Span.h" />
     <ClInclude Include="..\..\Source\Memory\SpanAllocator.h" />
     <ClInclude Include="..\..\Source\Memory\SpanFreeList.h" />
+    <ClInclude Include="..\..\Source\Memory\Win\Allocate.h" />
     <ClInclude Include="..\..\Source\Parse\AstParser.h" />
     <ClInclude Include="..\..\Source\Parse\ParseMacros.h" />
     <ClInclude Include="..\..\Source\Parse\TokenParser.h" />
@@ -62,18 +62,19 @@
     <ClCompile Include="..\..\Source\Memory\Span.cpp" />
     <ClCompile Include="..\..\Source\Memory\SpanAllocator.cpp" />
     <ClCompile Include="..\..\Source\Memory\SpanFreeList.cpp" />
+    <ClCompile Include="..\..\Source\Memory\Win\Allocate.cpp" />
     <ClCompile Include="..\..\Source\Parse\AstParser.cpp" />
     <ClCompile Include="..\..\Source\Parse\TokenParser.cpp" />
     <ClCompile Include="..\..\Source\Preprocess\Preprocess.cpp" />
     <None Include="..\..\DevLog\DEBUG.md" />
-    <None Include="..\..\DevLog\IR.md" />
-    <None Include="..\..\DevLog\LIBC.md" />
+    <None Include="..\..\DevLog\MOD_ir.md" />
+    <None Include="..\..\DevLog\MOD_libc.md" />
     <None Include="..\..\DevLog\MOD.md" />
     <None Include="..\..\DevLog\MOD_mem.md" />
     <None Include="..\..\DevLog\MOD_vm.md" />
-    <None Include="..\..\DevLog\PROG.md" />
+    <None Include="..\..\DevLog\CODE.md" />
     <None Include="..\..\DevLog\TODO.md" />
-    <None Include="..\..\DevLog\TODO_mem.md" />
+    <None Include="..\..\DevLog\TODO_vm.md" />
     <None Include="..\..\Test\SampleProgram\Program.c">
       <FileType>CppCode</FileType>
     </None>

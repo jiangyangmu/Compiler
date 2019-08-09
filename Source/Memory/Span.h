@@ -10,7 +10,6 @@ struct Span {
     size_t nPage;
 };
 
-Span * SpanStart(Span ** pNextSpanAddr);
 Span * SplitSpan(Span * ps);
 Span * MergeSpan(Span * psLeft, Span * psRight);
 

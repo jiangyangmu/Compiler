@@ -48,7 +48,7 @@ public:
     class ForwardIterator {
     public:
         ForwardIterator();
-        ForwardIterator(const LazySpanFreeList * psflBegin, const LazySpanFreeList * psflEnd, const LazySpanFreeList * psflCurr);
+        ForwardIterator(const SpanFreeList * psflBegin, const SpanFreeList * psflEnd, const SpanFreeList * psflCurr);
 
         ForwardIterator(const ForwardIterator &) = default;
         ForwardIterator(ForwardIterator &&) = default;
@@ -64,10 +64,10 @@ public:
         SpanDescriptor    operator * ();
 
     private:
-        const LazySpanFreeList * cpsflBegin;
-        const LazySpanFreeList * cpsflEnd;
-        const LazySpanFreeList * cpsflCurr;
-        LazySpanFreeList::ForwardIterator fiCurr;
+        const SpanFreeList * cpsflBegin;
+        const SpanFreeList * cpsflEnd;
+        const SpanFreeList * cpsflCurr;
+        SpanFreeList::ForwardIterator fiCurr;
     };
 
     ForwardIterator Begin() const;
@@ -88,7 +88,7 @@ private:
 // constexpr size_t DEFAULT_NUM_PAGE_PER_SPAN = 16 * 1024; // 64MB
 constexpr size_t DEFAULT_NUM_PAGE_PER_SPAN = 4; // 1MB
 
-                                                // nReservedPage must be power of 2, at least 16
+// nReservedPage must be power of 2, at least 16
 SpanAllocator   CreateSpanAllocator(size_t nReservedPage);
 SpanAllocator   CreateSpanAllocator(void * pvMemBegin, size_t nPage);
 SpanAllocator * GetDefaultSpanAllocator();

@@ -1,10 +1,11 @@
 #include "SpanFreeList.h"
 
+#include "Win/Allocate.h"
+
 namespace LowLevel {
 
 // ===========================================================================
 // SpanFreeList: init, push, pop, empty
-// LazySpanFreeList: init, push, pop, empty
 // ===========================================================================
 
 SpanFreeList::Position
@@ -16,25 +17,21 @@ SpanFreeList::BeginPos()
 SpanFreeList::Position
 SpanFreeList::EndPos()
 {
-    Span ** pNextSpanAddr;
-
-    pNextSpanAddr = &psHead;
-    while (*pNextSpanAddr)
-        pNextSpanAddr = &(*pNextSpanAddr)->psNext;
-
-    return Position(pNextSpanAddr);
+    Position pos(&psHead);
+    while (pos.HasPointedSpan())
+        ++pos;
+    return pos;
 }
 
 SpanFreeList::Position
 SpanFreeList::FindPos(Span * ps)
 {
-    Span ** pNextSpanAddr;
+    Position pos(&psHead);
 
-    pNextSpanAddr = &psHead;
-    while (*pNextSpanAddr && *pNextSpanAddr < ps)
-        pNextSpanAddr = &(*pNextSpanAddr)->psNext;
+    while (pos.HasPointedSpan() && pos.GetPointedSpan() < ps)
+        ++pos;
 
-    return Position(pNextSpanAddr);
+    return pos;
 }
 
 SpanFreeList::Position
@@ -42,37 +39,39 @@ SpanFreeList::FindPosBefore(Position pos)
 {
     ASSERT(psHead && pos != BeginPos());
 
-    Span ** pNextSpanAddr;
     Span * ps;
-
-    ps = SpanStart(pos.pNextSpanAddr);
-
-    pNextSpanAddr = &psHead;
-    while (*pNextSpanAddr != ps)
-        pNextSpanAddr = &(*pNextSpanAddr)->psNext;
-
-    return Position(pNextSpanAddr);
+    ps = pos.GetHostSpan();
+    
+    Position posBefore(&psHead);
+    while (posBefore.HasPointedSpan() && posBefore.GetPointedSpan() != ps)
+        ++posBefore;
+    return posBefore;
 }
 
 void
-SpanFreeList::Insert(Span * span)
+SpanFreeList::Insert(Span * ps)
 {
-    ASSERT(span);
+    ASSERT(ps);
+    FindPos(ps).InsertSpan(ps);
+}
 
-    Position pos = FindPos(span);
-    span->psNext = *pos.pNextSpanAddr;
-    *pos.pNextSpanAddr = span;
+void
+SpanFreeList::Insert(void * pvSpanBegin, size_t nPage)
+{
+    ASSERT(pvSpanBegin);
+
+    Span * ps;
+    ps          = (Span *)pvSpanBegin;
+    ps->psNext  = nullptr;
+    ps->nPage   = nPage;
+
+    FindPos(ps).InsertSpan(ps);
 }
 
 Span *
 SpanFreeList::Remove(Position & pos)
 {
-    ASSERT(pos.HasValue());
-
-    Span * ps;
-    ps = *pos.pNextSpanAddr;
-    *pos.pNextSpanAddr = ps->psNext;
-    return ps;
+    return pos.RemoveSpan();
 }
 
 Span *
@@ -80,8 +79,8 @@ SpanFreeList::Pop()
 {
     ASSERT(psHead);
     Span * ps;
-    ps = psHead;
-    psHead = psHead->psNext;
+    ps      = psHead;
+    psHead  = psHead->psNext;
     return ps;
 }
 
@@ -91,65 +90,6 @@ SpanFreeList::Empty() const
     return psHead == nullptr;
 }
 
-
-void
-LazySpanFreeList::Insert(Span * ps)
-{
-    Span ** ppsInsert;
-
-    ppsInsert = &psHead;
-    while (*ppsInsert != nullptr && *ppsInsert < ps)
-    {
-        ppsInsert = &(*ppsInsert)->psNext;
-    }
-    ps->psNext = *ppsInsert;
-    *ppsInsert = ps;
-}
-
-void
-LazySpanFreeList::Insert(void * pvMemBegin, size_t nPage)
-{
-    Span * ps;
-    ps = (Span *)pvMemBegin;
-    ps->nPage = nPage;
-    Insert(ps);
-}
-
-void
-CommitPage(void * pvMemBegin, size_t nPage);
-Span *
-LazySpanFreeList::Pop()
-{
-    if (!psHead)
-    {
-        ASSERT(pvLazySpan);
-
-        CommitPage(pvLazySpan, nLazySpanPage);
-
-        psHead = (Span *)pvLazySpan;
-        psHead->psNext = nullptr;
-        psHead->nPage = nLazySpanPage;
-
-        pvLazySpan = nullptr;
-        nLazySpanPage = 0;
-    }
-
-    Span * ps;
-    ps = psHead;
-    psHead = psHead->psNext;
-    return ps;
-}
-
-bool
-LazySpanFreeList::Empty() const
-{
-    return psHead == nullptr && pvLazySpan == nullptr;
-}
-
-bool LazySpanFreeList::HasLazySpan() const
-{
-    return pvLazySpan != nullptr;
-}
 
 // ===========================================================================
 // SpanFreeList::ForwardIterator
@@ -205,26 +145,53 @@ SpanFreeList::ForwardIterator::operator * ()
 }
 
 SpanFreeList::Position::Position(Span ** pNextSpanAddr)
-    : pNextSpanAddr(pNextSpanAddr)
+    : pNextSpanAddr{pNextSpanAddr}
 {
     ASSERT(pNextSpanAddr);
 }
 
-SpanDescriptor
-SpanFreeList::Position::GetValue()
+bool
+SpanFreeList::Position::HasPointedSpan() const
 {
-    ASSERT(HasValue());
-    SpanDescriptor sd;
-    sd.cpvMemBegin = *pNextSpanAddr;
-    sd.nPage = (*pNextSpanAddr)->nPage;
-    return sd;
+    return *pNextSpanAddr != nullptr;
+}
+
+Span *
+SpanFreeList::Position::GetPointedSpan() const
+{
+    return *pNextSpanAddr;
+}
+
+Span *
+SpanFreeList::Position::GetHostSpan()
+{
+    return (Span *)((char *)pNextSpanAddr - offsetof(Span, psNext));
+}
+
+void
+SpanFreeList::Position::InsertSpan(Span * ps)
+{
+    ASSERT(ps);
+    ps->psNext      = GetPointedSpan();
+    *pNextSpanAddr  = ps;
+}
+
+Span *
+SpanFreeList::Position::RemoveSpan()
+{
+    ASSERT(HasPointedSpan());
+    Span * ps;
+    ps              = GetPointedSpan();
+    *pNextSpanAddr  = ps->psNext;
+    ps->psNext      = nullptr;
+    return ps;
 }
 
 SpanFreeList::Position &
 SpanFreeList::Position::operator++()
 {
     if (*pNextSpanAddr)
-        pNextSpanAddr = &(*pNextSpanAddr)->psNext;
+        pNextSpanAddr = (Span **)((char *)(*pNextSpanAddr) + offsetof(Span, psNext));
     return *this;
 }
 
@@ -234,72 +201,6 @@ SpanFreeList::Position::operator++(int)
     Position tmp(*this);
     operator++();
     return tmp;
-}
-
-
-LazySpanFreeList::ForwardIterator::ForwardIterator()
-    : cpsHead(nullptr), cpsCurr(nullptr)
-{
-    sdLazySpan.cpvMemBegin = nullptr;
-    sdLazySpan.nPage = 0;
-}
-
-LazySpanFreeList::ForwardIterator::ForwardIterator(const void * cpvLazySpan, size_t nLazySpanPage, const Span * cpsHead, bool bBegin)
-    : cpsHead(cpsHead)
-{
-    sdLazySpan.cpvMemBegin = cpvLazySpan;
-    sdLazySpan.nPage = cpvLazySpan ? nLazySpanPage : 0;
-    this->cpsCurr = bBegin
-        ? (cpvLazySpan ? (const Span *)cpvLazySpan : cpsHead)
-        : nullptr;
-}
-
-LazySpanFreeList::ForwardIterator &
-LazySpanFreeList::ForwardIterator::operator ++ ()
-{
-    if (cpsCurr == (const Span *)sdLazySpan.cpvMemBegin)
-        cpsCurr = cpsHead;
-    else if (cpsCurr != nullptr)
-        cpsCurr = cpsCurr->psNext;
-    return *this;
-}
-
-LazySpanFreeList::ForwardIterator
-LazySpanFreeList::ForwardIterator::operator ++ (int)
-{
-    ForwardIterator tmp(*this);
-    operator++();
-    return tmp;
-}
-
-bool
-LazySpanFreeList::ForwardIterator::operator == (const ForwardIterator & o)
-{
-    ASSERT(sdLazySpan.cpvMemBegin == o.sdLazySpan.cpvMemBegin && cpsHead == o.cpsHead);
-    return cpsCurr == o.cpsCurr;
-}
-
-bool
-LazySpanFreeList::ForwardIterator::operator != (const ForwardIterator & o)
-{
-    return !operator==(o);
-}
-
-SpanDescriptor
-LazySpanFreeList::ForwardIterator::operator * ()
-{
-    ASSERT(cpsCurr);
-    if (cpsCurr == (const Span *)sdLazySpan.cpvMemBegin)
-    {
-        return sdLazySpan;
-    }
-    else
-    {
-        SpanDescriptor sd;
-        sd.cpvMemBegin = cpsCurr;
-        sd.nPage = cpsCurr->nPage;
-        return sd;
-    }
 }
 
 }
