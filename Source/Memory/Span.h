@@ -11,6 +11,7 @@ struct Span {
 };
 
 Span * SplitSpan(Span * ps);
+bool   CanMergeSpan(Span * psLeft, Span * psRight);
 Span * MergeSpan(Span * psLeft, Span * psRight);
 
 struct SpanDescriptor {

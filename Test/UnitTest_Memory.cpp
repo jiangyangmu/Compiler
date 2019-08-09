@@ -348,7 +348,7 @@ TEST(SpanAllocator_Create)
     }));
 }
 
-TEST(SpanAllocator_AllocFree)
+TEST(SpanAllocator_AllocFree_Verbose)
 {
     SpanAllocator sa = CreateSpanAllocator(16);
 
@@ -659,7 +659,7 @@ TEST(SpanAllocator_AllocFree)
     }
 }
 
-TEST(SpanAllocator_AllocFree2)
+TEST(SpanAllocator_AllocFree_Complete)
 {
     const size_t nPage = 8;
     const size_t nFreePage = nPage - 1;
@@ -868,15 +868,15 @@ TEST(FreeListAllocator_Create)
     FreeListAllocator fa(8);
 }
 
-TEST(FreeListAllocator_CreateAll)
+TEST(FreeListAllocator_Create_Complete)
 {
-    for (size_t szBlk = 16; szBlk < 128; szBlk <<= 1)
+    for (size_t szBlk = 8; szBlk <= 128; szBlk <<= 1)
     {
         FreeListAllocator fa(szBlk);
     }
 }
 
-TEST(FreeListAllocator_AllocFree)
+TEST(FreeListAllocator_AllocFree_Verbose)
 {
     FreeListAllocator fa(8);
 
@@ -920,11 +920,11 @@ TEST(FreeListAllocator_AllocFree)
     }
 }
 
-TEST(FreeListAllocator_AllocFreeAll)
+TEST(FreeListAllocator_AllocFree_Complete)
 {
-    void * addr[(DEFAULT_NUM_PAGE_PER_SPAN - 1) * PAGE_SIZE / 16];
+    void * addr[(DEFAULT_NUM_PAGE_PER_SPAN - 1) * PAGE_SIZE / 8];
 
-    for (size_t szBlk = 16; szBlk < 128; szBlk <<= 1)
+    for (size_t szBlk = 8; szBlk <= 128; szBlk <<= 1)
     {
         FreeListAllocator fa(szBlk);
 
@@ -1007,9 +1007,9 @@ TEST(FreeListAllocator_OOM)
     ASSERT_EQ(av.Report(), false);
 }
 
-TEST(FreeListAllocator_OOMAll)
+TEST(FreeListAllocator_OOM_Complete)
 {
-    for (size_t szBlk = 16; szBlk < 128; szBlk <<= 1)
+    for (size_t szBlk = 8; szBlk <= 128; szBlk <<= 1)
     {
         FreeListAllocator fa(szBlk);
 
@@ -1025,7 +1025,7 @@ TEST(FreeListAllocator_OOMAll)
             av.Alloc(pvCurr);
 
             *(void **)pvCurr = pvPrev;
-            pvPrev = pvCurr;
+            pvPrev           = pvCurr;
 
             ++count;
         }
@@ -1054,50 +1054,43 @@ TEST(GenericFreeListAllocator_Create)
     GenericFreeListAllocator gfa;
 }
 
-TEST(GenericFreeListAllocator_AllocFree)
+TEST(GenericFreeListAllocator_AllocFree_Complete)
 {
     GenericFreeListAllocator gfa;
 
-    void * pvHead;
-    void * pvCurr, *pvNext;
+    void * pvPrev, *pvCurr;
     size_t count;
 
-    for (size_t szBlk = 16; szBlk < 128; szBlk <<= 1)
+    for (size_t szBlk = 8; szBlk <= 128; szBlk <<= 1)
     {
         AllocationVerifier av(szBlk);
 
-        count   = 0;
-        pvHead  = gfa.Alloc(szBlk);
-
-        if (pvHead != nullptr)
+        pvPrev = nullptr;
+        count = 0;
+        while ((pvCurr = gfa.Alloc(szBlk)) != nullptr)
         {
-            *(void **)pvHead = nullptr;
-            av.Alloc(pvHead);
+            av.Alloc(pvCurr);
 
-            count   = 1;
-            pvCurr  = pvHead;
-            while ((pvNext = gfa.Alloc(szBlk)) != nullptr)
-            {
-                av.Alloc(pvNext);
-                *(void **)pvCurr    = pvNext;
-                pvCurr              = pvNext;
-                ++count;
+            *(void **)pvCurr = pvPrev;
+            pvPrev = pvCurr;
 
-                if (count % 1000 == 0)
-                    ASSERT(av.Report() == false);
-            }
+            ++count;
         }
 
         EXPECT_EQ(count, (DEFAULT_NUM_PAGE_PER_SPAN - 1) * GetMaxAllocNumPerPage(szBlk));
-
         std::cout << "OOM after alloc " << count << " block (" << szBlk << " byte)" << std::endl;
 
-        pvCurr = pvHead;
-        while (pvCurr != nullptr)
+        while (pvPrev != nullptr)
         {
-            pvNext = *(void **)pvCurr;
+            pvCurr = pvPrev;
+            pvPrev = *(void **)pvPrev;
+
             gfa.Free(pvCurr);
-            pvCurr = pvNext;
+            av.Free(pvCurr);
+
+            --count;
         }
+
+        ASSERT_EQ(av.Report(), false);
     }
 }

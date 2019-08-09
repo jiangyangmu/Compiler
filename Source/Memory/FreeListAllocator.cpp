@@ -1,6 +1,7 @@
 #include "FreeListAllocator.h"
 
 #include "../Base/Bit.h"
+#include "../Base/common.h"
 
 #include "SpanAllocator.h"
 
@@ -241,6 +242,8 @@ FreeListAllocator::ReleaseAllUnusedPages()
         pflp        = pflpNext;
     }
 
+    pflpEmptyList = nullptr;
+
     return bReleased;
 }
 
@@ -283,16 +286,23 @@ GenericFreeListAllocator::Alloc(size_t nBytes)
 
     if (pvBlkBegin == nullptr)
     {
-        size_t i = (sizeof(vpfla) / sizeof(vpfla[0]));
-        
-        while (i != 0)
+        for (size_t i = ifla + 1; i < ELEMENT_COUNT(vpfla); ++i)
         {
-            --i;
-            if (i != ifla && vpfla[i].ReleaseAllUnusedPages())
+            if (vpfla[i].ReleaseAllUnusedPages() &&
+                (pvBlkBegin = vpfla[ifla].Alloc()) != nullptr)
                 break;
         }
-
-        pvBlkBegin = vpfla[ifla].Alloc();
+        if (pvBlkBegin == nullptr)
+        {
+            size_t i = ifla;
+            while (i != 0)
+            {
+                --i;
+                if (vpfla[i].ReleaseAllUnusedPages() &&
+                    (pvBlkBegin = vpfla[ifla].Alloc()) != nullptr)
+                    break;
+            }
+        }
     }
 
     return pvBlkBegin;

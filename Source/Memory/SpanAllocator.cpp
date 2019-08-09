@@ -173,76 +173,43 @@ SpanCtrlBlock::Free(void * pvMemBegin, size_t nPage)
     ps->nPage = nPage;
     ps->psNext = nullptr;
 
-    SpanFreeList::ForwardIterator fiLastLess;
-    SpanFreeList::ForwardIterator fiFirstGreater;
-
     while (true)
     {
         // psfl: Non-empty N-Page Span Free List
         // ps:   Free N-Page Span
 
-        fiLastLess = psfl->End();
-        fiFirstGreater = psfl->Begin();
-        while (fiFirstGreater != psfl->End() && (*fiFirstGreater).cpvMemBegin < pvMemBegin)
+        SpanFreeList::Position posNext = psfl->FindPos(ps);
+
+        Span * psPrev = (posNext != psfl->BeginPos()) ? posNext.GetHostSpan() : nullptr;
+        Span * psNext = posNext.GetPointedSpan();
+
+        ASSERT(psPrev == nullptr || psPrev < ps);
+        ASSERT(psNext == nullptr || ps < psNext);
+
+        bool bIsEvenSpan = IsEvenSpan(MemBegin(), pvMemBegin, ps->nPage);
+
+        bool bMergePrev = psPrev && !bIsEvenSpan && CanMergeSpan(psPrev, ps);
+        bool bMergeNext = psNext && bIsEvenSpan && CanMergeSpan(ps, psNext);
+
+        if (bMergePrev)
         {
-            fiLastLess = fiFirstGreater;
-            ++fiFirstGreater;
+            SpanFreeList::Position posPrev = psfl->FindPosBefore(posNext);
+            
+            (void *)posPrev.RemoveSpan();
+            ps = MergeSpan(psPrev, ps);
         }
-
-        if (fiLastLess != psfl->End() &&
-            !IsEvenSpan(MemBegin(), pvMemBegin, ps->nPage) &&
-            (ps = MergeSpan((Span *)(*fiLastLess).cpvMemBegin, ps)) != nullptr)
+        else if (bMergeNext)
         {
-            // Extract merged span.
-            Span * psLastLess;
-            Span ** ppsLastLess;
-
-            psLastLess = (Span *)(*fiLastLess).cpvMemBegin;
-            for (ppsLastLess = &psfl->psHead;
-                 *ppsLastLess != psLastLess;
-                 ppsLastLess = &(*ppsLastLess)->psNext)
-            {
-            }
-            *ppsLastLess = psLastLess->psNext;
-        }
-        else if (fiFirstGreater != psfl->End() &&
-                 IsEvenSpan(MemBegin(), pvMemBegin, ps->nPage) &&
-                 (ps = MergeSpan(ps, (Span *)(*fiFirstGreater).cpvMemBegin)) != nullptr)
-        {
-            // Extract merged span.
-            Span * psFirstGreater;
-            Span ** ppsFirstGreater;
-
-            psFirstGreater = (Span *)(*fiFirstGreater).cpvMemBegin;
-            for (ppsFirstGreater = &psfl->psHead;
-                 *ppsFirstGreater != psFirstGreater;
-                 ppsFirstGreater = &(*ppsFirstGreater)->psNext)
-            {
-            }
-            *ppsFirstGreater = psFirstGreater->psNext;
+            posNext.RemoveSpan();
+            ps = MergeSpan(ps, psNext);
         }
         else
+        {
+            posNext.InsertSpan(ps);
             break;
+        }
 
         ++psfl;
-    }
-
-    if (fiFirstGreater == psfl->End())
-    {
-        ASSERT(psfl->psHead == nullptr);
-        psfl->psHead = ps;
-        ps->psNext = nullptr;
-    }
-    else
-    {
-        Span ** ppsFirstGreater;
-        for (ppsFirstGreater = &psfl->psHead;
-             *ppsFirstGreater != (Span *)(*fiFirstGreater).cpvMemBegin;
-             ppsFirstGreater = &(*ppsFirstGreater)->psNext)
-        {
-        }
-        ps->psNext = *ppsFirstGreater;
-        *ppsFirstGreater = ps;
     }
 }
 

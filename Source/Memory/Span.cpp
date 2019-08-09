@@ -21,20 +21,20 @@ SplitSpan(Span * ps)
     return psSecond;
 }
 
+bool
+CanMergeSpan(Span * psLeft, Span * psRight)
+{
+    ASSERT(psLeft && psRight && psLeft->nPage == psRight->nPage);
+    return (char *)psLeft + psLeft->nPage * PAGE_SIZE == (char *)psRight;
+}
+
 Span *
 MergeSpan(Span * psLeft, Span * psRight)
 {
     ASSERT(psLeft && psRight && psLeft->nPage == psRight->nPage);
-
-    if ((char *)psLeft + psLeft->nPage * PAGE_SIZE == (char *)psRight)
-    {
-        psLeft->nPage <<= 1;
-        return psLeft;
-    }
-    else
-    {
-        return nullptr;
-    }
+    ASSERT(CanMergeSpan(psLeft, psRight));
+    psLeft->nPage <<= 1;
+    return psLeft;
 }
 
 }
