@@ -25,8 +25,10 @@
     <ClCompile Include="..\..\Source\Memory\SpanAllocator.cpp" />
     <ClCompile Include="..\..\Source\Memory\SpanFreeList.cpp" />
     <ClCompile Include="..\..\Source\Memory\Win\WinAllocate.cpp" />
+    <ClCompile Include="..\..\Source\Preprocess\LineSlicer.cpp" />
     <ClCompile Include="..\..\Source\UnitTest\UnitTestMain.cpp" />
     <ClCompile Include="..\..\Test\UnitTest_Memory.cpp" />
+    <ClCompile Include="..\..\Test\UnitTest_Preprocess.cpp" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\Source\Memory\Address.h" />
@@ -36,6 +38,7 @@
     <ClInclude Include="..\..\Source\Memory\SpanAllocator.h" />
     <ClInclude Include="..\..\Source\Memory\SpanFreeList.h" />
     <ClInclude Include="..\..\Source\Memory\Win\WinAllocate.h" />
+    <ClInclude Include="..\..\Source\Preprocess\LineSlicer.h" />
     <ClInclude Include="..\..\Source\UnitTest\UnitTest.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">

@@ -31,6 +31,10 @@
       <Filter>Source</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Source\Memory\Win\WinAllocate.cpp" />
+    <ClCompile Include="..\..\Test\UnitTest_Preprocess.cpp">
+      <Filter>Test</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\Preprocess\LineSlicer.cpp">
       <Filter>Source</Filter>
     </ClCompile>
   </ItemGroup>
@@ -57,6 +61,7 @@
       <Filter>Source</Filter>
     </ClInclude>
     <ClInclude Include="..\..\Source\Memory\Win\WinAllocate.h" />
+    <ClInclude Include="..\..\Source\Preprocess\LineSlicer.h">
       <Filter>Source</Filter>
     </ClInclude>
   </ItemGroup>

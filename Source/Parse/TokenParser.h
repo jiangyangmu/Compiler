@@ -9,8 +9,6 @@
 class Token {
 public:
     enum Type {
-        // clang-format off
-
         UNKNOWN,
 
         // identifier
@@ -56,7 +54,6 @@ public:
 
         // last token
         FILE_END,
-        // clang-format on
     };
 
     Type type;

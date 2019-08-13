@@ -79,6 +79,9 @@
     <ClInclude Include="..\..\Source\Memory\Win\WinAllocate.h">
       <Filter>Memory\Win</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\Source\Preprocess\LineSlicer.h">
+      <Filter>Preprocess</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\Source\ir\CallingConvention.cpp">
@@ -138,6 +141,9 @@
     </ClCompile>
     <ClCompile Include="..\..\Source\Memory\Win\WinAllocate.cpp">
       <Filter>Memory\Win</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\Preprocess\LineSlicer.cpp">
+      <Filter>Preprocess</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
