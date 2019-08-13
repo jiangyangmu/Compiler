@@ -1,4 +1,4 @@
-#include "Allocate.h"
+#include "WinAllocate.h"
 
 #include <windows.h>
 #include <tchar.h>

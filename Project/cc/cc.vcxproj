@@ -40,7 +40,7 @@
     <ClInclude Include="..\..\Source\Memory\Span.h" />
     <ClInclude Include="..\..\Source\Memory\SpanAllocator.h" />
     <ClInclude Include="..\..\Source\Memory\SpanFreeList.h" />
-    <ClInclude Include="..\..\Source\Memory\Win\Allocate.h" />
+    <ClInclude Include="..\..\Source\Memory\Win\WinAllocate.h" />
     <ClInclude Include="..\..\Source\Parse\AstParser.h" />
     <ClInclude Include="..\..\Source\Parse\ParseMacros.h" />
     <ClInclude Include="..\..\Source\Parse\TokenParser.h" />
@@ -58,11 +58,12 @@
     <ClCompile Include="..\..\Source\ir\DefinitionContext.cpp" />
     <ClCompile Include="..\..\Source\ir\FunctionContext.cpp" />
     <ClCompile Include="..\..\Source\ir\TypeContext.cpp" />
+    <ClCompile Include="..\..\Source\Memory\Allocate.cpp" />
     <ClCompile Include="..\..\Source\Memory\FreeListAllocator.cpp" />
     <ClCompile Include="..\..\Source\Memory\Span.cpp" />
     <ClCompile Include="..\..\Source\Memory\SpanAllocator.cpp" />
     <ClCompile Include="..\..\Source\Memory\SpanFreeList.cpp" />
-    <ClCompile Include="..\..\Source\Memory\Win\Allocate.cpp" />
+    <ClCompile Include="..\..\Source\Memory\Win\WinAllocate.cpp" />
     <ClCompile Include="..\..\Source\Parse\AstParser.cpp" />
     <ClCompile Include="..\..\Source\Parse\TokenParser.cpp" />
     <ClCompile Include="..\..\Source\Preprocess\Preprocess.cpp" />

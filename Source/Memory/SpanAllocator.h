@@ -85,12 +85,16 @@ private:
     friend SpanAllocator * GetDefaultSpanAllocator();
 };
 
-// constexpr size_t DEFAULT_NUM_PAGE_PER_SPAN = 16 * 1024; // 64MB
-constexpr size_t DEFAULT_NUM_PAGE_PER_SPAN = 4; // 1MB
-
 // nReservedPage must be power of 2, at least 16
 SpanAllocator   CreateSpanAllocator(size_t nReservedPage);
 SpanAllocator   CreateSpanAllocator(void * pvMemBegin, size_t nPage);
+
+#ifdef _DEBUG
+constexpr size_t DEFAULT_NUM_PAGE_PER_SPAN = 4; // 16KB
+#else
+constexpr size_t DEFAULT_NUM_PAGE_PER_SPAN = 16 * 1024; // 64MB
+#endif
+
 SpanAllocator * GetDefaultSpanAllocator();
 
 }

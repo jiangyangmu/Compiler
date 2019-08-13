@@ -27,7 +27,10 @@
     <ClCompile Include="..\..\Source\Memory\SpanFreeList.cpp">
       <Filter>Source</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Source\Memory\Win\Allocate.cpp">
+    <ClCompile Include="..\..\Source\Memory\Allocate.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\Memory\Win\WinAllocate.cpp" />
       <Filter>Source</Filter>
     </ClCompile>
   </ItemGroup>
@@ -50,7 +53,10 @@
     <ClInclude Include="..\..\Source\Memory\SpanFreeList.h">
       <Filter>Source</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Source\Memory\Win\Allocate.h">
+    <ClInclude Include="..\..\Source\Memory\Allocate.h">
+      <Filter>Source</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\Memory\Win\WinAllocate.h" />
       <Filter>Source</Filter>
     </ClInclude>
   </ItemGroup>

@@ -76,7 +76,7 @@
     <ClInclude Include="..\..\Source\Memory\SpanAllocator.h">
       <Filter>Memory</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Source\Memory\Win\Allocate.h">
+    <ClInclude Include="..\..\Source\Memory\Win\WinAllocate.h">
       <Filter>Memory\Win</Filter>
     </ClInclude>
   </ItemGroup>
@@ -133,7 +133,10 @@
     <ClCompile Include="..\..\Source\Memory\Span.cpp">
       <Filter>Memory</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Source\Memory\Win\Allocate.cpp">
+    <ClCompile Include="..\..\Source\Memory\Allocate.cpp">
+      <Filter>Memory</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\Memory\Win\WinAllocate.cpp">
       <Filter>Memory\Win</Filter>
     </ClCompile>
   </ItemGroup>
@@ -165,6 +168,9 @@
     <Filter Include="Memory\Win">
       <UniqueIdentifier>{6b34cfc9-7bd3-4534-bafd-dc87d1cdbbcf}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Doc\old">
+      <UniqueIdentifier>{3e7efd03-3163-4eef-8c61-8d3c9c9fa0dd}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <None Include="..\..\Test\SampleProgram\Program.c">
@@ -173,16 +179,7 @@
     <None Include="..\..\Test\SampleProgram\Simple.c">
       <Filter>TestProgram</Filter>
     </None>
-    <None Include="..\..\DevLog\DEBUG.md">
-      <Filter>Doc</Filter>
-    </None>
     <None Include="..\..\DevLog\MOD.md">
-      <Filter>Doc</Filter>
-    </None>
-    <None Include="..\..\DevLog\MOD_mem.md">
-      <Filter>Doc</Filter>
-    </None>
-    <None Include="..\..\DevLog\MOD_vm.md">
       <Filter>Doc</Filter>
     </None>
     <None Include="..\..\DevLog\TODO.md">
@@ -191,14 +188,23 @@
     <None Include="..\..\DevLog\MOD_ir.md">
       <Filter>Doc</Filter>
     </None>
-    <None Include="..\..\DevLog\MOD_libc.md">
-      <Filter>Doc</Filter>
-    </None>
     <None Include="..\..\DevLog\CODE.md">
-      <Filter>Doc</Filter>
+      <Filter>Doc\old</Filter>
+    </None>
+    <None Include="..\..\DevLog\DEBUG.md">
+      <Filter>Doc\old</Filter>
+    </None>
+    <None Include="..\..\DevLog\MOD_libc.md">
+      <Filter>Doc\old</Filter>
+    </None>
+    <None Include="..\..\DevLog\MOD_mem.md">
+      <Filter>Doc\old</Filter>
     </None>
     <None Include="..\..\DevLog\TODO_vm.md">
-      <Filter>Doc</Filter>
+      <Filter>Doc\old</Filter>
+    </None>
+    <None Include="..\..\DevLog\MOD_vm.md">
+      <Filter>Doc\old</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>
