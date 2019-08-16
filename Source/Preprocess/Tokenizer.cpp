@@ -5,12 +5,6 @@
 #include <unordered_map>
 #include <xutility>
 
-const char * ParseId(const char * pcBegin);
-const char * ParseNumericConstant(const char * pcBegin);
-const char * ParseCharConstant(const char * pcBegin);
-const char * ParseStringLiteral(const char * pcBegin);
-const char * ParseOperatorPunctuator(const char * pcBegin);
-
 const char * ParsePPDirective(const char * pcBegin);
 const char * ParsePPIncludedFilePath(const char * pcBegin);
 const char * ParsePPLParan(const char * pcBegin);
@@ -51,6 +45,7 @@ struct TokenRecog {
         CHAR,
         STRING,
         OP_OR_PUNC,
+        PP_DIRECTIVE,
     };
 
     struct Info {
@@ -321,6 +316,16 @@ static inline const char * OperatorPunctuatorEnd(const char * start) {
     return start;
 }
 
+static inline const char * PPDirectiveEnd(const char * start)
+{
+    if (*start == '#')
+    {
+        ++start;
+        return IdEnd(start);
+    }
+    return start;
+}
+
 // Stop at the first character after current token, or start if not match.
 static inline const char * TokenEnd(const char * start,
                                     TokenRecog::Info * info) {
@@ -354,6 +359,11 @@ static inline const char * TokenEnd(const char * start,
     if ((end = OperatorPunctuatorEnd(start)) > start) // operator or punctuator
     {
         info->category = TokenRecog::OP_OR_PUNC;
+        return end;
+    }
+    if ((end = PPDirectiveEnd(start)) > start) // preprocess directive
+    {
+        info->category = TokenRecog::PP_DIRECTIVE;
         return end;
     }
 
@@ -416,6 +426,30 @@ Token::Type OperatorPunctuatorType(StringRef text) {
     if (operators_and_punctuators.find(text.toString()) !=
         operators_and_punctuators.end())
         return operators_and_punctuators[text.toString()];
+    else
+        return Token::UNKNOWN;
+}
+
+Token::Type PPDirectiveType(StringRef text) {
+    static std::unordered_map<std::string, Token::Type>
+        pp_directives = {
+            {"#if", Token::PPD_IF},
+            {"#ifdef", Token::PPD_IFDEF},
+            {"#ifndef", Token::PPD_IFNDEF},
+            {"#elif", Token::PPD_ELIF},
+            {"#else", Token::PPD_ELSE},
+            {"#endif", Token::PPD_ENDIF},
+            {"#define", Token::PPD_DEFINE},
+            {"#undef", Token::PPD_UNDEF},
+            {"#include", Token::PPD_INCLUDE},
+            {"#line", Token::PPD_LINE},
+            {"#error", Token::PPD_ERROR},
+            {"#pragma", Token::PPD_PRAGMA},
+            {"#", Token::PPD_NULL},
+        };
+    if (pp_directives.find(text.toString()) !=
+        pp_directives.end())
+        return pp_directives[text.toString()];
     else
         return Token::UNKNOWN;
 }
@@ -502,6 +536,8 @@ static inline Token RecognizeToken(const char * start,
             token.type = Token::CONST_CHAR;
             token.cval = EvalChar(token.text);
             break;
+        case TokenRecog::PP_DIRECTIVE:
+            token.type = PPDirectiveType(token.text);
         default:
             break;
     }
@@ -530,14 +566,13 @@ std::vector<Token> Tokenize(std::vector<std::string> vStrLines)
             if (*start == 0)
                 break;
             end = TokenEnd(start, &info);
-            // ERROR: invalid character sequence if fail.
             if (end == start)
-            {
                 throw std::invalid_argument("Unrecognized token.");
-            }
 
             // Recognize.
             Token token = RecognizeToken(start, end, info);
+            if (token.type == Token::UNKNOWN)
+                throw std::invalid_argument("Unrecognized token.");
             tokens.push_back(token);
         } while (true);
     }
