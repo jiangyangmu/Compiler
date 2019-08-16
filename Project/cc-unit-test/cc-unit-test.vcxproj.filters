@@ -37,6 +37,9 @@
     <ClCompile Include="..\..\Source\Preprocess\LineSlicer.cpp">
       <Filter>Source</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\Source\Preprocess\Tokenizer.cpp">
+      <Filter>Source</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="..\..\Source\Memory\Span.h">
@@ -62,6 +65,9 @@
     </ClInclude>
     <ClInclude Include="..\..\Source\Memory\Win\WinAllocate.h" />
     <ClInclude Include="..\..\Source\Preprocess\LineSlicer.h">
+      <Filter>Source</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\Preprocess\Tokenizer.h">
       <Filter>Source</Filter>
     </ClInclude>
   </ItemGroup>
