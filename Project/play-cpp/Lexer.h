@@ -5,6 +5,7 @@
 #include <vector>
 #include <bitset>
 #include <map>
+#include <array>
 #include <deque>
 
 /*
@@ -26,8 +27,7 @@
 
 */
 
-typedef std::vector<int> TransitionTable;
-typedef std::bitset<8> Closure;
+typedef std::bitset<32> Closure;
 
 struct Node
 {
@@ -124,7 +124,7 @@ NodeGroup Done(NodeGroup c)
     return { c.in, &n->next, c.alt };
 }
 
-// All reachable Node with non-empty next (including non-empty self)
+// All reachable Node with non-empty next, and non-empty or done self
 Closure EpsilonClosure(Node * n0)
 {
     static std::map<Node *, Closure> m;
@@ -134,7 +134,7 @@ Closure EpsilonClosure(Node * n0)
 
     Closure c;
     Closure mask;
-    if (n0->c)
+    if (n0->c || n0->done)
     {
         c.set(n0->id);
     }
@@ -233,8 +233,6 @@ MatchState GetState(Closure c)
     return MatchState::CONT;
 }
 
-TransitionTable Compile(NodeGroup c);
-
 void PrintNodes(Closure c)
 {
     std::cout << "{";
@@ -262,8 +260,146 @@ void PrintNodes()
     }
 }
 
+void Run(NodeGroup c, std::string & text)
+{
+    std::cout << "match \"" << text << "\"..." << std::endl;
+    Closure cl;
+    cl.set(c.in->id);
+    for (char ch : text)
+    {
+        cl = Next(EpsilonClosure(cl), ch);
+        PrintNodes(cl);
+
+        MatchState state = GetState(cl);
+        if (state == MatchState::GOOD)
+        {
+            std::cout << "matched." << std::endl;
+            break;
+        }
+        else if (state == MatchState::BAD)
+        {
+            std::cout << "not matched." << std::endl;
+            break;
+        }
+    }
+}
+
+struct TransitionTable
+{
+    std::vector<std::array<size_t, 26>> jump;
+    std::vector<MatchState> state;
+};
+TransitionTable Compile(NodeGroup g)
+{
+    TransitionTable t;
+
+    std::deque<Closure> q;
+    std::map<Closure, size_t, ClosureLessThan> id;
+    size_t next_id = 0;
+
+    Closure c0;
+    c0.set(g.in->id);
+    c0 = EpsilonClosure(c0);
+    q.push_front(c0);
+    id.emplace(c0, next_id++);
+
+    size_t row = 0;
+    while (!q.empty())
+    {
+        if (t.jump.size() < row + 1)
+            t.jump.resize(row + 1);
+
+        Closure c1 = q.back();
+        q.pop_back();
+        for (char ch = 'a'; ch <= 'z'; ++ch)
+        {
+            Closure c2 = EpsilonClosure(Next(c1, ch));
+            
+            auto cid = id.find(c2);
+            if (cid == id.end())
+            {
+                q.push_front(c2);
+                cid = id.emplace_hint(cid, c2, next_id++);
+            }
+
+            t.jump[row][ch - 'a'] = cid->second;
+        }
+
+        ++row;
+    }
+
+    t.state.resize(row);
+    for (auto cl_id : id)
+    {
+        t.state[cl_id.second] = GetState(cl_id.first);
+    }
+
+    return t;
+}
+void Run(TransitionTable & tt, std::string & text)
+{
+    std::cout << "match \"" << text << "\"..." << std::endl;
+    size_t state = 0;
+    size_t i = 0;
+    for (;
+         i < text.size() && tt.state[state] == MatchState::CONT;
+         ++i)
+    {
+        char ch = text[i];
+        state = tt.jump[state][ch - 'a'];
+    }
+
+    if (tt.state[state] == MatchState::GOOD)
+    {
+        if (i == text.size())
+            std::cout << "matched." << std::endl;
+        else
+            std::cout << "prefix \"" << text.substr(0, i) << "\" matched." << std::endl;
+    }
+    else
+    {
+        std::cout << "not matched." << std::endl;
+    }
+}
+
+void PrintTable(TransitionTable & tt)
+{
+    std::cout << "    ";
+    for (char ch = 'a'; ch <= 'z'; ++ch)
+    {
+        std::cout << "  " << ch;
+    }
+    std::cout << std::endl;
+
+    size_t state = 0;
+    for (auto row : tt.jump)
+    {
+        std::cout.width(4);
+        std::cout << state++;
+        for (char ch = 'a'; ch <= 'z'; ++ch)
+        {
+            std::cout << "  " << row[ch - 'a'];
+        }
+        std::cout << std::endl;
+    }
+
+    state = 0;
+    for (auto row : tt.state)
+    {
+        std::cout << "[" << state++ << "] ";
+        switch (row)
+        {
+            case MatchState::CONT: std::cout << "cont."; break;
+            case MatchState::GOOD: std::cout << "good"; break;
+            case MatchState::BAD: std::cout << "bad"; break;
+            default: break;
+        }
+        std::cout << std::endl;
+    }
+}
+
 // Convert 1 pattern list to transition table
-void Convert1()
+void Test_ConvertOnePattern()
 {
     // ab*c
     NodeGroup c = Done(
@@ -279,6 +415,10 @@ void Convert1()
     );
     PrintNodes();
 
+    // Compile.
+    TransitionTable tt = Compile(c);
+    PrintTable(tt);
+
     // Simulate.
     std::vector<std::string> input = {
         "ac",
@@ -288,26 +428,9 @@ void Convert1()
     };
     for (auto text : input)
     {
-        std::cout << "match \"" << text << "\"..." << std::endl;
-        Closure cl;
-        cl.set(c.in->id);
-        for (char ch : text)
-        {
-            cl = Next(EpsilonClosure(cl), ch);
-            PrintNodes(cl);
-        
-            MatchState state = GetState(cl);
-            if (state == MatchState::GOOD)
-            {
-                std::cout << "matched." << std::endl;
-                break;
-            }
-            else if (state == MatchState::BAD)
-            {
-                std::cout << "not matched." << std::endl;
-                break;
-            }
-        }
+        std::cout << "pattern: ab*c text: " << text << std::endl;
+        //Run(c, text);
+        Run(tt, text);
     }
 }
 
