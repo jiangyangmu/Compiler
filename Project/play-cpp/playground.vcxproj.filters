@@ -24,5 +24,8 @@
     <ClInclude Include="PositionLinkedList.h">
       <Filter>Category</Filter>
     </ClInclude>
+    <ClInclude Include="Lexer.h">
+      <Filter>Category</Filter>
+    </ClInclude>
   </ItemGroup>
 </Project>
