@@ -134,11 +134,9 @@ Closure EpsilonClosure(Node * n0)
 
     Closure c;
     Closure mask;
-    if (n0->c || n0->done)
-    {
-        c.set(n0->id);
-    }
     std::deque<Node *> q = {n0};
+    if (n0->done)
+        c.set(n0->id);
     while (!q.empty())
     {
         Node * n = q.back();
@@ -148,16 +146,21 @@ Closure EpsilonClosure(Node * n0)
             continue;
         mask.set(n->id);
 
-        if (!n->c && n->next)
+        if (n->c) // non-empty next
         {
-            assert(n->next != n);
-            c.set(n->next->id);
-            q.push_front(n->next);
+            assert(n->next);
+            c.set(n->id);
         }
-        if (n->alt)
+        if (!n->c && n->next) // epsilon next 1
+        {
+
+            assert(n->next != n);
+            q.push_front(n->next);
+
+        }
+        if (n->alt) // epsilon next 2
         {
             assert(n->alt != n);
-            c.set(n->alt->id);
             q.push_front(n->alt);
         }
     }
@@ -248,7 +251,7 @@ void PrintNodes()
     for (Node * n : NodeFactory)
     {
         std::cout
-            << n->id << (n->done ? "(done)" : "") << ":" << std::endl
+            << n->id << (n->done ? "(done)" : (n->c ? "(non-empty)" : "")) << ":" << std::endl
             << "  --" << (n->c ? n->c : '-') << "--> " << (n->next ? std::to_string(n->next->id) : "null") << std::endl
             << "  -----> " << (n->alt ? std::to_string(n->alt->id) : "null") << std::endl;
     }
@@ -260,28 +263,39 @@ void PrintNodes()
     }
 }
 
-void Run(NodeGroup c, std::string & text)
+bool Run(NodeGroup c, std::string & text)
 {
     std::cout << "match \"" << text << "\"..." << std::endl;
     Closure cl;
     cl.set(c.in->id);
-    for (char ch : text)
+
+    MatchState state = MatchState::CONT;
+    size_t i = 0;
+    for (;
+         i < text.size() && state == MatchState::CONT;
+         ++i)
     {
-        cl = Next(EpsilonClosure(cl), ch);
+        char ch = text[i];
+        cl = EpsilonClosure(cl);
+        cl = Next(cl, ch);
         PrintNodes(cl);
 
-        MatchState state = GetState(cl);
-        if (state == MatchState::GOOD)
-        {
-            std::cout << "matched." << std::endl;
-            break;
-        }
-        else if (state == MatchState::BAD)
-        {
-            std::cout << "not matched." << std::endl;
-            break;
-        }
+        state = GetState(cl);
     }
+
+    bool matched = false;
+    if (state == MatchState::GOOD)
+    {
+        if (i == text.size())
+            std::cout << "matched." << std::endl, matched = true;
+        else
+            std::cout << "prefix \"" << text.substr(0, i) << "\" matched." << std::endl;
+    }
+    else
+    {
+        std::cout << "not matched." << std::endl;
+    }
+    return matched;
 }
 
 struct TransitionTable
@@ -336,7 +350,7 @@ TransitionTable Compile(NodeGroup g)
 
     return t;
 }
-void Run(TransitionTable & tt, std::string & text)
+bool Run(TransitionTable & tt, std::string & text)
 {
     std::cout << "match \"" << text << "\"..." << std::endl;
     size_t state = 0;
@@ -349,10 +363,11 @@ void Run(TransitionTable & tt, std::string & text)
         state = tt.jump[state][ch - 'a'];
     }
 
+    bool matched = false;
     if (tt.state[state] == MatchState::GOOD)
     {
         if (i == text.size())
-            std::cout << "matched." << std::endl;
+            std::cout << "matched." << std::endl, matched = true;
         else
             std::cout << "prefix \"" << text.substr(0, i) << "\" matched." << std::endl;
     }
@@ -360,6 +375,7 @@ void Run(TransitionTable & tt, std::string & text)
     {
         std::cout << "not matched." << std::endl;
     }
+    return matched;
 }
 
 void PrintTable(TransitionTable & tt)
@@ -401,16 +417,26 @@ void PrintTable(TransitionTable & tt)
 // Convert 1 pattern list to transition table
 void Test_ConvertOnePattern()
 {
-    // ab*c
+    // ab*c+d?e
     NodeGroup c = Done(
         Concat(
             Concat(
-                Match('a'),
-                Rep0(
-                    Match('b')
+                Concat(
+                    Concat(
+                        Match('a'),
+                        Rep0(
+                            Match('b')
+                        )
+                    ),
+                    Rep1(
+                        Match('c')
+                    )
+                ),
+                Opt(
+                    Match('d')
                 )
             ),
-            Match('c')
+            Match('e')
         )
     );
     PrintNodes();
@@ -420,17 +446,24 @@ void Test_ConvertOnePattern()
     PrintTable(tt);
 
     // Simulate.
-    std::vector<std::string> input = {
-        "ac",
-        "abc",
-        "abbc",
-        "abbbc",
+    std::vector<std::pair<std::string, bool>> test_cases = {
+        { "ace", true },
+        { "abce", true },
+        { "abbce", true },
+        { "abbbce", true },
+        { "acce", true },
+        { "acde", true },
+        { "ce", false },
+        { "ae", false },
+        { "ac", false },
     };
-    for (auto text : input)
+    for (auto kv : test_cases)
     {
+        auto & text = kv.first;
+        bool result = kv.second;
         std::cout << "pattern: ab*c text: " << text << std::endl;
-        //Run(c, text);
-        Run(tt, text);
+        //assert(Run(c, text) == result);
+        assert(Run(tt, text) == result);
     }
 }
 
