@@ -62,8 +62,18 @@ Node * NewNode()
     return n;
 }
 
-// 1. build dfa
-NodeGroup Match(char c)
+// ===================================================================
+// Build epsilon NFA
+// ===================================================================
+
+NodeGroup MatchEmpty()
+{
+    Node * n = NewNode();
+
+    return { n, &n->next, &n->alt };
+}
+
+NodeGroup MatchChar(char c)
 {
     Node * n = NewNode();
     n->c = c;
@@ -123,6 +133,115 @@ NodeGroup Done(NodeGroup c)
 
     return { c.in, &n->next, c.alt };
 }
+
+
+// abc
+// a|b|c
+// ab*c
+// ab+c
+// ab?c
+// a(b|c)d
+// alt-group - concat-list - (char|alt-group)[repeat]
+#define REGEX_EXPECT(p, expect) \
+    do { \
+        if (*(p) != (expect)) \
+            throw std::invalid_argument("bad regex"); \
+    } while (false)
+#define REGEX_EXPECT_TRUE(cond) \
+    do { \
+        if (!(cond)) \
+            throw std::invalid_argument("bad regex"); \
+    } while (false)
+
+NodeGroup FromRegexChar(const char * & c);
+NodeGroup FromRegexConcatList(const char * & c);
+NodeGroup FromRegexAltGroup(const char * & c);
+
+NodeGroup FromRegexChar(const char * & c)
+{
+    NodeGroup g;
+
+    REGEX_EXPECT_TRUE('a' <= *c && *c <= 'z');
+    g = MatchChar(*c);
+    ++c;
+
+    return g;
+}
+NodeGroup FromRegexConcatList(const char * & c)
+{
+    // ((char | alt-group) repeat?)+
+    
+    NodeGroup g;
+    
+    assert(*c != '|' && *c != ')');
+    if (*c == '(')
+        g = FromRegexAltGroup(c);
+    else
+        g = FromRegexChar(c);
+    switch (*c)
+    {
+        case '*': g = Rep0(g); ++c; break;
+        case '+': g = Rep1(g); ++c; break;
+        case '?': g = Opt(g); ++c; break;
+        default: break;
+    }
+
+    while (*c != '|' && *c != ')')
+    {
+        if (*c == '(')
+            g = Concat(g, FromRegexAltGroup(c));
+        else
+            g = Concat(g, FromRegexChar(c));
+        switch (*c)
+        {
+            case '*': g = Rep0(g); ++c; break;
+            case '+': g = Rep1(g); ++c; break;
+            case '?': g = Opt(g); ++c; break;
+            default: break;
+        }
+    }
+
+    return g;
+}
+NodeGroup FromRegexAltGroup(const char * & c)
+{
+    // '(' concat-list? ('|' concat-list?)* ')'
+    
+    NodeGroup g;
+
+    REGEX_EXPECT(c, '(');
+    ++c;
+
+    if (*c == '|' || *c == ')')
+        g = MatchEmpty();
+    else
+        g = FromRegexConcatList(c);
+
+    while (*c == '|')
+    {
+        ++c;
+        if (*c != ')')
+            g = Alt(g, FromRegexConcatList(c));
+    }
+
+    REGEX_EXPECT(c, ')');
+    ++c;
+
+    return g;
+}
+NodeGroup FromRegex(std::string regex)
+{
+    if (regex.empty() || regex.at(0) != '(')
+        regex = "(" + regex + ")";
+
+    const char * c = regex.data();
+    return Done(FromRegexAltGroup(c));
+}
+std::string ToRegex(NodeGroup g);
+
+// ===================================================================
+// Simulate/compile/run epsilon NFA
+// ===================================================================
 
 // All reachable Node and self that are non-empty or done
 Closure EpsilonClosure(Node * n0)
@@ -425,10 +544,17 @@ bool Run(TransitionTable & tt, std::string & text)
     bool matched = false;
     if (tt.state[state] == MatchState::GOOD)
     {
+        size_t matched_pattern = 0;
+        for (size_t i = 0; i <= state; ++i)
+        {
+            if (tt.state[i] == MatchState::GOOD)
+                ++matched_pattern;
+        }
+
         if (i == text.size())
-            std::cout << "matched." << std::endl, matched = true;
+            std::cout << "matched pattern #" << matched_pattern << "." << std::endl, matched = true;
         else
-            std::cout << "prefix \"" << text.substr(0, i) << "\" matched." << std::endl;
+            std::cout << "prefix \"" << text.substr(0, i) << "\" matched pattern #" << matched_pattern << "." << std::endl;
     }
     else
     {
@@ -482,20 +608,20 @@ void Test_ConvertOnePattern()
             Concat(
                 Concat(
                     Concat(
-                        Match('a'),
+                        MatchChar('a'),
                         Rep0(
-                            Match('b')
+                            MatchChar('b')
                         )
                     ),
                     Rep1(
-                        Match('c')
+                        MatchChar('c')
                     )
                 ),
                 Opt(
-                    Match('d')
+                    MatchChar('d')
                 )
             ),
-            Match('e')
+            MatchChar('e')
         )
     );
     PrintNodes();
@@ -530,38 +656,8 @@ void Test_ConvertOnePattern()
 void Test_ConvertMultiplePattern()
 {
     std::vector<NodeGroup> vc = {
-        // apple
-        Done(
-            Concat(
-                Concat(
-                    Concat(
-                        Concat(
-                            Match('a'),
-                            Match('p')
-                        ),
-                        Match('p')
-                    ),
-                    Match('l')
-                ),
-                Match('e')
-            )
-        ),
-        // banan
-        Done(
-            Concat(
-                Concat(
-                    Concat(
-                        Concat(
-                            Match('b'),
-                            Match('a')
-                        ),
-                        Match('n')
-                    ),
-                    Match('a')
-                ),
-                Match('n')
-            )
-        ),
+        FromRegex("apple"),
+        FromRegex("banan")
     };
     PrintNodes();
 
