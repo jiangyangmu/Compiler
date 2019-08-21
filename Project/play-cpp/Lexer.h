@@ -124,7 +124,7 @@ NodeGroup Done(NodeGroup c)
     return { c.in, &n->next, c.alt };
 }
 
-// All reachable Node with non-empty next, and non-empty or done self
+// All reachable Node and self that are non-empty or done
 Closure EpsilonClosure(Node * n0)
 {
     static std::map<Node *, Closure> m;
@@ -135,8 +135,6 @@ Closure EpsilonClosure(Node * n0)
     Closure c;
     Closure mask;
     std::deque<Node *> q = {n0};
-    if (n0->done)
-        c.set(n0->id);
     while (!q.empty())
     {
         Node * n = q.back();
@@ -146,19 +144,16 @@ Closure EpsilonClosure(Node * n0)
             continue;
         mask.set(n->id);
 
-        if (n->c) // non-empty next
+        if (n->c || n->done) // non-empty or done
         {
-            assert(n->next);
             c.set(n->id);
         }
-        if (!n->c && n->next) // epsilon next 1
+        if (!n->c && n->next) // epsilon 1
         {
-
             assert(n->next != n);
             q.push_front(n->next);
-
         }
-        if (n->alt) // epsilon next 2
+        if (n->alt) // epsilon 2
         {
             assert(n->alt != n);
             q.push_front(n->alt);
@@ -234,6 +229,20 @@ MatchState GetState(Closure c)
     }
 
     return MatchState::CONT;
+}
+MatchState GetStateN(Closure c)
+{
+    if (c.none())
+        return MatchState::BAD;
+
+    size_t i = 0;
+    while (i < c.size() && !c.test(i))
+        ++i;
+    
+    if (NodeFactory[i]->done)
+        return MatchState::GOOD;
+    else
+        return MatchState::CONT;
 }
 
 void PrintNodes(Closure c)
@@ -350,6 +359,56 @@ TransitionTable Compile(NodeGroup g)
 
     return t;
 }
+
+TransitionTable CompileN(std::vector<NodeGroup> vg)
+{
+    TransitionTable t;
+
+    std::deque<Closure> q;
+    std::map<Closure, size_t, ClosureLessThan> id;
+    size_t next_id = 0;
+
+    Closure c0;
+    for (NodeGroup & g : vg)
+        c0.set(g.in->id);
+    c0 = EpsilonClosure(c0);
+    q.push_front(c0);
+    id.emplace(c0, next_id++);
+
+    size_t row = 0;
+    while (!q.empty())
+    {
+        if (t.jump.size() < row + 1)
+            t.jump.resize(row + 1);
+
+        Closure c1 = q.back();
+        q.pop_back();
+        for (char ch = 'a'; ch <= 'z'; ++ch)
+        {
+            Closure c2 = EpsilonClosure(Next(c1, ch));
+
+            auto cid = id.find(c2);
+            if (cid == id.end())
+            {
+                q.push_front(c2);
+                cid = id.emplace_hint(cid, c2, next_id++);
+            }
+
+            t.jump[row][ch - 'a'] = cid->second;
+        }
+
+        ++row;
+    }
+
+    t.state.resize(row);
+    for (auto cl_id : id)
+    {
+        t.state[cl_id.second] = GetStateN(cl_id.first);
+    }
+
+    return t;
+}
+
 bool Run(TransitionTable & tt, std::string & text)
 {
     std::cout << "match \"" << text << "\"..." << std::endl;
@@ -468,3 +527,60 @@ void Test_ConvertOnePattern()
 }
 
 // Convert N pattern list to transition table
+void Test_ConvertMultiplePattern()
+{
+    std::vector<NodeGroup> vc = {
+        // apple
+        Done(
+            Concat(
+                Concat(
+                    Concat(
+                        Concat(
+                            Match('a'),
+                            Match('p')
+                        ),
+                        Match('p')
+                    ),
+                    Match('l')
+                ),
+                Match('e')
+            )
+        ),
+        // banan
+        Done(
+            Concat(
+                Concat(
+                    Concat(
+                        Concat(
+                            Match('b'),
+                            Match('a')
+                        ),
+                        Match('n')
+                    ),
+                    Match('a')
+                ),
+                Match('n')
+            )
+        ),
+    };
+    PrintNodes();
+
+    // Compile.
+    TransitionTable tt = CompileN(vc);
+    PrintTable(tt);
+
+    // Simulate.
+    std::vector<std::pair<std::string, bool>> test_cases = {
+        { "apple", true },
+        { "banan", true },
+        { "appla", false },
+        { "banana", false },
+    };
+    for (auto kv : test_cases)
+    {
+        auto & text = kv.first;
+        bool result = kv.second;
+        std::cout << "pattern: (apple|banan) text: " << text << std::endl;
+        assert(Run(tt, text) == result);
+    }
+}
