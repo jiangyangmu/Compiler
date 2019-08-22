@@ -7,6 +7,7 @@
 #include <map>
 #include <array>
 #include <deque>
+#include <memory>
 
 /*
     Problem:
@@ -46,21 +47,79 @@ struct NodeGroup
     Node ** alt;
 };
 
-std::vector<Node *> NodeFactory;
-
-Node * NewNode()
+class NodeFactory
 {
-    Node * n = new Node;
-    n->id = NodeFactory.size();
-    n->done = false;
-    n->c = nullptr;
-    n->next = nullptr;
-    n->alt = nullptr;
+public:
+    Node * NewNode()
+    {
+        v.emplace_back(new Node);
 
-    NodeFactory.push_back(n);
+        Node * n = v.back().get();
+        n->id = v.size() - 1;
+        n->done = false;
+        n->c = nullptr;
+        n->next = nullptr;
+        n->alt = nullptr;
+        
+        return n;
+    }
+    Node * operator [] (size_t i) const
+    {
+        return v.at(i).get();
+    }
+    std::vector<std::unique_ptr<Node>> & nodes() { return v; }
+private:
+    std::vector<std::unique_ptr<Node>> v;
+};
 
-    return n;
-}
+enum class MatchState
+{
+    CONT,
+    GOOD,
+    BAD,
+};
+struct TransitionTable
+{
+    std::vector<std::array<size_t, 27>> jump;
+    std::vector<MatchState> state;
+    std::vector<Closure> state_closure;
+    std::vector<size_t> matched_branch;
+
+    bool Run(std::string & text);
+    size_t RunN(std::string & text);
+};
+
+struct ClosureLessThan
+{
+    bool operator () (const Closure & c1, const Closure & c2) const
+    {
+        size_t i = 0;
+        while (i < c1.size() && c1.test(i) == c2.test(i))
+            ++i;
+        return i < c1.size() && !c1.test(i) && c2.test(i);
+    }
+};
+struct CompileContext
+{
+    NodeFactory factory;
+
+    std::vector<NodeGroup> groups;
+    
+    std::map<Node *, Closure> n2c_cache;
+    std::map<Closure, Closure, ClosureLessThan> c2c_cache;
+
+    Closure EpsilonClosure(Node * n0);
+    Closure EpsilonClosure(Closure c);
+    Closure Next(Closure c, char ch);
+    std::pair<MatchState, size_t> GetState(Closure c);
+
+    void PrintNodes();
+
+    size_t Simulate(std::string & text);
+
+    TransitionTable Compile();
+};
+
 
 std::string NodesString(Closure c)
 {
@@ -69,36 +128,36 @@ std::string NodesString(Closure c)
     for (size_t i = 0; i < c.size(); ++i)
     {
         if (c.test(i))
-            s += " " + std::to_string(NodeFactory[i]->id);
+            s += " " + std::to_string(i);
     }
     s += " }";
     return s;
 }
-void PrintNodes(Closure c)
+void PrintClosure(Closure c)
 {
     std::cout << "{";
     for (size_t i = 0; i < c.size(); ++i)
     {
         if (c.test(i))
-            std::cout << " " << NodeFactory[i]->id;
+            std::cout << " " << i;
     }
     std::cout << " }" << std::endl;;
 }
-Closure EpsilonClosure(Node * n0);
-void PrintNodes()
+
+void CompileContext::PrintNodes()
 {
-    for (Node * n : NodeFactory)
+    for (auto & n : factory.nodes())
     {
         std::cout
             << n->id << (n->done ? "(done)" : (n->c ? "(non-empty)" : "")) << ":" << std::endl
             << "  --" << (n->c ? *n->c : '-') << "--> " << (n->next ? std::to_string(n->next->id) : "null") << std::endl
             << "  -----> " << (n->alt ? std::to_string(n->alt->id) : "null") << std::endl;
     }
-    for (Node * n : NodeFactory)
+    for (auto & n : factory.nodes())
     {
         std::cout
             << n->id << (n->done ? "(done)" : "") << ": ";
-        PrintNodes(EpsilonClosure(n));
+        PrintClosure(EpsilonClosure(n.get()));
     }
 }
 
@@ -106,16 +165,31 @@ void PrintNodes()
 // Build epsilon NFA
 // ===================================================================
 
+NodeFactory * gNodeFactory = nullptr;
+struct NodeFactoryScope
+{
+    NodeFactory * origin;
+public:
+    NodeFactoryScope(NodeFactory * factory)
+    {
+        origin = gNodeFactory;
+        gNodeFactory = factory;
+    }
+    ~NodeFactoryScope()
+    {
+        gNodeFactory = origin;
+    }
+};
+
 NodeGroup MatchEmpty()
 {
-    Node * n = NewNode();
-
+    Node * n = gNodeFactory->NewNode();
     return { n, &n->next, &n->alt };
 }
 
 NodeGroup MatchChar(char c)
 {
-    Node * n = NewNode();
+    Node * n = gNodeFactory->NewNode();
     n->c = new char(c);
 
     return { n, &n->next, &n->alt };
@@ -130,35 +204,35 @@ NodeGroup Concat(NodeGroup c1, NodeGroup c2)
 
 NodeGroup Alt(NodeGroup c1, NodeGroup c2)
 {
-    Node * n = NewNode();
+    Node * n = gNodeFactory->NewNode();
     *c1.next = n;
     *c1.alt = c2.in;
     *c2.next = n;
 
-    return { c1.in, c2.alt, &n->alt };
+    return { c1.in, &n->next, c2.alt };
 }
 
 NodeGroup Rep0(NodeGroup c)
 {
-    Node * n = NewNode();
+    Node * n = gNodeFactory->NewNode();
     n->alt = c.in;
-    c.in->next = n;
+    *c.next = n;
 
     return { n, &n->next, c.alt };
 }
 
 NodeGroup Rep1(NodeGroup c)
 {
-    Node * n = NewNode();
+    Node * n = gNodeFactory->NewNode();
     n->alt = c.in;
-    c.in->next = n;
+    *c.next = n;
 
     return { c.in, &n->next, c.alt };
 }
 
 NodeGroup Opt(NodeGroup c)
 {
-    Node * n = NewNode();
+    Node * n = gNodeFactory->NewNode();
     *c.next = n;
     *c.alt = n;
 
@@ -167,13 +241,12 @@ NodeGroup Opt(NodeGroup c)
 
 NodeGroup Done(NodeGroup c)
 {
-    Node * n = NewNode();
+    Node * n = gNodeFactory->NewNode();
     n->done = true;
     *c.next = n;
 
     return { c.in, &n->next, c.alt };
 }
-
 
 // abc
 // a|b|c
@@ -284,11 +357,10 @@ std::string ToRegex(NodeGroup g);
 // ===================================================================
 
 // All reachable Node and self that are non-empty or done
-Closure EpsilonClosure(Node * n0)
+Closure CompileContext::EpsilonClosure(Node * n0)
 {
-    static std::map<Node *, Closure> m;
-    auto kv = m.find(n0);
-    if (kv != m.end())
+    auto kv = n2c_cache.find(n0);
+    if (kv != n2c_cache.end())
         return kv->second;
 
     Closure c;
@@ -319,28 +391,16 @@ Closure EpsilonClosure(Node * n0)
         }
     }
 
-    return m.emplace_hint(kv, n0, c)->second;
+    return n2c_cache.emplace_hint(kv, n0, c)->second;
 }
 
-struct ClosureLessThan
-{
-    bool operator () (const Closure & c1, const Closure & c2) const
-    {
-        size_t i = 0;
-        while (i < c1.size() && c1.test(i) == c2.test(i))
-            ++i;
-        return i < c1.size() && !c1.test(i) && c2.test(i);
-    }
-};
 
-Closure EpsilonClosure(Closure c)
+Closure CompileContext::EpsilonClosure(Closure c)
 {
-    static std::map<Closure, Closure, ClosureLessThan> m;
-
     Closure c2;
 
-    auto kv = m.find(c);
-    if (kv != m.end())
+    auto kv = c2c_cache.find(c);
+    if (kv != c2c_cache.end())
     {
         c2 = kv->second;
     }
@@ -350,10 +410,10 @@ Closure EpsilonClosure(Closure c)
         {
             if (c[i])
             {
-                c2 |= EpsilonClosure(NodeFactory[i]);
+                c2 |= EpsilonClosure(factory[i]);
             }
         }
-        m.emplace_hint(kv, c, c2);
+        c2c_cache.emplace_hint(kv, c, c2);
 
         //std::cout << NodesString(c) << " -> " << NodesString(c2) << std::endl;
     }
@@ -361,14 +421,14 @@ Closure EpsilonClosure(Closure c)
     return c2;
 }
 
-Closure Next(Closure c, char ch)
+Closure CompileContext::Next(Closure c, char ch)
 {
     Closure c2;
     for (size_t i = 0; i < c.size(); ++i)
     {
         if (c[i])
         {
-            Node * n = NodeFactory[i];
+            Node * n = factory[i];
             assert(n->done || n->c);
             if (n->done)
                 c2.set(n->id);
@@ -379,26 +439,7 @@ Closure Next(Closure c, char ch)
     return c2;
 }
 
-enum class MatchState
-{
-    CONT,
-    GOOD,
-    BAD,
-};
-MatchState GetState(Closure c)
-{
-    if (c.none())
-        return MatchState::BAD;
-
-    for (size_t i = 0; i < c.size(); ++i)
-    {
-        if (c[i] && NodeFactory[i]->done)
-            return MatchState::GOOD;
-    }
-
-    return MatchState::CONT;
-}
-std::pair<MatchState, size_t> GetStateN(Closure c)
+std::pair<MatchState, size_t> CompileContext::GetState(Closure c)
 {
     if (c.none())
         return {MatchState::BAD, 0};
@@ -407,19 +448,21 @@ std::pair<MatchState, size_t> GetStateN(Closure c)
     while (i < c.size() && !c.test(i))
         ++i;
     
-    if (NodeFactory[i]->done)
+    if (factory[i]->done)
         return {MatchState::GOOD, i};
     else
         return {MatchState::CONT, 0};
 }
 
-bool Run(NodeGroup c, std::string & text)
+size_t CompileContext::Simulate(std::string & text)
 {
     std::cout << "match \"" << text << "\"..." << std::endl;
     Closure cl;
-    cl.set(c.in->id);
+    for (NodeGroup & g : groups)
+        cl.set(g.in->id);
 
     MatchState state = MatchState::CONT;
+    size_t state_id = 0;
     size_t i = 0;
     for (;
          i < text.size() && state == MatchState::CONT;
@@ -428,9 +471,9 @@ bool Run(NodeGroup c, std::string & text)
         char ch = text[i];
         cl = EpsilonClosure(cl);
         cl = Next(cl, ch);
-        PrintNodes(cl);
+        //PrintNodes(cl);
 
-        state = GetState(cl);
+        std::tie(state, state_id) = GetState(cl);
     }
 
     bool matched = false;
@@ -448,13 +491,7 @@ bool Run(NodeGroup c, std::string & text)
     return matched;
 }
 
-struct TransitionTable
-{
-    std::vector<std::array<size_t, 27>> jump;
-    std::vector<MatchState> state;
-    std::vector<size_t> matched_branch;
-};
-TransitionTable Compile(NodeGroup g)
+TransitionTable CompileContext::Compile()
 {
     TransitionTable t;
 
@@ -463,67 +500,7 @@ TransitionTable Compile(NodeGroup g)
     size_t next_id = 0;
 
     Closure c0;
-    c0.set(g.in->id);
-    c0 = EpsilonClosure(c0);
-    q.push_front(c0);
-    id.emplace(c0, next_id++);
-
-    size_t row = 0;
-    while (!q.empty())
-    {
-        if (t.jump.size() < row + 1)
-            t.jump.resize(row + 1);
-
-        Closure c1 = q.back();
-        q.pop_back();
-        for (char ch = 'a'; ch <= 'z'; ++ch)
-        {
-            Closure c2 = EpsilonClosure(Next(c1, ch));
-            
-            auto cid = id.find(c2);
-            if (cid == id.end())
-            {
-                q.push_front(c2);
-                cid = id.emplace_hint(cid, c2, next_id++);
-            }
-
-            t.jump[row][ch - 'a'] = cid->second;
-        }
-        {
-            Closure c2 = EpsilonClosure(Next(c1, 0));
-
-            auto cid = id.find(c2);
-            if (cid == id.end())
-            {
-                q.push_front(c2);
-                cid = id.emplace_hint(cid, c2, next_id++);
-            }
-
-            t.jump[row][26] = cid->second;
-        }
-
-        ++row;
-    }
-
-    t.state.resize(row);
-    for (auto cl_id : id)
-    {
-        t.state[cl_id.second] = GetState(cl_id.first);
-    }
-
-    return t;
-}
-
-TransitionTable CompileN(std::vector<NodeGroup> vg)
-{
-    TransitionTable t;
-
-    std::deque<Closure> q;
-    std::map<Closure, size_t, ClosureLessThan> id;
-    size_t next_id = 0;
-
-    Closure c0;
-    for (NodeGroup & g : vg)
+    for (NodeGroup & g : groups)
         c0.set(g.in->id);
     c0 = EpsilonClosure(c0);
     q.push_front(c0);
@@ -568,18 +545,20 @@ TransitionTable CompileN(std::vector<NodeGroup> vg)
 
     t.state.resize(row);
     t.matched_branch.resize(row);
+    t.state_closure.resize(row);
 
     // Convert Node id to branch number.
     for (auto cl_id : id)
     {
-        auto state_and_done_node = GetStateN(cl_id.first);
+        auto state_and_done_node = GetState(cl_id.first);
         t.state[cl_id.second] = state_and_done_node.first;
+        t.state_closure[cl_id.second] = cl_id.first;
 
         size_t done_node = state_and_done_node.second;
         size_t branch = 0;
         for (size_t i = 0; i <= done_node; ++i)
         {
-            if (NodeFactory[i]->done)
+            if (factory[i]->done)
                 ++branch;
         }
         t.matched_branch[cl_id.second] = branch;
@@ -588,22 +567,39 @@ TransitionTable CompileN(std::vector<NodeGroup> vg)
     return t;
 }
 
-bool Run(TransitionTable & tt, std::string & text)
+bool TransitionTable::Run(std::string & text)
 {
     std::cout << "match \"" << text << "\"..." << std::endl;
-    size_t state = 0;
+    size_t st = 0;
     size_t i = 0;
     for (;
-         i < text.size() && tt.state[state] == MatchState::CONT;
+         i < text.size() && this->state[st] == MatchState::CONT;
          ++i)
     {
         char ch = text[i];
-        state = tt.jump[state][ch - 'a'];
+        st = this->jump[st][ch - 'a'];
     }
-    state = tt.jump[state][26];
+    for (;
+         i < text.size() && this->state[st] == MatchState::GOOD;
+         ++i)
+    {
+        char ch = text[i];
+        size_t next_state = this->jump[st][ch - 'a'];
+        if (this->state[next_state] != MatchState::GOOD)
+        {
+            --i;
+            break;
+        }
+         st = next_state;
+    }
+    if (i == text.size())
+    {
+        size_t next_state = this->jump[st][26];
+        st = this->jump[st][26];
+    }
 
     bool matched = false;
-    if (tt.state[state] == MatchState::GOOD)
+    if (this->state[st] == MatchState::GOOD)
     {
         if (i == text.size())
             std::cout << "matched pattern ." << std::endl, matched = true;
@@ -617,55 +613,84 @@ bool Run(TransitionTable & tt, std::string & text)
     return matched;
 }
 
-size_t RunN(TransitionTable & tt, std::string & text)
+size_t TransitionTable::RunN(std::string & text)
 {
     std::cout << "match \"" << text << "\"..." << std::endl;
-    size_t state = 0;
+    size_t st = 0;
     size_t i = 0;
     for (;
-         i < text.size() && tt.state[state] == MatchState::CONT;
+         i < text.size() && this->state[st] == MatchState::CONT;
          ++i)
     {
         char ch = text[i];
-        std::cout << state << " --" << ch << "-> " << tt.jump[state][ch - 'a'] << std::endl;
-        state = tt.jump[state][ch - 'a'];
+        size_t next_state = this->jump[st][ch - 'a'];
+        std::cout << st << NodesString(this->state_closure[st]) << " --" << ch << "-> " << next_state << NodesString(this->state_closure[next_state]) << std::endl;
+        st = next_state;
     }
-    std::cout << state << " -\\0-> " << tt.jump[state][26] << std::endl;
-    state = tt.jump[state][26];
+    for (;
+         i < text.size() && this->state[st] == MatchState::GOOD;
+         ++i)
+    {
+        char ch = text[i];
+        size_t next_state = this->jump[st][ch - 'a'];
+        if (this->state[next_state] != MatchState::GOOD)
+        {
+            --i;
+            break;
+        }
+        std::cout << st << NodesString(this->state_closure[st]) << " --" << ch << "-> " << next_state << NodesString(this->state_closure[next_state]) << std::endl;
+        st = next_state;
+    }
+    if (i == text.size())
+    {
+        size_t next_state = this->jump[st][26];
+        std::cout << st << NodesString(this->state_closure[st]) << " -\\0-> " << next_state << NodesString(this->state_closure[next_state]) << std::endl;
+        st = this->jump[st][26];
+    }
 
-    if (tt.state[state] == MatchState::GOOD)
+    if (this->state[st] == MatchState::GOOD)
     {
         if (i == text.size())
-            std::cout << "matched pattern #" << tt.matched_branch[state] << "." << std::endl;
+            std::cout << "matched pattern #" << this->matched_branch[st] << "." << std::endl;
         else
-            std::cout << "prefix \"" << text.substr(0, i) << "\" matched pattern #" << tt.matched_branch[state] << "." << std::endl;
+            std::cout << "prefix \"" << text.substr(0, i) << "\" matched pattern #" << this->matched_branch[st] << "." << std::endl;
     }
     else
     {
         std::cout << "not matched." << std::endl;
     }
-    return tt.matched_branch[state];
+    return this->matched_branch[st];
 }
 
 void PrintTable(TransitionTable & tt)
 {
-    std::cout << "    ";
+    const int w = 3;
+
+    std::cout << "  ";
+    std::cout.width(w);
+    std::cout << " ";
     for (char ch = 'a'; ch <= 'z'; ++ch)
     {
-        std::cout << "  " << ch;
+        std::cout.width(w);
+        std::cout << ch;
     }
-    std::cout << " \\0";
+    std::cout.width(w);
+    std::cout << "\\0";
     std::cout << std::endl;
 
     size_t state = 0;
     for (auto row : tt.jump)
     {
-        std::cout << " [" << state++ << "]";
+        std::cout << " [";
+        std::cout.width(w - 1);
+        std::cout << state++ << "]";
         for (char ch = 'a'; ch <= 'z'; ++ch)
         {
-            std::cout << "  " << row[ch - 'a'];
+            std::cout.width(w);
+            std::cout << row[ch - 'a'];
         }
-        std::cout << "  " << row[26];
+        std::cout.width(w);
+        std::cout << row[26];
         std::cout << std::endl;
     }
 
@@ -680,7 +705,7 @@ void PrintTable(TransitionTable & tt)
             case MatchState::BAD: std::cout << "bad"; break;
             default: break;
         }
-        std::cout << std::endl;
+        std::cout << "\t" << NodesString(tt.state_closure[state]) << std::endl;
 
         ++state;
     }
@@ -689,6 +714,9 @@ void PrintTable(TransitionTable & tt)
 // Convert 1 pattern list to transition table
 void Test_ConvertOnePattern()
 {
+    CompileContext context;
+    NodeFactoryScope scope(&context.factory);
+
     // ab*c+d?e
     NodeGroup c = Done(
         Concat(
@@ -711,10 +739,11 @@ void Test_ConvertOnePattern()
             MatchChar('e')
         )
     );
-    PrintNodes();
+    context.groups.push_back(c);
+    context.PrintNodes();
 
     // Compile.
-    TransitionTable tt = Compile(c);
+    TransitionTable tt = context.Compile();
     PrintTable(tt);
 
     // Simulate.
@@ -734,14 +763,50 @@ void Test_ConvertOnePattern()
         auto & text = kv.first;
         bool result = kv.second;
         std::cout << "pattern: ab*c text: " << text << std::endl;
-        //assert(Run(c, text) == result);
-        assert(Run(tt, text) == result);
+        assert(tt.Run(text) == result);
     }
 }
 
+void Test_ConvertOnePattern2()
+{
+    CompileContext context;
+    NodeFactoryScope scope(&context.factory);
+
+    // (a|b)+
+    NodeGroup c = MatchChar('a');
+    c = Alt(c, MatchChar('b'));
+    c = Rep1(c);
+    c = Done(c);
+    context.groups.push_back(c);
+    context.PrintNodes();
+
+    // Compile.
+    TransitionTable tt = context.Compile();
+    PrintTable(tt);
+
+    // Simulate.
+    std::vector<std::pair<std::string, bool>> test_cases = {
+        { "a", true },
+        { "b", true },
+        { "ab", true },
+        { "ba", true },
+        { "baz", false },
+    };
+    for (auto kv : test_cases)
+    {
+        auto & text = kv.first;
+        bool result = kv.second;
+        std::cout << "pattern: (a|b)+ text: " << text << std::endl;
+        assert(tt.Run(text) == result);
+    }
+}
+/*
 // Convert N pattern list to transition table
 void Test_ConvertMultiplePattern()
 {
+    CompileContext context;
+    NodeFactoryScope scope(&context.factory);
+
     std::vector<NodeGroup> vc = {
         FromRegex("apple"),
         FromRegex("banan")
@@ -770,6 +835,9 @@ void Test_ConvertMultiplePattern()
 
 void Test_ConvertMultiplePattern2()
 {
+    CompileContext context;
+    NodeFactoryScope scope(&context.factory);
+
     std::vector<NodeGroup> vc = {
         FromRegex("app"),
         FromRegex("ap"),
@@ -790,6 +858,38 @@ void Test_ConvertMultiplePattern2()
         { "apple", 1 },
         { "a", 4 },
         { "appl", 1 },
+    };
+    for (auto kv : test_cases)
+    {
+        auto & text = kv.first;
+        auto which = kv.second;
+        std::cout << "text: " << text << std::endl;
+        assert(RunN(tt, text) == which);
+    }
+}
+
+void Test_ConvertMultiplePattern3()
+{
+    CompileContext context;
+    NodeFactoryScope scope(&context.factory);
+
+    std::vector<NodeGroup> vc = {
+        FromRegex("abcde"),
+        FromRegex("xy"),
+        FromRegex("(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y)+")
+    };
+    PrintNodes();
+
+    // Compile.
+    TransitionTable tt = CompileN(vc);
+    PrintTable(tt);
+
+    // Simulate.
+    std::vector<std::pair<std::string, size_t>> test_cases = {
+        { "abcde", 1 },
+        { "xy", 2 },
+        { "hello", 3 },
+        { "helloz", 3 },
     };
     for (auto kv : test_cases)
     {
@@ -885,3 +985,4 @@ void Test_CLex()
         assert(RunN(tt, text) == which);
     }
 }
+*/
