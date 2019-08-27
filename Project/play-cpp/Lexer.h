@@ -18,6 +18,7 @@
         ELSE        => Context, Result Function
 
         * if matches pattern 1 & 2, prefer 1
+        * one char look-after assertion
 
     Example:
 
@@ -26,35 +27,74 @@
         [0-9]+      => num
         ELSE        => throw error
 
+        if          => if keyword
+        ifthis      => id
+        if0else     => id
+
 */
 
-typedef std::bitset<512> Closure;
+class CharSet
+{
+public:
+    typedef std::array<size_t, 27> ContainerType;
+    static const std::vector<char> & Chars()
+    {
+        static const std::vector<char> chars = { 'a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z','\0', };
+        return chars;
+    }
+    static const std::vector<const char *> & CharStrs()
+    {
+        static const std::vector<const char *> char_strs = { "a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z","\\0", };
+        return char_strs;
+    }
+    static const std::vector<size_t> & CharIdxs()
+    {
+        static const std::vector<size_t> char_idxs = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, };
+        return char_idxs;
+    }
+    static bool Contains(char ch)
+    {
+        return ch == '\0' || ('a' <= ch && ch <= 'z');
+    }
+    static size_t CharIdx(char ch)
+    {
+        assert(Contains(ch));
+        return ch == '\0' ? 26 : size_t(ch - 'a');
+    }
+    static const char * CharStr(char ch)
+    {
+        assert(Contains(ch));
+        return CharStrs()[CharIdx(ch)];
+    }
+};
 
-struct Node
+struct NfaState
 {
     size_t id;
     bool done;
 
     char * c;
-    Node * next;
-    Node * alt;
+    NfaState * next;
+    NfaState * alt;
 };
 
-struct NodeGroup
+typedef std::bitset<512> NfaStateSet;
+
+struct NfaGraph
 {
-    Node * in;
-    Node ** next;
-    Node ** alt;
+    NfaState * in;
+    NfaState ** next;
+    NfaState ** alt;
 };
 
-class NodeFactory
+class NfaStateFactory
 {
 public:
-    Node * NewNode()
+    NfaState * NewState()
     {
-        v.emplace_back(new Node);
+        v.emplace_back(new NfaState);
 
-        Node * n = v.back().get();
+        NfaState * n = v.back().get();
         n->id = v.size() - 1;
         n->done = false;
         n->c = nullptr;
@@ -63,13 +103,13 @@ public:
         
         return n;
     }
-    Node * operator [] (size_t i) const
+    NfaState * operator [] (size_t i) const
     {
         return v.at(i).get();
     }
-    std::vector<std::unique_ptr<Node>> & nodes() { return v; }
+    std::vector<std::unique_ptr<NfaState>> & States() { return v; }
 private:
-    std::vector<std::unique_ptr<Node>> v;
+    std::vector<std::unique_ptr<NfaState>> v;
 };
 
 enum class MatchState
@@ -78,20 +118,25 @@ enum class MatchState
     GOOD,
     BAD,
 };
+typedef size_t TableState;
 struct TransitionTable
 {
-    std::vector<std::array<size_t, 27>> jump;
-    std::vector<MatchState> state;
-    std::vector<Closure> state_closure;
-    std::vector<size_t> matched_branch;
+    // (Table-State, Char) to (Table-State)
+    std::vector<CharSet::ContainerType> nextStateTable;
+    // (Table-State) to (Match-Status)
+    std::vector<MatchState> matchStatusTable;
+    // (Table-State) to (Match-Branch)
+    std::vector<size_t> matchedBranchTable;
+    
+    // debug
+    std::vector<NfaStateSet> nfaStateSetTable;
 
-    bool Run(std::string & text);
-    size_t RunN(std::string & text);
+    size_t Run(std::string & text);
 };
 
-struct ClosureLessThan
+struct NfaStateSetComparator
 {
-    bool operator () (const Closure & c1, const Closure & c2) const
+    bool operator () (const NfaStateSet & c1, const NfaStateSet & c2) const
     {
         size_t i = 0;
         while (i < c1.size() && c1.test(i) == c2.test(i))
@@ -101,17 +146,17 @@ struct ClosureLessThan
 };
 struct CompileContext
 {
-    NodeFactory factory;
+    NfaStateFactory nfaStateFactory;
 
-    std::vector<NodeGroup> groups;
+    std::vector<NfaGraph> nfaGraphs;
     
-    std::map<Node *, Closure> n2c_cache;
-    std::map<Closure, Closure, ClosureLessThan> c2c_cache;
+    std::map<NfaState *, NfaStateSet> n2c_cache;
+    std::map<NfaStateSet, NfaStateSet, NfaStateSetComparator> c2c_cache;
 
-    Closure EpsilonClosure(Node * n0);
-    Closure EpsilonClosure(Closure c);
-    Closure Next(Closure c, char ch);
-    std::pair<MatchState, size_t> GetState(Closure c);
+    NfaStateSet EpsilonClosure(NfaState * n0);
+    NfaStateSet EpsilonClosure(NfaStateSet c);
+    NfaStateSet Next(NfaStateSet c, char ch);
+    std::pair<MatchState, size_t> GetState(NfaStateSet c);
 
     void PrintNodes();
 
@@ -120,8 +165,11 @@ struct CompileContext
     TransitionTable Compile();
 };
 
+// ===================================================================
+// Print
+// ===================================================================
 
-std::string NodesString(Closure c)
+std::string NfaStateSetToString(NfaStateSet c)
 {
     std::string s;
     s += "{";
@@ -133,7 +181,7 @@ std::string NodesString(Closure c)
     s += " }";
     return s;
 }
-void PrintClosure(Closure c)
+void PrintNfaStateSet(NfaStateSet c)
 {
     std::cout << "{";
     for (size_t i = 0; i < c.size(); ++i)
@@ -146,18 +194,63 @@ void PrintClosure(Closure c)
 
 void CompileContext::PrintNodes()
 {
-    for (auto & n : factory.nodes())
+    for (auto & n : nfaStateFactory.States())
     {
         std::cout
             << n->id << (n->done ? "(done)" : (n->c ? "(non-empty)" : "")) << ":" << std::endl
             << "  --" << (n->c ? *n->c : '-') << "--> " << (n->next ? std::to_string(n->next->id) : "null") << std::endl
             << "  -----> " << (n->alt ? std::to_string(n->alt->id) : "null") << std::endl;
     }
-    for (auto & n : factory.nodes())
+    for (auto & n : nfaStateFactory.States())
     {
         std::cout
             << n->id << (n->done ? "(done)" : "") << ": ";
-        PrintClosure(EpsilonClosure(n.get()));
+        PrintNfaStateSet(EpsilonClosure(n.get()));
+    }
+}
+
+void PrintTable(TransitionTable & tt)
+{
+    const int w = 3;
+
+    std::cout << "  ";
+    std::cout.width(w);
+    std::cout << " ";
+    for (auto ch : CharSet::CharStrs())
+    {
+        std::cout.width(w);
+        std::cout << ch;
+    }
+    std::cout << std::endl;
+
+    size_t state = 0;
+    for (auto row : tt.nextStateTable)
+    {
+        std::cout << " [";
+        std::cout.width(w - 1);
+        std::cout << state++ << "]";
+        for (auto i : CharSet::CharIdxs())
+        {
+            std::cout.width(w);
+            std::cout << row[i];
+        }
+        std::cout << std::endl;
+    }
+
+    state = 0;
+    for (auto row : tt.matchStatusTable)
+    {
+        std::cout << " [" << state << "] ";
+        switch (row)
+        {
+            case MatchState::CONT: std::cout << "cont."; break;
+            case MatchState::GOOD: std::cout << "good #" << (!tt.matchedBranchTable.empty() ? std::to_string(tt.matchedBranchTable[state]) : "1"); break;
+            case MatchState::BAD: std::cout << "bad"; break;
+            default: break;
+        }
+        std::cout << "\t" << NfaStateSetToString(tt.nfaStateSetTable[state]) << std::endl;
+
+        ++state;
     }
 }
 
@@ -165,46 +258,47 @@ void CompileContext::PrintNodes()
 // Build epsilon NFA
 // ===================================================================
 
-NodeFactory * gNodeFactory = nullptr;
-struct NodeFactoryScope
+NfaStateFactory * gFactory = nullptr;
+
+struct NfaStateFactoryScope
 {
-    NodeFactory * origin;
+    NfaStateFactory * origin;
 public:
-    NodeFactoryScope(NodeFactory * factory)
+    NfaStateFactoryScope(NfaStateFactory * factory)
     {
-        origin = gNodeFactory;
-        gNodeFactory = factory;
+        origin = gFactory;
+        gFactory = factory;
     }
-    ~NodeFactoryScope()
+    ~NfaStateFactoryScope()
     {
-        gNodeFactory = origin;
+        gFactory = origin;
     }
 };
 
-NodeGroup MatchEmpty()
+NfaGraph MatchEmpty()
 {
-    Node * n = gNodeFactory->NewNode();
+    NfaState * n = gFactory->NewState();
     return { n, &n->next, &n->alt };
 }
 
-NodeGroup MatchChar(char c)
+NfaGraph MatchChar(char c)
 {
-    Node * n = gNodeFactory->NewNode();
+    NfaState * n = gFactory->NewState();
     n->c = new char(c);
 
     return { n, &n->next, &n->alt };
 }
 
-NodeGroup Concat(NodeGroup c1, NodeGroup c2)
+NfaGraph Concat(NfaGraph c1, NfaGraph c2)
 {
     *c1.next = c2.in;
 
     return { c1.in, c2.next , c1.alt };
 }
 
-NodeGroup Alt(NodeGroup c1, NodeGroup c2)
+NfaGraph Alt(NfaGraph c1, NfaGraph c2)
 {
-    Node * n = gNodeFactory->NewNode();
+    NfaState * n = gFactory->NewState();
     *c1.next = n;
     *c1.alt = c2.in;
     *c2.next = n;
@@ -212,36 +306,36 @@ NodeGroup Alt(NodeGroup c1, NodeGroup c2)
     return { c1.in, &n->next, c2.alt };
 }
 
-NodeGroup Rep0(NodeGroup c)
+NfaGraph Rep0(NfaGraph c)
 {
-    Node * n = gNodeFactory->NewNode();
+    NfaState * n = gFactory->NewState();
     n->alt = c.in;
     *c.next = n;
 
     return { n, &n->next, c.alt };
 }
 
-NodeGroup Rep1(NodeGroup c)
+NfaGraph Rep1(NfaGraph c)
 {
-    Node * n = gNodeFactory->NewNode();
+    NfaState * n = gFactory->NewState();
     n->alt = c.in;
     *c.next = n;
 
     return { c.in, &n->next, c.alt };
 }
 
-NodeGroup Opt(NodeGroup c)
+NfaGraph Opt(NfaGraph c)
 {
-    Node * n = gNodeFactory->NewNode();
+    NfaState * n = gFactory->NewState();
     *c.next = n;
     *c.alt = n;
 
     return { c.in, &n->next, &n->alt };
 }
 
-NodeGroup Done(NodeGroup c)
+NfaGraph Done(NfaGraph c)
 {
-    Node * n = gNodeFactory->NewNode();
+    NfaState * n = gFactory->NewState();
     n->done = true;
     *c.next = n;
 
@@ -254,6 +348,7 @@ NodeGroup Done(NodeGroup c)
 // ab+c
 // ab?c
 // a(b|c)d
+// n(?=o)
 // alt-group - concat-list - (char|alt-group)[repeat]
 #define REGEX_EXPECT(p, expect) \
     do { \
@@ -266,25 +361,25 @@ NodeGroup Done(NodeGroup c)
             throw std::invalid_argument("bad regex"); \
     } while (false)
 
-NodeGroup FromRegexChar(const char * & c);
-NodeGroup FromRegexConcatList(const char * & c);
-NodeGroup FromRegexAltGroup(const char * & c);
+NfaGraph FromRegexChar(const char * & c);
+NfaGraph FromRegexConcatList(const char * & c);
+NfaGraph FromRegexAltGroup(const char * & c);
 
-NodeGroup FromRegexChar(const char * & c)
+NfaGraph FromRegexChar(const char * & c)
 {
-    NodeGroup g;
+    NfaGraph g;
 
-    REGEX_EXPECT_TRUE('a' <= *c && *c <= 'z');
+    REGEX_EXPECT_TRUE(CharSet::Contains(*c));
     g = MatchChar(*c);
     ++c;
 
     return g;
 }
-NodeGroup FromRegexConcatList(const char * & c)
+NfaGraph FromRegexConcatList(const char * & c)
 {
     // ((char | alt-group) repeat?)+
     
-    NodeGroup g;
+    NfaGraph g;
     
     assert(*c != '|' && *c != ')');
     if (*c == '(')
@@ -316,11 +411,11 @@ NodeGroup FromRegexConcatList(const char * & c)
 
     return g;
 }
-NodeGroup FromRegexAltGroup(const char * & c)
+NfaGraph FromRegexAltGroup(const char * & c)
 {
     // '(' concat-list? ('|' concat-list?)* ')'
     
-    NodeGroup g;
+    NfaGraph g;
 
     REGEX_EXPECT(c, '(');
     ++c;
@@ -342,7 +437,7 @@ NodeGroup FromRegexAltGroup(const char * & c)
 
     return g;
 }
-NodeGroup FromRegex(std::string regex)
+NfaGraph FromRegex(std::string regex)
 {
     if (regex.empty() || regex.at(0) != '(')
         regex = "(" + regex + ")";
@@ -350,25 +445,25 @@ NodeGroup FromRegex(std::string regex)
     const char * c = regex.data();
     return Done(FromRegexAltGroup(c));
 }
-std::string ToRegex(NodeGroup g);
+std::string ToRegex(NfaGraph g);
 
 // ===================================================================
 // Simulate/compile/run epsilon NFA
 // ===================================================================
 
 // All reachable Node and self that are non-empty or done
-Closure CompileContext::EpsilonClosure(Node * n0)
+NfaStateSet CompileContext::EpsilonClosure(NfaState * n0)
 {
     auto kv = n2c_cache.find(n0);
     if (kv != n2c_cache.end())
         return kv->second;
 
-    Closure c;
-    Closure mask;
-    std::deque<Node *> q = {n0};
+    NfaStateSet c;
+    NfaStateSet mask;
+    std::deque<NfaState *> q = {n0};
     while (!q.empty())
     {
-        Node * n = q.back();
+        NfaState * n = q.back();
         q.pop_back();
 
         if (mask.test(n->id))
@@ -394,10 +489,9 @@ Closure CompileContext::EpsilonClosure(Node * n0)
     return n2c_cache.emplace_hint(kv, n0, c)->second;
 }
 
-
-Closure CompileContext::EpsilonClosure(Closure c)
+NfaStateSet CompileContext::EpsilonClosure(NfaStateSet c)
 {
-    Closure c2;
+    NfaStateSet c2;
 
     auto kv = c2c_cache.find(c);
     if (kv != c2c_cache.end())
@@ -410,7 +504,7 @@ Closure CompileContext::EpsilonClosure(Closure c)
         {
             if (c[i])
             {
-                c2 |= EpsilonClosure(factory[i]);
+                c2 |= EpsilonClosure(nfaStateFactory[i]);
             }
         }
         c2c_cache.emplace_hint(kv, c, c2);
@@ -421,14 +515,14 @@ Closure CompileContext::EpsilonClosure(Closure c)
     return c2;
 }
 
-Closure CompileContext::Next(Closure c, char ch)
+NfaStateSet CompileContext::Next(NfaStateSet c, char ch)
 {
-    Closure c2;
+    NfaStateSet c2;
     for (size_t i = 0; i < c.size(); ++i)
     {
         if (c[i])
         {
-            Node * n = factory[i];
+            NfaState * n = nfaStateFactory[i];
             assert(n->done || n->c);
             if (n->done)
                 c2.set(n->id);
@@ -439,7 +533,7 @@ Closure CompileContext::Next(Closure c, char ch)
     return c2;
 }
 
-std::pair<MatchState, size_t> CompileContext::GetState(Closure c)
+std::pair<MatchState, size_t> CompileContext::GetState(NfaStateSet c)
 {
     if (c.none())
         return {MatchState::BAD, 0};
@@ -448,7 +542,7 @@ std::pair<MatchState, size_t> CompileContext::GetState(Closure c)
     while (i < c.size() && !c.test(i))
         ++i;
     
-    if (factory[i]->done)
+    if (nfaStateFactory[i]->done)
         return {MatchState::GOOD, i};
     else
         return {MatchState::CONT, 0};
@@ -457,8 +551,8 @@ std::pair<MatchState, size_t> CompileContext::GetState(Closure c)
 size_t CompileContext::Simulate(std::string & text)
 {
     std::cout << "match \"" << text << "\"..." << std::endl;
-    Closure cl;
-    for (NodeGroup & g : groups)
+    NfaStateSet cl;
+    for (NfaGraph & g : nfaGraphs)
         cl.set(g.in->id);
 
     MatchState state = MatchState::CONT;
@@ -495,12 +589,12 @@ TransitionTable CompileContext::Compile()
 {
     TransitionTable t;
 
-    std::deque<Closure> q;
-    std::map<Closure, size_t, ClosureLessThan> id;
+    std::deque<NfaStateSet> q;
+    std::map<NfaStateSet, size_t, NfaStateSetComparator> id;
     size_t next_id = 0;
 
-    Closure c0;
-    for (NodeGroup & g : groups)
+    NfaStateSet c0;
+    for (NfaGraph & g : nfaGraphs)
         c0.set(g.in->id);
     c0 = EpsilonClosure(c0);
     q.push_front(c0);
@@ -509,14 +603,14 @@ TransitionTable CompileContext::Compile()
     size_t row = 0;
     while (!q.empty())
     {
-        if (t.jump.size() < row + 1)
-            t.jump.resize(row + 1);
+        if (t.nextStateTable.size() < row + 1)
+            t.nextStateTable.resize(row + 1);
 
-        Closure c1 = q.back();
+        NfaStateSet c1 = q.back();
         q.pop_back();
-        for (char ch = 'a'; ch <= 'z'; ++ch)
+        for (char ch : CharSet::Chars())
         {
-            Closure c2 = EpsilonClosure(Next(c1, ch));
+            NfaStateSet c2 = EpsilonClosure(Next(c1, ch));
 
             auto cid = id.find(c2);
             if (cid == id.end())
@@ -525,200 +619,89 @@ TransitionTable CompileContext::Compile()
                 cid = id.emplace_hint(cid, c2, next_id++);
             }
 
-            t.jump[row][ch - 'a'] = cid->second;
-        }
-        {
-            Closure c2 = EpsilonClosure(Next(c1, 0));
-
-            auto cid = id.find(c2);
-            if (cid == id.end())
-            {
-                q.push_front(c2);
-                cid = id.emplace_hint(cid, c2, next_id++);
-            }
-
-            t.jump[row][26] = cid->second;
+            t.nextStateTable[row][CharSet::CharIdx(ch)] = cid->second;
         }
 
         ++row;
     }
 
-    t.state.resize(row);
-    t.matched_branch.resize(row);
-    t.state_closure.resize(row);
+    t.matchStatusTable.resize(row);
+    t.matchedBranchTable.resize(row);
+    t.nfaStateSetTable.resize(row);
 
     // Convert Node id to branch number.
     for (auto cl_id : id)
     {
         auto state_and_done_node = GetState(cl_id.first);
-        t.state[cl_id.second] = state_and_done_node.first;
-        t.state_closure[cl_id.second] = cl_id.first;
+        t.matchStatusTable[cl_id.second] = state_and_done_node.first;
+        t.nfaStateSetTable[cl_id.second] = cl_id.first;
 
         size_t done_node = state_and_done_node.second;
         size_t branch = 0;
         for (size_t i = 0; i <= done_node; ++i)
         {
-            if (factory[i]->done)
+            if (nfaStateFactory[i]->done)
                 ++branch;
         }
-        t.matched_branch[cl_id.second] = branch;
+        t.matchedBranchTable[cl_id.second] = branch;
     }
 
     return t;
 }
 
-bool TransitionTable::Run(std::string & text)
+size_t TransitionTable::Run(std::string & text)
 {
     std::cout << "match \"" << text << "\"..." << std::endl;
-    size_t st = 0;
+    
+    TableState st = 0;
     size_t i = 0;
-    for (;
-         i < text.size() && this->state[st] == MatchState::CONT;
-         ++i)
+
+    if (this->matchStatusTable[st] == MatchState::CONT)
     {
-        char ch = text[i];
-        st = this->jump[st][ch - 'a'];
-    }
-    for (;
-         i < text.size() && this->state[st] == MatchState::GOOD;
-         ++i)
-    {
-        char ch = text[i];
-        size_t next_state = this->jump[st][ch - 'a'];
-        if (this->state[next_state] != MatchState::GOOD)
+        for (;
+             i <= text.size();
+             ++i)
         {
-            --i;
-            break;
+            char ch = text.data()[i];
+            size_t next_state = this->nextStateTable[st][CharSet::CharIdx(ch)];
+            if (this->matchStatusTable[st] != MatchState::BAD)
+            {
+                std::cout << st << NfaStateSetToString(this->nfaStateSetTable[st]) << " --" << CharSet::CharStr(ch) << "-> " << next_state << NfaStateSetToString(this->nfaStateSetTable[next_state]) << std::endl;
+                st = next_state;
+            }
+            else
+                break;
         }
-         st = next_state;
-    }
-    if (i == text.size())
-    {
-        size_t next_state = this->jump[st][26];
-        st = this->jump[st][26];
     }
 
-    bool matched = false;
-    if (this->state[st] == MatchState::GOOD)
+    // i points to first unmatched char.
+
+    if (this->matchStatusTable[st] == MatchState::GOOD)
     {
-        if (i == text.size())
-            std::cout << "matched pattern ." << std::endl, matched = true;
+        if (i == text.size() + 1)
+            std::cout << "matched pattern #" << this->matchedBranchTable[st] << "." << std::endl;
         else
-            std::cout << "prefix \"" << text.substr(0, i) << "\" matched." << std::endl;
+            std::cout << "prefix \"" << text.substr(0, i) << "\" matched pattern #" << this->matchedBranchTable[st] << "." << std::endl;
     }
     else
     {
         std::cout << "not matched." << std::endl;
     }
-    return matched;
+    return this->matchedBranchTable[st];
 }
 
-size_t TransitionTable::RunN(std::string & text)
-{
-    std::cout << "match \"" << text << "\"..." << std::endl;
-    size_t st = 0;
-    size_t i = 0;
-    for (;
-         i < text.size() && this->state[st] == MatchState::CONT;
-         ++i)
-    {
-        char ch = text[i];
-        size_t next_state = this->jump[st][ch - 'a'];
-        std::cout << st << NodesString(this->state_closure[st]) << " --" << ch << "-> " << next_state << NodesString(this->state_closure[next_state]) << std::endl;
-        st = next_state;
-    }
-    for (;
-         i < text.size() && this->state[st] == MatchState::GOOD;
-         ++i)
-    {
-        char ch = text[i];
-        size_t next_state = this->jump[st][ch - 'a'];
-        if (this->state[next_state] != MatchState::GOOD)
-        {
-            --i;
-            break;
-        }
-        std::cout << st << NodesString(this->state_closure[st]) << " --" << ch << "-> " << next_state << NodesString(this->state_closure[next_state]) << std::endl;
-        st = next_state;
-    }
-    if (i == text.size())
-    {
-        size_t next_state = this->jump[st][26];
-        std::cout << st << NodesString(this->state_closure[st]) << " -\\0-> " << next_state << NodesString(this->state_closure[next_state]) << std::endl;
-        st = this->jump[st][26];
-    }
-
-    if (this->state[st] == MatchState::GOOD)
-    {
-        if (i == text.size())
-            std::cout << "matched pattern #" << this->matched_branch[st] << "." << std::endl;
-        else
-            std::cout << "prefix \"" << text.substr(0, i) << "\" matched pattern #" << this->matched_branch[st] << "." << std::endl;
-    }
-    else
-    {
-        std::cout << "not matched." << std::endl;
-    }
-    return this->matched_branch[st];
-}
-
-void PrintTable(TransitionTable & tt)
-{
-    const int w = 3;
-
-    std::cout << "  ";
-    std::cout.width(w);
-    std::cout << " ";
-    for (char ch = 'a'; ch <= 'z'; ++ch)
-    {
-        std::cout.width(w);
-        std::cout << ch;
-    }
-    std::cout.width(w);
-    std::cout << "\\0";
-    std::cout << std::endl;
-
-    size_t state = 0;
-    for (auto row : tt.jump)
-    {
-        std::cout << " [";
-        std::cout.width(w - 1);
-        std::cout << state++ << "]";
-        for (char ch = 'a'; ch <= 'z'; ++ch)
-        {
-            std::cout.width(w);
-            std::cout << row[ch - 'a'];
-        }
-        std::cout.width(w);
-        std::cout << row[26];
-        std::cout << std::endl;
-    }
-
-    state = 0;
-    for (auto row : tt.state)
-    {
-        std::cout << " [" << state << "] ";
-        switch (row)
-        {
-            case MatchState::CONT: std::cout << "cont."; break;
-            case MatchState::GOOD: std::cout << "good #" << (!tt.matched_branch.empty() ? std::to_string(tt.matched_branch[state]) : "1"); break;
-            case MatchState::BAD: std::cout << "bad"; break;
-            default: break;
-        }
-        std::cout << "\t" << NodesString(tt.state_closure[state]) << std::endl;
-
-        ++state;
-    }
-}
+// ===================================================================
+// Test
+// ===================================================================
 
 // Convert 1 pattern list to transition table
 void Test_ConvertOnePattern()
 {
     CompileContext context;
-    NodeFactoryScope scope(&context.factory);
+    NfaStateFactoryScope scope(&context.nfaStateFactory);
 
     // ab*c+d?e
-    NodeGroup c = Done(
+    NfaGraph c = Done(
         Concat(
             Concat(
                 Concat(
@@ -739,7 +722,7 @@ void Test_ConvertOnePattern()
             MatchChar('e')
         )
     );
-    context.groups.push_back(c);
+    context.nfaGraphs.push_back(c);
     context.PrintNodes();
 
     // Compile.
@@ -763,21 +746,21 @@ void Test_ConvertOnePattern()
         auto & text = kv.first;
         bool result = kv.second;
         std::cout << "pattern: ab*c text: " << text << std::endl;
-        assert(tt.Run(text) == result);
+        assert((tt.Run(text) == 1) == result);
     }
 }
 
 void Test_ConvertOnePattern2()
 {
     CompileContext context;
-    NodeFactoryScope scope(&context.factory);
+    NfaStateFactoryScope scope(&context.nfaStateFactory);
 
     // (a|b)+
-    NodeGroup c = MatchChar('a');
+    NfaGraph c = MatchChar('a');
     c = Alt(c, MatchChar('b'));
     c = Rep1(c);
     c = Done(c);
-    context.groups.push_back(c);
+    context.nfaGraphs.push_back(c);
     context.PrintNodes();
 
     // Compile.
@@ -790,65 +773,67 @@ void Test_ConvertOnePattern2()
         { "b", true },
         { "ab", true },
         { "ba", true },
-        { "baz", false },
+        { "baz", true },
     };
     for (auto kv : test_cases)
     {
         auto & text = kv.first;
         bool result = kv.second;
         std::cout << "pattern: (a|b)+ text: " << text << std::endl;
-        assert(tt.Run(text) == result);
+        assert((tt.Run(text) == 1) == result);
     }
 }
-/*
+
 // Convert N pattern list to transition table
 void Test_ConvertMultiplePattern()
 {
     CompileContext context;
-    NodeFactoryScope scope(&context.factory);
+    NfaStateFactoryScope scope(&context.nfaStateFactory);
 
-    std::vector<NodeGroup> vc = {
+    std::vector<NfaGraph> vc = {
         FromRegex("apple"),
         FromRegex("banan")
     };
-    PrintNodes();
+    context.nfaGraphs = vc;
+    context.PrintNodes();
 
     // Compile.
-    TransitionTable tt = CompileN(vc);
+    TransitionTable tt = context.Compile();
     PrintTable(tt);
 
     // Simulate.
-    std::vector<std::pair<std::string, bool>> test_cases = {
-        { "apple", true },
-        { "banan", true },
-        { "appla", false },
-        { "banana", false },
+    std::vector<std::pair<std::string, size_t>> test_cases = {
+        { "apple", 1 },
+        { "banan", 2 },
+        { "appla", 0 },
+        { "banana", 2 },
     };
     for (auto kv : test_cases)
     {
         auto & text = kv.first;
-        bool result = kv.second;
-        std::cout << "pattern: (apple|banan) text: " << text << std::endl;
-        assert(Run(tt, text) == result);
+        auto which = kv.second;
+        std::cout << "text: " << text << std::endl;
+        assert(tt.Run(text) == which);
     }
 }
 
 void Test_ConvertMultiplePattern2()
 {
     CompileContext context;
-    NodeFactoryScope scope(&context.factory);
+    NfaStateFactoryScope scope(&context.nfaStateFactory);
 
-    std::vector<NodeGroup> vc = {
+    std::vector<NfaGraph> vc = {
         FromRegex("app"),
         FromRegex("ap"),
         FromRegex("apple"),
         FromRegex("a"),
         FromRegex("appl"),
     };
-    PrintNodes();
+    context.nfaGraphs = vc;
+    context.PrintNodes();
 
     // Compile.
-    TransitionTable tt = CompileN(vc);
+    TransitionTable tt = context.Compile();
     PrintTable(tt);
 
     // Simulate.
@@ -864,24 +849,25 @@ void Test_ConvertMultiplePattern2()
         auto & text = kv.first;
         auto which = kv.second;
         std::cout << "text: " << text << std::endl;
-        assert(RunN(tt, text) == which);
+        assert(tt.Run(text) == which);
     }
 }
 
 void Test_ConvertMultiplePattern3()
 {
     CompileContext context;
-    NodeFactoryScope scope(&context.factory);
+    NfaStateFactoryScope scope(&context.nfaStateFactory);
 
-    std::vector<NodeGroup> vc = {
+    std::vector<NfaGraph> vc = {
         FromRegex("abcde"),
         FromRegex("xy"),
         FromRegex("(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y)+")
     };
-    PrintNodes();
+    context.nfaGraphs = vc;
+    context.PrintNodes();
 
     // Compile.
-    TransitionTable tt = CompileN(vc);
+    TransitionTable tt = context.Compile();
     PrintTable(tt);
 
     // Simulate.
@@ -896,13 +882,16 @@ void Test_ConvertMultiplePattern3()
         auto & text = kv.first;
         auto which = kv.second;
         std::cout << "text: " << text << std::endl;
-        assert(RunN(tt, text) == which);
+        assert(tt.Run(text) == which);
     }
 }
 
 void Test_CLex()
 {
-    std::vector<NodeGroup> vc = {
+    CompileContext context;
+    NfaStateFactoryScope scope(&context.nfaStateFactory);
+
+    std::vector<NfaGraph> vc = {
         FromRegex("while"),
         FromRegex("volatile"),
         FromRegex("void"),
@@ -937,9 +926,10 @@ void Test_CLex()
         FromRegex("auto"),
         FromRegex("(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z)+"),
     };
+    context.nfaGraphs = vc;
     //PrintNodes();
 
-    TransitionTable tt = CompileN(vc);
+    TransitionTable tt = context.Compile();
     PrintTable(tt);
 
     std::vector<std::pair<std::string, size_t>> test_cases = {
@@ -982,7 +972,6 @@ void Test_CLex()
         auto & text = kv.first;
         auto which = kv.second;
         std::cout << "pattern: C-Lex text: " << text << std::endl;
-        assert(RunN(tt, text) == which);
+        assert(tt.Run(text) == which);
     }
 }
-*/
