@@ -4,7 +4,7 @@
 #include <string>
 #include <vector>
 #include <bitset>
-#include <map>
+#include <unordered_map>
 #include <array>
 #include <deque>
 #include <memory>
@@ -68,6 +68,8 @@ public:
     }
 };
 
+// Nfa
+
 struct NfaState
 {
     size_t id;
@@ -107,10 +109,12 @@ public:
     {
         return v.at(i).get();
     }
-    std::vector<std::unique_ptr<NfaState>> & States() { return v; }
+    const std::vector<std::unique_ptr<NfaState>> & States() const { return v; }
 private:
     std::vector<std::unique_ptr<NfaState>> v;
 };
+
+// Dfa
 
 struct MatchStatus
 {
@@ -118,15 +122,15 @@ struct MatchStatus
     bool cont;
     size_t goodBranch;
 };
-typedef size_t TableState;
-struct TransitionTable
+
+typedef size_t DfaState;
+
+struct Dfa
 {
     // (Table-State, Char) to (Table-State)
-    std::vector<CharSet::ContainerType> nextStateTable;
+    std::vector<CharSet::ContainerType> table;
     // (Table-State) to (Match-Status)
-    std::vector<MatchStatus> matchStatusTable;
-    // (Table-State) to (Match-Branch)
-    std::vector<size_t> matchedBranchTable;
+    std::vector<MatchStatus> action;
     
     // debug
     std::vector<NfaStateSet> nfaStateSetTable;
@@ -134,33 +138,54 @@ struct TransitionTable
     size_t Run(std::string & text);
 };
 
-struct NfaStateSetComparator
-{
-    bool operator () (const NfaStateSet & c1, const NfaStateSet & c2) const
-    {
-        size_t i = 0;
-        while (i < c1.size() && c1.test(i) == c2.test(i))
-            ++i;
-        return i < c1.size() && !c1.test(i) && c2.test(i);
-    }
-};
-struct CompileContext
+// Dfa build
+
+struct DfaInput
 {
     NfaStateFactory nfaStateFactory;
-
     std::vector<NfaGraph> nfaGraphs;
-    
-    std::map<NfaState *, NfaStateSet> n2c_cache;
-    std::map<NfaStateSet, NfaStateSet, NfaStateSetComparator> c2c_cache;
+};
 
-    NfaStateSet EpsilonClosure(NfaState * n0);
-    NfaStateSet EpsilonClosure(NfaStateSet c);
-    NfaStateSet Next(NfaStateSet c, char ch);
-    MatchStatus GetState(NfaStateSet c);
+struct DfaCompileContext
+{
+    const std::vector<NfaGraph> & nfaGraphs;
+    const NfaStateFactory & nfaStates;
+    std::unordered_map<const NfaState *, NfaStateSet> c1;
+    std::unordered_map<NfaStateSet, NfaStateSet> c2;
+};
 
-    void PrintNodes();
+class NfaStateSetToDfaState
+{
+public:
+    NfaStateSetToDfaState() : ds(0) {}
 
-    TransitionTable Compile();
+    DfaState Add(const NfaStateSet & nss)
+    {
+        auto result = m.try_emplace(nss, ds);
+        if (result.second)
+        {
+            v.emplace_back(result.first->first);
+            ++ds;
+        }
+        return result.first->second;
+    }
+    DfaState Guard() const
+    {
+        return ds;
+    }
+    const NfaStateSet & Get(DfaState ds)
+    {
+        return v.at(ds);
+    }
+    const std::unordered_map<NfaStateSet, DfaState> & AsMap() const
+    {
+        return m;
+    }
+
+private:
+    DfaState ds;
+    std::unordered_map<NfaStateSet, DfaState> m;
+    std::vector<NfaStateSet> v;
 };
 
 // ===================================================================
@@ -189,25 +214,24 @@ void PrintNfaStateSet(NfaStateSet c)
     }
     std::cout << " }" << std::endl;;
 }
-
-void CompileContext::PrintNodes()
+NfaStateSet EpsilonClosure(NfaState * ns, DfaCompileContext & context);
+void PrintDfaCompileContext(DfaCompileContext & context)
 {
-    for (auto & n : nfaStateFactory.States())
+    for (const auto & n : context.nfaStates.States())
     {
         std::cout
             << n->id << (n->done ? "(done)" : (n->c ? "(non-empty)" : "")) << ":" << std::endl
             << "  --" << (n->c ? *n->c : '-') << "--> " << (n->next ? std::to_string(n->next->id) : "null") << std::endl
             << "  -----> " << (n->alt ? std::to_string(n->alt->id) : "null") << std::endl;
     }
-    for (auto & n : nfaStateFactory.States())
+    for (const auto & n : context.nfaStates.States())
     {
         std::cout
             << n->id << (n->done ? "(done)" : "") << ": ";
-        PrintNfaStateSet(EpsilonClosure(n.get()));
+        PrintNfaStateSet(EpsilonClosure(n.get(), context));
     }
 }
-
-void PrintTable(TransitionTable & tt)
+void PrintDfa(Dfa & dfa)
 {
     const int w = 3;
 
@@ -222,7 +246,7 @@ void PrintTable(TransitionTable & tt)
     std::cout << std::endl;
 
     size_t state = 0;
-    for (auto row : tt.nextStateTable)
+    for (auto row : dfa.table)
     {
         std::cout << " [";
         std::cout.width(w - 1);
@@ -236,7 +260,7 @@ void PrintTable(TransitionTable & tt)
     }
 
     state = 0;
-    for (auto row : tt.matchStatusTable)
+    for (auto row : dfa.action)
     {
         std::cout << " [" << state << "] ";
         if (row.bad)
@@ -250,7 +274,7 @@ void PrintTable(TransitionTable & tt)
             else if (row.goodBranch > 0)
                 std::cout << "good #" << row.goodBranch;
         }
-        std::cout << "\t" << NfaStateSetToString(tt.nfaStateSetTable[state]) << std::endl;
+        std::cout << "\t" << NfaStateSetToString(dfa.nfaStateSetTable[state]) << std::endl;
 
         ++state;
     }
@@ -456,16 +480,23 @@ std::string ToRegex(NfaGraph g);
 // Compile/run epsilon NFA
 // ===================================================================
 
-// All reachable Node and self that are non-empty or done
-NfaStateSet CompileContext::EpsilonClosure(NfaState * n0)
+NfaStateSet Init(DfaCompileContext & context)
 {
-    auto kv = n2c_cache.find(n0);
-    if (kv != n2c_cache.end())
+    NfaStateSet nss;
+    for (const NfaGraph & g : context.nfaGraphs)
+        nss.set(g.in->id);
+    return nss;
+}
+// All reachable Node and self that are non-empty or done
+NfaStateSet EpsilonClosure(NfaState * ns, DfaCompileContext & context)
+{
+    auto kv = context.c1.find(ns);
+    if (kv != context.c1.end())
         return kv->second;
 
-    NfaStateSet c;
+    NfaStateSet nss;
     NfaStateSet mask;
-    std::deque<NfaState *> q = {n0};
+    std::deque<NfaState *> q = { ns };
     while (!q.empty())
     {
         NfaState * n = q.back();
@@ -477,7 +508,7 @@ NfaStateSet CompileContext::EpsilonClosure(NfaState * n0)
 
         if (n->c || n->done) // non-empty or done
         {
-            c.set(n->id);
+            nss.set(n->id);
         }
         if (!n->c && n->next) // epsilon 1
         {
@@ -491,68 +522,63 @@ NfaStateSet CompileContext::EpsilonClosure(NfaState * n0)
         }
     }
 
-    return n2c_cache.emplace_hint(kv, n0, c)->second;
+    return context.c1.emplace_hint(kv, ns, nss)->second;
 }
-
-NfaStateSet CompileContext::EpsilonClosure(NfaStateSet c)
+NfaStateSet EpsilonClosure(const NfaStateSet & nss, DfaCompileContext & context)
 {
-    NfaStateSet c2;
+    NfaStateSet nss2;
 
-    auto kv = c2c_cache.find(c);
-    if (kv != c2c_cache.end())
+    auto kv = context.c2.find(nss);
+    if (kv != context.c2.end())
     {
-        c2 = kv->second;
+        nss2 = kv->second;
     }
     else
     {
-        for (size_t i = 0; i < c.size(); ++i)
+        for (size_t i = 0; i < nss.size(); ++i)
         {
-            if (c[i])
+            if (nss[i])
             {
-                c2 |= EpsilonClosure(nfaStateFactory[i]);
+                nss2 |= EpsilonClosure(context.nfaStates[i], context);
             }
         }
-        c2c_cache.emplace_hint(kv, c, c2);
-
-        //std::cout << NodesString(c) << " -> " << NodesString(c2) << std::endl;
+        context.c2.emplace_hint(kv, nss, nss2);
     }
 
-    return c2;
+    return nss2;
 }
-
-NfaStateSet CompileContext::Next(NfaStateSet c, char ch)
+NfaStateSet Jump(const NfaStateSet & nss, char ch, DfaCompileContext & context)
 {
-    NfaStateSet c2;
-    for (size_t i = 0; i < c.size(); ++i)
+    NfaStateSet nss2;
+    for (size_t i = 0; i < nss.size(); ++i)
     {
-        if (c[i])
+        if (nss[i])
         {
-            NfaState * n = nfaStateFactory[i];
+            NfaState * n = context.nfaStates[i];
             assert(n->done || n->c);
             if (n->done)
                 /*c2.set(n->id)*/;
             else if (*n->c == ch && n->next)
-                c2.set(n->next->id);
+                nss2.set(n->next->id);
         }
     }
-    return c2;
+    return nss2;
 }
-
-MatchStatus CompileContext::GetState(NfaStateSet c)
+MatchStatus GetState(const NfaStateSet & nss, DfaCompileContext & context)
 {
-    if (c.none())
-        return {true, false, 0};
+    if (nss.none())
+        return { true, false, 0 };
 
     bool cont = false;
     size_t goodBranch = 0;
 
     bool done = false;
     size_t doneNfaStateId = 0;
-    for (size_t i = 0; i < c.size() && (!cont || !goodBranch); ++i)
+    for (size_t i = 0; i < nss.size() && (!cont || !goodBranch); ++i)
     {
-        if (c.test(i))
+        if (nss.test(i))
         {
-            if (!done && nfaStateFactory[i]->done)
+            if (!done && context.nfaStates[i]->done)
                 done = true, doneNfaStateId = i;
             else
                 cont = true;
@@ -562,97 +588,89 @@ MatchStatus CompileContext::GetState(NfaStateSet c)
     {
         for (size_t i = 0; i <= doneNfaStateId; ++i)
         {
-            if (nfaStateFactory[i]->done)
+            if (context.nfaStates[i]->done)
                 ++goodBranch;
         }
     }
-    
+
     return { false, cont, goodBranch };
 }
 
-TransitionTable CompileContext::Compile()
+Dfa Compile(DfaInput & input)
 {
-    TransitionTable t;
+    std::vector<CharSet::ContainerType> dfaTable;
 
-    std::deque<NfaStateSet> q;
-    std::map<NfaStateSet, TableState, NfaStateSetComparator> toTableState;
-    TableState nextTableState = 0;
+    DfaCompileContext context = { input.nfaGraphs, input.nfaStateFactory };
+    NfaStateSetToDfaState nfa2dfa;
+    NfaStateSet nss;
+    DfaState ds;
 
-    NfaStateSet c0;
-    for (NfaGraph & g : nfaGraphs)
-        c0.set(g.in->id);
-    c0 = EpsilonClosure(c0);
-    q.push_front(c0);
-    toTableState.emplace(c0, nextTableState++);
+    // PrintNfaGraphAndEpsilonClosure(context);
 
-    size_t row = 0;
-    while (!q.empty())
+    nss =
+        EpsilonClosure(
+            Init(context),
+            context
+        );
+    ds = nfa2dfa.Add(nss);
+    for (; ds < nfa2dfa.Guard(); ++ds)
     {
-        if (t.nextStateTable.size() < row + 1)
-            t.nextStateTable.resize(row + 1);
-
-        NfaStateSet c1 = q.back();
-        q.pop_back();
+        nss = nfa2dfa.Get(ds);
+        dfaTable.emplace_back();
         for (char ch : CharSet::Chars())
         {
-            NfaStateSet c2 = EpsilonClosure(Next(c1, ch));
-
-            auto iter = toTableState.find(c2);
-            if (iter == toTableState.end())
-            {
-                q.push_front(c2);
-                iter = toTableState.emplace_hint(iter, c2, nextTableState++);
-            }
-
-            t.nextStateTable[row][CharSet::CharIdx(ch)] = iter->second;
+            NfaStateSet nss2 =
+                EpsilonClosure(
+                    Jump(nss, ch, context),
+                    context
+                );
+            dfaTable[ds][CharSet::CharIdx(ch)] =
+                nfa2dfa.Add(nss2);
         }
-
-        ++row;
     }
 
-    t.matchStatusTable.resize(row);
-    t.matchedBranchTable.resize(row);
-    t.nfaStateSetTable.resize(row);
+    Dfa dfa;
 
-    // Convert Node id to branch number.
-    for (auto cl_id : toTableState)
+    dfa.table = std::move(dfaTable);
+    dfa.action.resize(dfa.table.size());
+    dfa.nfaStateSetTable.resize(dfa.table.size());
+    for (auto cl_id : nfa2dfa.AsMap())
     {
-        MatchStatus m = GetState(cl_id.first);
-        t.matchStatusTable[cl_id.second] = m;
-        t.nfaStateSetTable[cl_id.second] = cl_id.first;
-        t.matchedBranchTable[cl_id.second] = m.goodBranch;
+        MatchStatus m = GetState(cl_id.first, context);
+        dfa.action[cl_id.second] = m;
+        dfa.nfaStateSetTable[cl_id.second] = cl_id.first;
     }
 
-    return t;
+    return dfa;
 }
 
-size_t TransitionTable::Run(std::string & text)
+size_t Dfa::Run(std::string & text)
 {
     std::cout << "match \"" << text << "\"..." << std::endl;
-    
-    TableState st = 0;
+
+    DfaState st = 0;
     size_t i = 0;
 
     size_t matchedBranch = 0;
     size_t matchedOffset = 0;
 
-    if (this->matchStatusTable[st].cont)
+    if (this->action[st].cont)
     {
         for (;
              i < text.size();
              ++i)
         {
             char ch = text.data()[i];
-            size_t next_state = this->nextStateTable[st][CharSet::CharIdx(ch)];
-            if (!this->matchStatusTable[st].bad)
+            size_t next_state = this->table[st][CharSet::CharIdx(ch)];
+            if (!this->action[st].bad)
             {
                 st = next_state;
                 std::cout << st << NfaStateSetToString(this->nfaStateSetTable[st]) << " --" << CharSet::CharStr(ch) << "-> " << next_state << NfaStateSetToString(this->nfaStateSetTable[next_state]) << std::endl;
-                
+
                 if (matchedBranch == 0 ||
-                    (0 < this->matchStatusTable[st].goodBranch && this->matchStatusTable[st].goodBranch <= matchedBranch))
+                    (0 < this->action[st].goodBranch && this->action[st].goodBranch <= matchedBranch))
                 {
-                    matchedBranch = this->matchStatusTable[st].goodBranch;
+                    matchedBranch = this->action[st].goodBranch;
                     matchedOffset = i + 1;
                 }
             }
@@ -684,10 +702,10 @@ size_t TransitionTable::Run(std::string & text)
 // Convert 1 pattern list to transition table
 void Test_ConvertOnePattern()
 {
-    CompileContext context;
-    NfaStateFactoryScope scope(&context.nfaStateFactory);
+    DfaInput input;
 
     // ab*c+d?e
+    NfaStateFactoryScope scope(&input.nfaStateFactory);
     NfaGraph c = Done(
         Concat(
             Concat(
@@ -709,12 +727,11 @@ void Test_ConvertOnePattern()
             MatchChar('e')
         )
     );
-    context.nfaGraphs.push_back(c);
-    context.PrintNodes();
+    input.nfaGraphs.push_back(c);
 
     // Compile.
-    TransitionTable tt = context.Compile();
-    PrintTable(tt);
+    Dfa dfa = Compile(input);
+    PrintDfa(dfa);
 
     // Simulate.
     std::vector<std::pair<std::string, bool>> test_cases = {
@@ -733,26 +750,25 @@ void Test_ConvertOnePattern()
         auto & text = kv.first;
         bool result = kv.second;
         std::cout << "pattern: ab*c text: " << text << std::endl;
-        assert((tt.Run(text) == 1) == result);
+        assert((dfa.Run(text) == 1) == result);
     }
 }
 
 void Test_ConvertOnePattern2()
 {
-    CompileContext context;
-    NfaStateFactoryScope scope(&context.nfaStateFactory);
+    DfaInput input;
 
     // (a|b)+
+    NfaStateFactoryScope scope(&input.nfaStateFactory);
     NfaGraph c = MatchChar('a');
     c = Alt(c, MatchChar('b'));
     c = Rep1(c);
     c = Done(c);
-    context.nfaGraphs.push_back(c);
-    context.PrintNodes();
+    input.nfaGraphs.push_back(c);
 
     // Compile.
-    TransitionTable tt = context.Compile();
-    PrintTable(tt);
+    Dfa dfa = Compile(input);
+    PrintDfa(dfa);
 
     // Simulate.
     std::vector<std::pair<std::string, bool>> test_cases = {
@@ -767,26 +783,25 @@ void Test_ConvertOnePattern2()
         auto & text = kv.first;
         bool result = kv.second;
         std::cout << "pattern: (a|b)+ text: " << text << std::endl;
-        assert((tt.Run(text) == 1) == result);
+        assert((dfa.Run(text) == 1) == result);
     }
 }
 
 // Convert N pattern list to transition table
 void Test_ConvertMultiplePattern()
 {
-    CompileContext context;
-    NfaStateFactoryScope scope(&context.nfaStateFactory);
+    DfaInput input;
 
+    NfaStateFactoryScope scope(&input.nfaStateFactory);
     std::vector<NfaGraph> vc = {
         FromRegex("apple"),
         FromRegex("banan")
     };
-    context.nfaGraphs = vc;
-    context.PrintNodes();
+    input.nfaGraphs = vc;
 
     // Compile.
-    TransitionTable tt = context.Compile();
-    PrintTable(tt);
+    Dfa dfa = Compile(input);
+    PrintDfa(dfa);
 
     // Simulate.
     std::vector<std::pair<std::string, size_t>> test_cases = {
@@ -800,15 +815,15 @@ void Test_ConvertMultiplePattern()
         auto & text = kv.first;
         auto which = kv.second;
         std::cout << "text: " << text << std::endl;
-        assert(tt.Run(text) == which);
+        assert(dfa.Run(text) == which);
     }
 }
 
 void Test_ConvertMultiplePattern2()
 {
-    CompileContext context;
-    NfaStateFactoryScope scope(&context.nfaStateFactory);
+    DfaInput input;
 
+    NfaStateFactoryScope scope(&input.nfaStateFactory);
     std::vector<NfaGraph> vc = {
         FromRegex("app"),
         FromRegex("ap"),
@@ -816,12 +831,11 @@ void Test_ConvertMultiplePattern2()
         FromRegex("a"),
         FromRegex("appl"),
     };
-    context.nfaGraphs = vc;
-    context.PrintNodes();
+    input.nfaGraphs = vc;
 
     // Compile.
-    TransitionTable tt = context.Compile();
-    PrintTable(tt);
+    Dfa dfa = Compile(input);
+    PrintDfa(dfa);
 
     // Simulate.
     std::vector<std::pair<std::string, size_t>> test_cases = {
@@ -836,26 +850,25 @@ void Test_ConvertMultiplePattern2()
         auto & text = kv.first;
         auto which = kv.second;
         std::cout << "text: " << text << std::endl;
-        assert(tt.Run(text) == which);
+        assert(dfa.Run(text) == which);
     }
 }
 
 void Test_ConvertMultiplePattern3()
 {
-    CompileContext context;
-    NfaStateFactoryScope scope(&context.nfaStateFactory);
+    DfaInput input;
 
+    NfaStateFactoryScope scope(&input.nfaStateFactory);
     std::vector<NfaGraph> vc = {
         FromRegex("abcde"),
         FromRegex("xy"),
         FromRegex("(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y)+")
     };
-    context.nfaGraphs = vc;
-    context.PrintNodes();
+    input.nfaGraphs = vc;
 
     // Compile.
-    TransitionTable tt = context.Compile();
-    PrintTable(tt);
+    Dfa dfa = Compile(input);
+    PrintDfa(dfa);
 
     // Simulate.
     std::vector<std::pair<std::string, size_t>> test_cases = {
@@ -869,31 +882,30 @@ void Test_ConvertMultiplePattern3()
         auto & text = kv.first;
         auto which = kv.second;
         std::cout << "text: " << text << std::endl;
-        assert(tt.Run(text) == which);
+        assert(dfa.Run(text) == which);
     }
 }
 
 void Test_Compile(std::string pattern)
 {
-    CompileContext context;
-    NfaStateFactoryScope scope(&context.nfaStateFactory);
+    DfaInput input;
 
+    NfaStateFactoryScope scope(&input.nfaStateFactory);
     std::vector<NfaGraph> vc = {
         FromRegex(pattern),
     };
-    context.nfaGraphs = vc;
-    context.PrintNodes();
+    input.nfaGraphs = vc;
 
     // Compile.
-    TransitionTable tt = context.Compile();
-    PrintTable(tt);
+    Dfa dfa = Compile(input);
+    PrintDfa(dfa);
 }
 
 void Test_CLex()
 {
-    CompileContext context;
-    NfaStateFactoryScope scope(&context.nfaStateFactory);
+    DfaInput input;
 
+    NfaStateFactoryScope scope(&input.nfaStateFactory);
     std::vector<NfaGraph> vc = {
         FromRegex("while"),
         FromRegex("volatile"),
@@ -929,11 +941,10 @@ void Test_CLex()
         FromRegex("auto"),
         FromRegex("(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z)+"),
     };
-    context.nfaGraphs = vc;
-    //PrintNodes();
+    input.nfaGraphs = vc;
 
-    TransitionTable tt = context.Compile();
-    PrintTable(tt);
+    Dfa dfa = Compile(input);
+    PrintDfa(dfa);
 
     std::vector<std::pair<std::string, size_t>> test_cases = {
         { "while", 1 },
@@ -969,12 +980,13 @@ void Test_CLex()
         { "break", 31 },
         { "auto", 32 },
         { "justanidname", 33 },
+        { "ifelse", 17 },
     };
     for (auto kv : test_cases)
     {
         auto & text = kv.first;
         auto which = kv.second;
         std::cout << "pattern: C-Lex text: " << text << std::endl;
-        assert(tt.Run(text) == which);
+        assert(dfa.Run(text) == which);
     }
 }
