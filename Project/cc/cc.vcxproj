@@ -44,6 +44,7 @@
     <ClInclude Include="..\..\Source\Parse\AstParser.h" />
     <ClInclude Include="..\..\Source\Parse\ParseMacros.h" />
     <ClInclude Include="..\..\Source\Parse\TokenParser.h" />
+    <ClInclude Include="..\..\Source\Preprocess\Lexer.h" />
     <ClInclude Include="..\..\Source\Preprocess\LineSlicer.h" />
     <ClInclude Include="..\..\Source\Preprocess\Preprocess.h" />
   </ItemGroup>
@@ -67,6 +68,7 @@
     <ClCompile Include="..\..\Source\Memory\Win\WinAllocate.cpp" />
     <ClCompile Include="..\..\Source\Parse\AstParser.cpp" />
     <ClCompile Include="..\..\Source\Parse\TokenParser.cpp" />
+    <ClCompile Include="..\..\Source\Preprocess\Lexer.cpp" />
     <ClCompile Include="..\..\Source\Preprocess\LineSlicer.cpp" />
     <ClCompile Include="..\..\Source\Preprocess\Preprocess.cpp" />
     <None Include="..\..\DevLog\DEBUG.md" />
@@ -87,6 +89,7 @@
   </ItemGroup>
   <ItemGroup>
     <Text Include="..\..\DevLog\AstBNF.txt" />
+    <Text Include="..\..\DevLog\Lex.txt" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{DDAE5B18-7E5C-4827-9485-288273BE3AEB}</ProjectGuid>

@@ -82,6 +82,9 @@
     <ClInclude Include="..\..\Source\Preprocess\LineSlicer.h">
       <Filter>Preprocess</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\Source\Preprocess\Lexer.h">
+      <Filter>Preprocess</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\Source\ir\CallingConvention.cpp">
@@ -143,6 +146,9 @@
       <Filter>Memory\Win</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Source\Preprocess\LineSlicer.cpp">
+      <Filter>Preprocess</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\Preprocess\Lexer.cpp">
       <Filter>Preprocess</Filter>
     </ClCompile>
   </ItemGroup>
@@ -216,6 +222,9 @@
   <ItemGroup>
     <Text Include="..\..\DevLog\AstBNF.txt">
       <Filter>Parse</Filter>
+    </Text>
+    <Text Include="..\..\DevLog\Lex.txt">
+      <Filter>Preprocess</Filter>
     </Text>
   </ItemGroup>
 </Project>

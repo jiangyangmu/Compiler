@@ -2,6 +2,7 @@
 
 #include "../Source/Preprocess/LineSlicer.h"
 #include "../Source/Preprocess/Tokenizer.h"
+#include "../Source/Preprocess/Lexer.h"
 
 TEST(LineSlicer_Simple)
 {
@@ -109,5 +110,95 @@ TEST(Tokenizer_UnknownToken)
     {
         std::cerr << "Caught exception: " << e.what() << std::endl;
         EXPECT_EQ(e.what(), std::string("Unrecognized token."));
+    }
+}
+
+TEST(Lexer_Complete)
+{
+    DfaInput input;
+
+    NfaStateFactoryScope scope(&input.nfaStateFactory);
+    std::vector<NfaGraph> vc = {
+        FromRegex("while"),
+        FromRegex("volatile"),
+        FromRegex("void"),
+        FromRegex("unsigned"),
+        FromRegex("union"),
+        FromRegex("typedef"),
+        FromRegex("switch"),
+        FromRegex("struct"),
+        FromRegex("static"),
+        FromRegex("sizeof"),
+        FromRegex("signed"),
+        FromRegex("short"),
+        FromRegex("return"),
+        FromRegex("register"),
+        FromRegex("long"),
+        FromRegex("int"),
+        FromRegex("if"),
+        FromRegex("goto"),
+        FromRegex("for"),
+        FromRegex("float"),
+        FromRegex("extern"),
+        FromRegex("enum"),
+        FromRegex("else"),
+        FromRegex("double"),
+        FromRegex("do"),
+        FromRegex("default"),
+        FromRegex("continue"),
+        FromRegex("const"),
+        FromRegex("char"),
+        FromRegex("case"),
+        FromRegex("break"),
+        FromRegex("auto"),
+        FromRegex("(a|b|c|d|e|f|g|h|i|j|k|l|m|n|o|p|q|r|s|t|u|v|w|x|y|z)+"),
+    };
+    input.nfaGraphs = vc;
+
+    Dfa dfa = Compile(input);
+    PrintDfa(dfa);
+
+    std::vector<std::pair<std::string, size_t>> test_cases = {
+        { "while", 1 },
+        { "volatile", 2 },
+        { "void", 3 },
+        { "unsigned", 4 },
+        { "union", 5 },
+        { "typedef", 6 },
+        { "switch", 7 },
+        { "struct", 8 },
+        { "static", 9 },
+        { "sizeof", 10 },
+        { "signed", 11 },
+        { "short", 12 },
+        { "return", 13 },
+        { "register", 14 },
+        { "long", 15 },
+        { "int", 16 },
+        { "if", 17 },
+        { "goto", 18 },
+        { "for", 19 },
+        { "float", 20 },
+        { "extern", 21 },
+        { "enum", 22 },
+        { "else", 23 },
+        { "double", 24 },
+        { "do", 25 },
+        { "default", 26 },
+        { "continue", 27 },
+        { "const", 28 },
+        { "char", 29 },
+        { "case", 30 },
+        { "break", 31 },
+        { "auto", 32 },
+        { "justanidname", 33 },
+        { "ifelse", 17 },
+    };
+    for (auto kv : test_cases)
+    {
+        auto & text = kv.first;
+        auto which = kv.second;
+        std::cout << "pattern: C-Lex text: " << text << std::endl;
+        EXPECT_EQ(dfa.Run(text).which, which);
     }
 }
