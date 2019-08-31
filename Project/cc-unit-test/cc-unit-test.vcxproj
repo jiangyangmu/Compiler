@@ -25,6 +25,7 @@
     <ClCompile Include="..\..\Source\Memory\SpanAllocator.cpp" />
     <ClCompile Include="..\..\Source\Memory\SpanFreeList.cpp" />
     <ClCompile Include="..\..\Source\Memory\Win\WinAllocate.cpp" />
+    <ClCompile Include="..\..\Source\Preprocess\Lexer.cpp" />
     <ClCompile Include="..\..\Source\Preprocess\LineSlicer.cpp" />
     <ClCompile Include="..\..\Source\Preprocess\Tokenizer.cpp" />
     <ClCompile Include="..\..\Source\UnitTest\UnitTestMain.cpp" />
@@ -39,6 +40,7 @@
     <ClInclude Include="..\..\Source\Memory\SpanAllocator.h" />
     <ClInclude Include="..\..\Source\Memory\SpanFreeList.h" />
     <ClInclude Include="..\..\Source\Memory\Win\WinAllocate.h" />
+    <ClInclude Include="..\..\Source\Preprocess\Lexer.h" />
     <ClInclude Include="..\..\Source\Preprocess\LineSlicer.h" />
     <ClInclude Include="..\..\Source\Preprocess\Tokenizer.h" />
     <ClInclude Include="..\..\Source\UnitTest\UnitTest.h" />
