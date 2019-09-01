@@ -40,7 +40,7 @@
     <ClCompile Include="..\..\Source\Preprocess\Tokenizer.cpp">
       <Filter>Source</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Source\Preprocess\Lexer.cpp">
+    <ClCompile Include="..\..\Source\Preprocess\DfaMatcher.cpp">
       <Filter>Source</Filter>
     </ClCompile>
   </ItemGroup>
@@ -73,7 +73,7 @@
     <ClInclude Include="..\..\Source\Preprocess\Tokenizer.h">
       <Filter>Source</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Source\Preprocess\Lexer.h">
+    <ClInclude Include="..\..\Source\Preprocess\DfaMatcher.h">
       <Filter>Source</Filter>
     </ClInclude>
   </ItemGroup>

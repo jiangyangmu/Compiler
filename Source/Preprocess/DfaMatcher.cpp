@@ -1,71 +1,16 @@
-#pragma once
+#include "DfaMatcher.h"
 
 #include <cassert>
-#include <string>
-#include <vector>
 #include <bitset>
 #include <unordered_map>
 #include <array>
 #include <deque>
 #include <memory>
-
-/*
-    Problem:
-
-        pattern 1   => Context, Result Object A
-        pattern 2   => Context, Result Object B
-        ...
-        ELSE        => Context, Result Function
-
-        * if matches pattern 1 & 2, prefer 1
-        * one char look-after assertion
-
-    Example:
-
-        proc        => proc keyword
-        [_a-zA-Z]+  => id
-        [0-9]+      => num
-        ELSE        => throw error
-
-        if          => if keyword
-        ifthis      => id
-        if0else     => id
-
-*/
+#include <iostream>
 
 class CharSet
 {
 public:
-    //static const size_t N = 27;
-    //static const std::vector<char> & Chars()
-    //{
-    //    static const std::vector<char> chars = { 'a','b','c','d','e','f','g','h','i','j','k','l','m','n','o','p','q','r','s','t','u','v','w','x','y','z','\0', };
-    //    return chars;
-    //}
-    //static const std::vector<const char *> & CharStrs()
-    //{
-    //    static const std::vector<const char *> char_strs = { "a","b","c","d","e","f","g","h","i","j","k","l","m","n","o","p","q","r","s","t","u","v","w","x","y","z","\\0", };
-    //    return char_strs;
-    //}
-    //static const std::vector<size_t> & CharIdxs()
-    //{
-    //    static const std::vector<size_t> char_idxs = { 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20, 21, 22, 23, 24, 25, 26, };
-    //    return char_idxs;
-    //}
-    //static bool Contains(char ch)
-    //{
-    //    return ch == '\0' || ('a' <= ch && ch <= 'z');
-    //}
-    //static size_t CharIdx(char ch)
-    //{
-    //    assert(Contains(ch));
-    //    return ch == '\0' ? 26 : size_t(ch - 'a');
-    //}
-    //static const char * CharStr(char ch)
-    //{
-    //    assert(Contains(ch));
-    //    return CharStrs()[CharIdx(ch)];
-    //}
     static const size_t N = 128;
     static const std::vector<char> & Chars()
     {
@@ -138,7 +83,7 @@ public:
         n->c = nullptr;
         n->next = nullptr;
         n->alt = nullptr;
-        
+
         return n;
     }
     NfaState * operator [] (size_t i) const
@@ -161,12 +106,7 @@ struct DfaAction
     size_t goodBranch;
 };
 
-struct DfaMatchResult
-{
-    size_t offset;
-    size_t length; // 0: no match
-    size_t which;  // 0: no match, 1: match 1st pattern, ...
-};
+struct DfaMatchResult;
 
 typedef std::array<size_t, CharSet::N> DfaTableRow;
 
@@ -176,7 +116,7 @@ struct Dfa
     std::vector<DfaTableRow> table;
     // (Table-State) to (Match-Status)
     std::vector<DfaAction> action;
-    
+
     // debug
     std::vector<NfaStateSet> dfa2nfa;
 
@@ -504,8 +444,7 @@ NfaGraph FromRegexCharGroup(const char * & c)
                 ++c;
             }
         };
-    }
-    while (*c != ']');
+    } while (*c != ']');
 
     REGEX_EXPECT(c, ']');
     ++c;
@@ -566,9 +505,9 @@ NfaGraph FromRegexAltGroup(const char * & c);
 NfaGraph FromRegexConcatList(const char * & c)
 {
     // ((char | alt-group) repeat?)+
-    
+
     NfaGraph g;
-    
+
     REGEX_EXPECT_NOT(c, '|');
     REGEX_EXPECT_NOT(c, ')');
     if (*c == '(')
@@ -607,7 +546,7 @@ NfaGraph FromRegexConcatList(const char * & c)
 NfaGraph FromRegexAltGroup(const char * & c)
 {
     // '(' concat-list? ('|' concat-list?)* ')'
-    
+
     NfaGraph g;
 
     REGEX_EXPECT(c, '(');
@@ -911,7 +850,7 @@ std::vector<DfaMatchResult> Match(std::vector<std::string> patterns, std::string
     input.nfaGraphs.reserve(patterns.size());
     for (auto & p : patterns)
         input.nfaGraphs.emplace_back(FromRegex(p));
-    
+
     Dfa dfa = Compile(input);
     //PrintDfa(dfa);
 
@@ -924,7 +863,7 @@ std::vector<DfaMatchResult> Match(std::vector<std::string> patterns, std::string
     {
         DfaMatchResult r = Match(dfa, pos, end);
         r.offset = pos - begin;
-        
+
         if (r.length == 0)
         {
             std::string msg = "unexpected char: ";
@@ -937,293 +876,4 @@ std::vector<DfaMatchResult> Match(std::vector<std::string> patterns, std::string
     }
 
     return m;
-}
-
-// ===================================================================
-// Test
-// ===================================================================
-
-#define EXPECT_EQ(left, right) \
-do { \
-    auto l = (left); \
-    auto r = (right); \
-    if (l != r) \
-    { \
-        std::cerr << "Left: " << l << std::endl \
-                  << "Right: " << r << std::endl; \
-        assert(false); \
-    } \
-} while (false)
-#define EXPECT_NFA_EQ(g, text) \
-do { \
-    std::string actual = NfaGraphToString(g); \
-    if (actual != (text)) \
-    { \
-        std::cerr << "Expect: " << (text) << std::endl \
-                  << "Actual: " << actual << std::endl; \
-        assert(false); \
-    } \
-} while (false)
-
-void Test_BuildAPI()
-{
-    NfaStateFactory factory;
-    NfaStateFactoryScope scope(&factory);
-
-    // From build function
-
-    // empty, char
-    EXPECT_NFA_EQ(MatchEmpty(),     "(EPS (NULL) (NULL))");
-    EXPECT_NFA_EQ(MatchChar('a'),   "(a (NULL) (NULL))");
-
-    // concat, alt
-    EXPECT_NFA_EQ(Concat(MatchChar('a'), MatchChar('b')),   "(a (b (NULL) (NULL)) (NULL))");
-    EXPECT_NFA_EQ(Alt(MatchChar('a'), MatchChar('b')),      "(a (EPS (NULL) (NULL)) (b (EPS (NULL) (NULL)) (NULL)))");
-
-    // rep0, rep1, opt
-
-    // From string
-}
-
-void Test_OnePattern_Elements()
-{
-    DfaInput input;
-
-    // ab*c+d?e
-    NfaStateFactoryScope scope(&input.nfaStateFactory);
-    NfaGraph c = FromRegex("ab*c+d?e");
-    input.nfaGraphs.push_back(c);
-
-    // Compile.
-    Dfa dfa = Compile(input);
-    PrintDfa(dfa);
-
-    // Simulate.
-    std::vector<std::pair<std::string, bool>> test_cases = {
-        { "ace", true },
-        { "abce", true },
-        { "abbce", true },
-        { "abbbce", true },
-        { "acce", true },
-        { "acde", true },
-        { "ce", false },
-        { "ae", false },
-        { "ac", false },
-    };
-    for (auto kv : test_cases)
-    {
-        auto & text = kv.first;
-        bool result = kv.second;
-        std::cout << "pattern: ab*c text: " << text << std::endl;
-        assert((dfa.Run(text).which == 1) == result);
-    }
-}
-
-void Test_OnePattern_MatchPrefix()
-{
-    DfaInput input;
-
-    // (a|b)+
-    NfaStateFactoryScope scope(&input.nfaStateFactory);
-    NfaGraph c = FromRegex("\\\\a|[b-d]");
-    input.nfaGraphs.push_back(c);
-
-    // Compile.
-    Dfa dfa = Compile(input);
-    PrintDfa(dfa);
-
-    // Simulate.
-    std::vector<std::pair<std::string, size_t>> test_cases = {
-        { "a", 0 },
-    };
-    for (auto kv : test_cases)
-    {
-        auto & text = kv.first;
-        size_t length = kv.second;
-        std::cout << "pattern: (a|b)+ text: " << text << std::endl;
-        EXPECT_EQ(dfa.Run(text).length, length);
-    }
-}
-
-void Test_MultiplePattern_MatchFirst()
-{
-    DfaInput input;
-
-    NfaStateFactoryScope scope(&input.nfaStateFactory);
-    std::vector<NfaGraph> vc = {
-        FromRegex("app"),
-        FromRegex("ap"),
-        FromRegex("apple"),
-        FromRegex("a"),
-        FromRegex("appl"),
-    };
-    input.nfaGraphs = vc;
-
-    // Compile.
-    Dfa dfa = Compile(input);
-    PrintDfa(dfa);
-
-    // Simulate.
-    std::vector<std::pair<std::string, size_t>> test_cases = {
-        { "app", 1 },
-        { "ap", 2 },
-        { "apple", 1 },
-        { "a", 4 },
-        { "appl", 1 },
-    };
-    for (auto kv : test_cases)
-    {
-        auto & text = kv.first;
-        auto which = kv.second;
-        std::cout << "text: " << text << std::endl;
-        assert(dfa.Run(text).which == which);
-    }
-}
-
-void Test_MultiplePattern_CKeyword()
-{
-    DfaInput input;
-
-    NfaStateFactoryScope scope(&input.nfaStateFactory);
-    std::vector<NfaGraph> vc = {
-        FromRegex("while"),
-        FromRegex("volatile"),
-        FromRegex("void"),
-        FromRegex("unsigned"),
-        FromRegex("union"),
-        FromRegex("typedef"),
-        FromRegex("switch"),
-        FromRegex("struct"),
-        FromRegex("static"),
-        FromRegex("sizeof"),
-        FromRegex("signed"),
-        FromRegex("short"),
-        FromRegex("return"),
-        FromRegex("register"),
-        FromRegex("long"),
-        FromRegex("int"),
-        FromRegex("if"),
-        FromRegex("goto"),
-        FromRegex("for"),
-        FromRegex("float"),
-        FromRegex("extern"),
-        FromRegex("enum"),
-        FromRegex("else"),
-        FromRegex("double"),
-        FromRegex("do"),
-        FromRegex("default"),
-        FromRegex("continue"),
-        FromRegex("const"),
-        FromRegex("char"),
-        FromRegex("case"),
-        FromRegex("break"),
-        FromRegex("auto"),
-        FromRegex("[a-z]+"),
-    };
-    input.nfaGraphs = vc;
-
-    Dfa dfa = Compile(input);
-    PrintDfa(dfa);
-
-    std::vector<std::pair<std::string, size_t>> test_cases = {
-        { "while", 1 },
-        { "volatile", 2 },
-        { "void", 3 },
-        { "unsigned", 4 },
-        { "union", 5 },
-        { "typedef", 6 },
-        { "switch", 7 },
-        { "struct", 8 },
-        { "static", 9 },
-        { "sizeof", 10 },
-        { "signed", 11 },
-        { "short", 12 },
-        { "return", 13 },
-        { "register", 14 },
-        { "long", 15 },
-        { "int", 16 },
-        { "if", 17 },
-        { "goto", 18 },
-        { "for", 19 },
-        { "float", 20 },
-        { "extern", 21 },
-        { "enum", 22 },
-        { "else", 23 },
-        { "double", 24 },
-        { "do", 25 },
-        { "default", 26 },
-        { "continue", 27 },
-        { "const", 28 },
-        { "char", 29 },
-        { "case", 30 },
-        { "break", 31 },
-        { "auto", 32 },
-        { "justanidname", 33 },
-        { "ifelse", 17 },
-    };
-    for (auto kv : test_cases)
-    {
-        auto & text = kv.first;
-        auto which = kv.second;
-        std::cout << "pattern: C-Lex text: " << text << std::endl;
-        assert(dfa.Run(text).which == which);
-    }
-}
-
-void Test_API()
-{
-    try
-    {
-        std::vector<std::string> patterns = {
-            "[_a-zA-Z][_a-zA-Z0-9]*",
-            "#[_a-zA-Z][_a-zA-Z0-9]*",
-            "[0-9]+\\.[0-9]*|\\.[0-9]+",
-            "[0-9]+",
-            "'([^']|\\\\')+'|\"([^\"]|\\\\\")*\"|<([^> ]|\\\\>)+>",
-            "~|}|\\|\\||\\|=|\\||{|^=|^|]|\\[|\\?|>>=|>>|>=|>|==|=|<=|<<=|<<|<|;|:|/=|/|\\.\\.\\.|\\.|->|-=|--|-|,|+=|++|+|*=|*|\\)|\\(|&=|&&|&|%=|%|##|#|!=|!",
-            "[ \t\r]+",
-            "\n",
-        };
-        std::vector<std::string> types = {
-            "ID",
-            "DIRECTIVE",
-            "FLOAT",
-            "INT",
-            "RANGE",
-            "OP",
-            "SPACE",
-            "NEW_LINE",
-        };
-        std::string text =
-            "hello_0_this_Is_a_Long_Name good "
-            "#hello_0_this_Is_a_Long_Directive #haha "
-            "0. 0.0 .0 "
-            "0 1 22 4890 "
-            "'a0=>?\"\\'' \"a0=>?'\\\"\" <a0=\\>?'\">"
-            "~ } || |= | { ^= ^ ] [ ? >>= >> >= > == = <= <<= << < ; : /= / ... . -> -= -- - , += ++ + *= * ) ( &= && & %= % ## # != ! "
-            " \t\r"
-            "\n\n"
-            ;
-        std::vector<DfaMatchResult> mr = Match(patterns, text);
-
-        for (auto r : mr)
-        {
-            if (r.which > 0)
-                std::cout << "Matched: " << types[r.which - 1] << " " << text.substr(r.offset, r.length) << std::endl;
-        }
-    }
-    catch (const std::invalid_argument& e)
-    {
-        std::cerr << "Caught exception: " << e.what() << std::endl;
-    }
-}
-
-void Test_CLex()
-{
-    Test_BuildAPI();
-    Test_OnePattern_Elements();
-    Test_OnePattern_MatchPrefix();
-    Test_MultiplePattern_MatchFirst();
-    Test_MultiplePattern_CKeyword();
-    Test_API();
 }
