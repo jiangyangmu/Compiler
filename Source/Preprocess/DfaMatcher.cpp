@@ -119,8 +119,6 @@ struct Dfa
 
     // debug
     std::vector<NfaStateSet> dfa2nfa;
-
-    DfaMatchResult Run(std::string & text);
 };
 
 // Dfa build
@@ -745,59 +743,6 @@ Dfa Compile(DfaInput & input)
     return dfa;
 }
 
-DfaMatchResult Dfa::Run(std::string & text)
-{
-    std::cout << "match \"" << text << "\"..." << std::endl;
-
-    DfaState ds = 0;
-    size_t i = 0;
-
-    size_t matchedBranch = 0;
-    size_t matchedLength = 0;
-
-    if (this->action[ds].cont)
-    {
-        for (;
-             i < text.size();
-             ++i)
-        {
-            char ch = text.data()[i];
-            size_t ds2 = this->table[ds][CharSet::CharIdx(ch)];
-
-            std::cout
-                << ds /*<< NfaStateSetToString(this->dfa2nfa[ds])*/
-                << " --" << CharSet::CharStr(ch) << "-> "
-                << ds2 /*<< NfaStateSetToString(this->dfa2nfa[ds2])*/ << std::endl;
-
-            ds = ds2;
-
-            if (this->action[ds].bad)
-                break;
-
-            if (matchedBranch == 0 ||
-                (0 < this->action[ds].goodBranch && this->action[ds].goodBranch <= matchedBranch))
-            {
-                matchedBranch = this->action[ds].goodBranch;
-                matchedLength = i + 1;
-            }
-        }
-    }
-
-    if (matchedBranch > 0)
-    {
-        if (matchedLength == text.size())
-            std::cout << "matched pattern #" << matchedBranch << "." << std::endl;
-        else
-            std::cout << "prefix \"" << text.substr(0, matchedLength) << "\" matched pattern #" << matchedBranch << "." << std::endl;
-    }
-    else
-    {
-        std::cout << "not matched." << std::endl;
-    }
-
-    return { 0, matchedLength, matchedBranch };
-}
-
 // ===================================================================
 // Match API
 // ===================================================================
@@ -842,7 +787,7 @@ DfaMatchResult Match(Dfa & dfa, const char * begin, const char * end)
     return { 0, matchedLength, matchedBranch };
 }
 
-std::vector<DfaMatchResult> Match(std::vector<std::string> patterns, std::string text)
+std::vector<DfaMatchResult> Match(std::vector<std::string> patterns, StringRef text)
 {
     DfaInput input;
     NfaStateFactoryScope scope(&input.nfaStateFactory);
@@ -857,7 +802,7 @@ std::vector<DfaMatchResult> Match(std::vector<std::string> patterns, std::string
     std::vector<DfaMatchResult> m;
 
     const char * begin = text.data();
-    const char * end = text.data() + text.length();
+    const char * end = text.data() + text.size();
     const char * pos = begin;
     while (pos < end)
     {

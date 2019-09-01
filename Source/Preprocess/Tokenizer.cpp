@@ -5,7 +5,6 @@
 #include <unordered_map>
 #include <xutility>
 
-const char * ParsePPDirective(const char * pcBegin);
 const char * ParsePPIncludedFilePath(const char * pcBegin);
 const char * ParsePPLParan(const char * pcBegin);
 
@@ -584,3 +583,29 @@ std::vector<Token> Tokenize(std::vector<std::string> vStrLines)
     return tokens;
 }
 
+#include "DfaMatcher.h"
+#include <iostream>
+
+std::vector<Token> Tokenize(std::string & text)
+{
+    static std::vector<std::string> general_patterns = {
+        /* ID        */ "[_a-zA-Z][_a-zA-Z0-9]*",
+        /* DIRECTIVE */ "#[_a-zA-Z][_a-zA-Z0-9]*",
+        /* FLOATING  */ "[0-9]+\\.[0-9]*|\\.[0-9]+",
+        /* INTEGER   */ "[0-9]+",
+        /* SEQUENCE  */ "'([^']|\\\\')+'|\"([^\"]|\\\\\")*\"|<([^> ]|\\\\>)+>",
+        /* OPERATOR  */ "~|}|\\|\\||\\|=|\\||{|^=|^|]|\\[|\\?|>>=|>>|>=|>|==|=|<=|<<=|<<|<|;|:|/=|/|\\.\\.\\.|\\.|->|-=|--|-|,|+=|++|+|*=|*|\\)|\\(|&=|&&|&|%=|%|##|#|!=|!",
+        /* SPACE     */ "[ \t\r]+",
+        /* NEW LINE  */ "\n",
+    };
+    std::vector<DfaMatchResult> mr = Match(general_patterns, StringRef(text.data(), text.length()));
+
+    std::vector<Token> tokens;
+    for (auto r : mr)
+    {
+        Token t;
+        t.text = StringRef(text.data() + r.offset, r.length);
+        tokens.push_back(t);
+    }
+    return tokens;
+}

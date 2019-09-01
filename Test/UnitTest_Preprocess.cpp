@@ -113,7 +113,7 @@ TEST(Tokenizer_UnknownToken)
     }
 }
 
-TEST(Lexer_Complete)
+TEST(DfaMatcher_Complete)
 {
     try
     {
@@ -147,12 +147,39 @@ TEST(Lexer_Complete)
             " \t\r"
             "\n\n"
             ;
-        std::vector<DfaMatchResult> mr = Match(patterns, text);
+        std::vector<DfaMatchResult> mr = Match(patterns, StringRef(text.data(), text.length()));
 
         for (auto r : mr)
         {
             if (r.which > 0)
                 std::cout << "Matched: " << types[r.which - 1] << " " << text.substr(r.offset, r.length) << std::endl;
+        }
+    }
+    catch (const std::invalid_argument& e)
+    {
+        std::cerr << "Caught exception: " << e.what() << std::endl;
+    }
+}
+
+TEST(Tokenizer_DfaMatcher)
+{
+    try
+    {
+        std::string text =
+            "hello_0_this_Is_a_Long_Name good "
+            "#hello_0_this_Is_a_Long_Directive #haha "
+            "0. 0.0 .0 "
+            "0 1 22 4890 "
+            "'a0=>?\"\\'' \"a0=>?'\\\"\" <a0=\\>?'\">"
+            "~ } || |= | { ^= ^ ] [ ? >>= >> >= > == = <= <<= << < ; : /= / ... . -> -= -- - , += ++ + *= * ) ( &= && & %= % ## # != ! "
+            " \t\r"
+            "\n\n"
+            ;
+        std::vector<Token> tokens = Tokenize(text);
+
+        for (auto t : Tokenize(text))
+        {
+            std::cout << "Token: " << t.text << std::endl;
         }
     }
     catch (const std::invalid_argument& e)

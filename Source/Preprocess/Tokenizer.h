@@ -92,3 +92,5 @@ struct Token
 };
 
 std::vector<Token> Tokenize(std::vector<std::string> vLines);
+
+std::vector<Token> Tokenize(std::string & text);
