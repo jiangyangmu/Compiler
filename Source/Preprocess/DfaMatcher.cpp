@@ -63,7 +63,7 @@ struct NfaState
 
 typedef std::bitset<4096> NfaStateSet;
 
-struct NfaGraph
+struct Nfa
 {
     NfaState * in;
     NfaState ** next;
@@ -106,7 +106,12 @@ struct DfaAction
     size_t goodBranch;
 };
 
-struct DfaMatchResult;
+struct DfaMatchResult
+{
+    size_t offset;
+    size_t length; // 0: no match
+    size_t which;  // 0: no match, 1: match 1st pattern, ...
+};
 
 typedef std::array<size_t, CharSet::N> DfaTableRow;
 
@@ -116,22 +121,19 @@ struct Dfa
     std::vector<DfaTableRow> table;
     // (Table-State) to (Match-Status)
     std::vector<DfaAction> action;
-
-    // debug
-    std::vector<NfaStateSet> dfa2nfa;
 };
 
 // Dfa build
 
-struct DfaInput
+struct DfaCompileInput
 {
     NfaStateFactory nfaStateFactory;
-    std::vector<NfaGraph> nfaGraphs;
+    std::vector<Nfa> nfaList;
 };
 
 struct DfaCompileContext
 {
-    const std::vector<NfaGraph> & nfaGraphs;
+    const std::vector<Nfa> & nfas;
     const NfaStateFactory & nfaStates;
     std::unordered_map<const NfaState *, NfaStateSet> c1;
     std::unordered_map<NfaStateSet, NfaStateSet> c2;
@@ -171,9 +173,7 @@ private:
     std::vector<NfaStateSet> v;
 };
 
-// ===================================================================
-// Print
-// ===================================================================
+// ==== Print ====
 
 std::string NfaStateSetToString(NfaStateSet c)
 {
@@ -214,7 +214,7 @@ std::string NfaGraphToString(NfaState * ns)
     s += ")";
     return s;
 }
-std::string NfaGraphToString(NfaGraph g)
+std::string NfaGraphToString(Nfa g)
 {
     return NfaGraphToString(g.in);
 }
@@ -288,15 +288,13 @@ void PrintDfa(Dfa & dfa)
             else if (row.goodBranch > 0)
                 std::cout << "good #" << row.goodBranch;
         }
-        std::cout << "\t" << NfaStateSetToString(dfa.dfa2nfa[state]) << std::endl;
+        std::cout << /*"\t" << NfaStateSetToString(dfa.dfa2nfa[state]) <<*/ std::endl;
 
         ++state;
     }
 }
 
-// ===================================================================
-// Build epsilon NFA
-// ===================================================================
+// ==== Build NFA ====
 
 NfaStateFactory * gFactory = nullptr;
 
@@ -315,25 +313,25 @@ public:
     }
 };
 
-NfaGraph MatchEmpty()
+Nfa MatchEmpty()
 {
     NfaState * n = gFactory->NewState();
     return { n, &n->next, &n->alt };
 }
-NfaGraph MatchChar(char c)
+Nfa MatchChar(char c)
 {
     NfaState * n = gFactory->NewState();
     n->c = new char(c);
 
     return { n, &n->next, &n->alt };
 }
-NfaGraph Concat(NfaGraph c1, NfaGraph c2)
+Nfa Concat(Nfa c1, Nfa c2)
 {
     *c1.next = c2.in;
 
     return { c1.in, c2.next , c1.alt };
 }
-NfaGraph Alt(NfaGraph c1, NfaGraph c2)
+Nfa Alt(Nfa c1, Nfa c2)
 {
     NfaState * n = gFactory->NewState();
     *c1.next = n;
@@ -342,7 +340,7 @@ NfaGraph Alt(NfaGraph c1, NfaGraph c2)
 
     return { c1.in, &n->next, c2.alt };
 }
-NfaGraph Rep0(NfaGraph c)
+Nfa Rep0(Nfa c)
 {
     NfaState * n = gFactory->NewState();
     n->alt = c.in;
@@ -350,7 +348,7 @@ NfaGraph Rep0(NfaGraph c)
 
     return { n, &n->next, c.alt };
 }
-NfaGraph Rep1(NfaGraph c)
+Nfa Rep1(Nfa c)
 {
     NfaState * n = gFactory->NewState();
     n->alt = c.in;
@@ -358,7 +356,7 @@ NfaGraph Rep1(NfaGraph c)
 
     return { c.in, &n->next, c.alt };
 }
-NfaGraph Opt(NfaGraph c)
+Nfa Opt(Nfa c)
 {
     NfaState * n = gFactory->NewState();
     *c.next = n;
@@ -366,7 +364,7 @@ NfaGraph Opt(NfaGraph c)
 
     return { c.in, &n->next, &n->alt };
 }
-NfaGraph Done(NfaGraph c)
+Nfa Done(Nfa c)
 {
     NfaState * n = gFactory->NewState();
     n->done = true;
@@ -374,6 +372,8 @@ NfaGraph Done(NfaGraph c)
 
     return { c.in, &n->next, c.alt };
 }
+
+// ==== Regex -> NFA ====
 
 // abc
 // a|b|c
@@ -399,7 +399,7 @@ NfaGraph Done(NfaGraph c)
             throw std::invalid_argument("bad regex"); \
     } while (false)
 
-NfaGraph FromRegexCharGroup(const char * & c)
+Nfa FromRegexCharGroup(const char * & c)
 {
     // '[' '^'? (char|char '-' char)+ ']'
     std::vector<bool> v(CharSet::N, false);
@@ -447,7 +447,7 @@ NfaGraph FromRegexCharGroup(const char * & c)
     REGEX_EXPECT(c, ']');
     ++c;
 
-    NfaGraph g;
+    Nfa g;
     size_t i = 0;
     for (; i != v.size(); ++i)
     {
@@ -469,12 +469,12 @@ NfaGraph FromRegexCharGroup(const char * & c)
     return g;
 }
 // char, escape, wildcard
-NfaGraph FromRegexChar(const char * & c)
+Nfa FromRegexChar(const char * & c)
 {
     if (*c == '[')
         return FromRegexCharGroup(c);
 
-    NfaGraph g;
+    Nfa g;
 
     REGEX_EXPECT_TRUE(CharSet::Contains(*c));
     if (*c == '\\')
@@ -499,12 +499,12 @@ NfaGraph FromRegexChar(const char * & c)
 
     return g;
 }
-NfaGraph FromRegexAltGroup(const char * & c);
-NfaGraph FromRegexConcatList(const char * & c)
+Nfa FromRegexAltGroup(const char * & c);
+Nfa FromRegexConcatList(const char * & c)
 {
     // ((char | alt-group) repeat?)+
 
-    NfaGraph g;
+    Nfa g;
 
     REGEX_EXPECT_NOT(c, '|');
     REGEX_EXPECT_NOT(c, ')');
@@ -522,7 +522,7 @@ NfaGraph FromRegexConcatList(const char * & c)
 
     while (*c != '|' && *c != ')')
     {
-        NfaGraph g2;
+        Nfa g2;
 
         if (*c == '(')
             g2 = FromRegexAltGroup(c);
@@ -541,11 +541,11 @@ NfaGraph FromRegexConcatList(const char * & c)
 
     return g;
 }
-NfaGraph FromRegexAltGroup(const char * & c)
+Nfa FromRegexAltGroup(const char * & c)
 {
     // '(' concat-list? ('|' concat-list?)* ')'
 
-    NfaGraph g;
+    Nfa g;
 
     REGEX_EXPECT(c, '(');
     ++c;
@@ -567,23 +567,20 @@ NfaGraph FromRegexAltGroup(const char * & c)
 
     return g;
 }
-NfaGraph FromRegex(std::string regex)
+Nfa FromRegex(std::string regex)
 {
     regex = "(" + regex + ")";
 
     const char * c = regex.data();
     return Done(FromRegexAltGroup(c));
 }
-std::string ToRegex(NfaGraph g);
 
-// ===================================================================
-// Build DFA
-// ===================================================================
+// ==== Subset Construction ====
 
 NfaStateSet Init(DfaCompileContext & context)
 {
     NfaStateSet nss;
-    for (const NfaGraph & g : context.nfaGraphs)
+    for (const Nfa & g : context.nfas)
         nss.set(g.in->id);
     return nss;
 }
@@ -664,6 +661,7 @@ NfaStateSet Jump(const NfaStateSet & nss, char ch, DfaCompileContext & context)
     }
     return nss2;
 }
+// Die? Cont? Which rule (prefer given first)?
 DfaAction GetAction(const NfaStateSet & nss, DfaCompileContext & context)
 {
     if (nss.none())
@@ -696,11 +694,17 @@ DfaAction GetAction(const NfaStateSet & nss, DfaCompileContext & context)
     return { false, cont, goodBranch };
 }
 
-Dfa Compile(DfaInput & input)
+#define DFA_EXPECT_TRUE(cond) \
+    do { \
+        if (!(cond)) \
+            throw std::invalid_argument("bad DFA"); \
+    } while (false)
+
+Dfa Compile(DfaCompileInput & input)
 {
     std::vector<DfaTableRow> dfaTable;
 
-    DfaCompileContext context = { input.nfaGraphs, input.nfaStateFactory };
+    DfaCompileContext context = { input.nfaList, input.nfaStateFactory };
     NfaStateSetToDfaState nfa2dfa;
     NfaStateSet nss;
     DfaState ds;
@@ -733,19 +737,13 @@ Dfa Compile(DfaInput & input)
 
     dfa.table = std::move(dfaTable);
     dfa.action.resize(dfa.table.size());
-    dfa.dfa2nfa.resize(dfa.table.size());
     for (auto nss_ds : nfa2dfa.AsMap())
     {
         dfa.action[nss_ds.second] = GetAction(nss_ds.first, context);
-        dfa.dfa2nfa[nss_ds.second] = nss_ds.first;
     }
 
     return dfa;
 }
-
-// ===================================================================
-// Match API
-// ===================================================================
 
 DfaMatchResult Match(Dfa & dfa, const char * begin, const char * end)
 {
@@ -754,52 +752,45 @@ DfaMatchResult Match(Dfa & dfa, const char * begin, const char * end)
     size_t matchedBranch = 0;
     size_t matchedLength = 0;
 
-    std::cout << std::endl;
-
-    if (dfa.action[ds].cont)
+    assert (!dfa.action[ds].bad && dfa.action[ds].cont && dfa.action[ds].goodBranch == 0);
+    for (const char * pos = begin;
+         pos != end;
+         ++pos)
     {
-        for (const char * pos = begin;
-             pos != end;
-             ++pos)
+        char ch = *pos;
+        size_t ds2 = dfa.table[ds][CharSet::CharIdx(ch)];
+
+        ds = ds2;
+
+        if (dfa.action[ds].bad)
+            break;
+
+        if (dfa.action[ds].goodBranch)
         {
-            char ch = *pos;
-            size_t ds2 = dfa.table[ds][CharSet::CharIdx(ch)];
-
-            std::cout
-                << ds /*<< NfaStateSetToString(this->dfa2nfa[ds])*/
-                << " --" << CharSet::CharStr(ch) << "-> "
-                << ds2 /*<< NfaStateSetToString(this->dfa2nfa[ds2])*/ << std::endl;
-
-            ds = ds2;
-
-            if (dfa.action[ds].bad)
-                break;
-
-            if (0 < dfa.action[ds].goodBranch &&
-                (matchedBranch == 0 || dfa.action[ds].goodBranch <= matchedBranch))
-            {
-                matchedBranch = dfa.action[ds].goodBranch;
-                matchedLength = pos - begin + 1;
-            }
+            matchedBranch = dfa.action[ds].goodBranch;
+            matchedLength = pos - begin + 1;
         }
     }
 
+    // Offset filled by client.
     return { 0, matchedLength, matchedBranch };
 }
 
-std::vector<DfaMatchResult> Match(std::vector<std::string> patterns, StringRef text)
+// ==== API ====
+
+std::vector<MatchResult> Match(std::vector<std::string> patterns, StringRef text)
 {
-    DfaInput input;
+    DfaCompileInput input;
     NfaStateFactoryScope scope(&input.nfaStateFactory);
 
-    input.nfaGraphs.reserve(patterns.size());
+    input.nfaList.reserve(patterns.size());
     for (auto & p : patterns)
-        input.nfaGraphs.emplace_back(FromRegex(p));
+        input.nfaList.emplace_back(FromRegex(p));
 
     Dfa dfa = Compile(input);
     //PrintDfa(dfa);
 
-    std::vector<DfaMatchResult> m;
+    std::vector<MatchResult> m;
 
     const char * begin = text.data();
     const char * end = text.data() + text.size();
@@ -811,14 +802,70 @@ std::vector<DfaMatchResult> Match(std::vector<std::string> patterns, StringRef t
 
         if (r.length == 0)
         {
-            std::string msg = "unexpected char: ";
+            std::string msg = "Unexpected char: ";
             msg.push_back(*pos);
             throw std::invalid_argument(msg);
         }
 
-        m.push_back(r);
+        m.push_back({r.offset, r.length, r.which});
         pos += r.length;
     }
 
     return m;
 }
+
+#ifdef UNIT_TEST
+#include "../UnitTest/UnitTest.h"
+
+TEST(DfaMatcher_Complete)
+{
+    try
+    {
+        std::vector<std::string> patterns = {
+            "if",
+            "[_a-zA-Z][_a-zA-Z0-9]*",
+            "#[_a-zA-Z][_a-zA-Z0-9]*",
+            "[0-9]+\\.[0-9]*|\\.[0-9]+",
+            "[0-9]+",
+            "'([^']|\\\\')+'|\"([^\"]|\\\\\")*\"|<([^> ]|\\\\>)+>",
+            "~|}|\\|\\||\\|=|\\||{|^=|^|]|\\[|\\?|>>=|>>|>=|>|==|=|<=|<<=|<<|<|;|:|/=|/|\\.\\.\\.|\\.|->|-=|--|-|,|+=|++|+|*=|*|\\)|\\(|&=|&&|&|%=|%|##|#|!=|!",
+            "[ \t\r]+",
+            "\n",
+        };
+        std::vector<std::string> types = {
+            "IF",
+            "ID",
+            "DIRECTIVE",
+            "FLOAT",
+            "INT",
+            "RANGE",
+            "OP",
+            "SPACE",
+            "NEW_LINE",
+        };
+        std::string text =
+            "if "
+            "if_as_an_id hello_0_this_Is_a_Long_Name good "
+            "#hello_0_this_Is_a_Long_Directive #haha "
+            "0. 0.0 .0 "
+            "0 1 22 4890 "
+            "'a0=>?\"\\'' \"a0=>?'\\\"\" <a0=\\>?'\">"
+            "~ } || |= | { ^= ^ ] [ ? >>= >> >= > == = <= <<= << < ; : /= / ... . -> -= -- - , += ++ + *= * ) ( &= && & %= % ## # != ! "
+            " \t\r"
+            "\n\n"
+            ;
+        std::vector<MatchResult> mr = Match(patterns, StringRef(text.data(), text.length()));
+
+        for (auto r : mr)
+        {
+            if (r.which > 0)
+                std::cout << "Matched: " << types[r.which - 1] << " " << text.substr(r.offset, r.length) << std::endl;
+        }
+    }
+    catch (const std::invalid_argument& e)
+    {
+        std::cerr << "Caught exception: " << e.what() << std::endl;
+    }
+}
+
+#endif

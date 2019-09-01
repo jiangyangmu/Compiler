@@ -861,8 +861,6 @@ private:
     std::map<void *, size_t> mOutOfRangeFree;
 };
 
-//#define 
-
 TEST(FreeListAllocator_Create)
 {
     FreeListAllocator fa(8);

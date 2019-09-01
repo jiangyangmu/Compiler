@@ -1,5 +1,7 @@
 #pragma once
 
+#ifdef UNIT_TEST
+
 // #include <cassert>
 #include <iostream>
 #include <vector>
@@ -210,3 +212,5 @@ private:
             std::exit(EXIT_FAILURE);                                          \
         }                                                                     \
     } while (false)
+
+#endif

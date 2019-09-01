@@ -147,7 +147,7 @@ TEST(DfaMatcher_Complete)
             " \t\r"
             "\n\n"
             ;
-        std::vector<DfaMatchResult> mr = Match(patterns, StringRef(text.data(), text.length()));
+        std::vector<MatchResult> mr = Match(patterns, StringRef(text.data(), text.length()));
 
         for (auto r : mr)
         {

@@ -1,3 +1,5 @@
+#ifdef UNIT_TEST
+
 #include "UnitTest.h"
 
 #include <iostream>
@@ -18,6 +20,8 @@
 
 #endif
 
+#define TEST_FILTER "Dfa"
+
 TestRunner & TestRunner::Get() {
     static TestRunner * runner = new TestRunner();
     return *runner;
@@ -32,10 +36,14 @@ void TestRunner::SetError(bool has_error) {
 }
 
 void TestRunner::RunAllTest() {
-    size_t count = all_tests_.size();
+    size_t count = 0;
     size_t failed = 0, passed = 0;
+    std::string filter = TEST_FILTER;
     for (auto test : all_tests_)
     {
+        if (!filter.empty() && std::string(test->getName()).find(filter) == std::string::npos)
+            continue;
+        ++count;
         std::cout << "[ RUN     ] " << test->getName() << std::endl;
         has_error_ = false;
         test->setUp();
@@ -61,3 +69,5 @@ int main(void) {
     TestRunner::Get().RunAllTest();
     return 0;
 }
+
+#endif

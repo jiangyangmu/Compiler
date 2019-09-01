@@ -179,8 +179,6 @@ struct Dfa
     
     // debug
     std::vector<NfaStateSet> dfa2nfa;
-
-    DfaMatchResult Run(std::string & text);
 };
 
 // Dfa build
@@ -806,61 +804,8 @@ Dfa Compile(DfaInput & input)
     return dfa;
 }
 
-DfaMatchResult Dfa::Run(std::string & text)
-{
-    std::cout << "match \"" << text << "\"..." << std::endl;
-
-    DfaState ds = 0;
-    size_t i = 0;
-
-    size_t matchedBranch = 0;
-    size_t matchedLength = 0;
-
-    if (this->action[ds].cont)
-    {
-        for (;
-             i < text.size();
-             ++i)
-        {
-            char ch = text.data()[i];
-            size_t ds2 = this->table[ds][CharSet::CharIdx(ch)];
-
-            std::cout
-                << ds /*<< NfaStateSetToString(this->dfa2nfa[ds])*/
-                << " --" << CharSet::CharStr(ch) << "-> "
-                << ds2 /*<< NfaStateSetToString(this->dfa2nfa[ds2])*/ << std::endl;
-
-            ds = ds2;
-
-            if (this->action[ds].bad)
-                break;
-
-            if (matchedBranch == 0 ||
-                (0 < this->action[ds].goodBranch && this->action[ds].goodBranch <= matchedBranch))
-            {
-                matchedBranch = this->action[ds].goodBranch;
-                matchedLength = i + 1;
-            }
-        }
-    }
-
-    if (matchedBranch > 0)
-    {
-        if (matchedLength == text.size())
-            std::cout << "matched pattern #" << matchedBranch << "." << std::endl;
-        else
-            std::cout << "prefix \"" << text.substr(0, matchedLength) << "\" matched pattern #" << matchedBranch << "." << std::endl;
-    }
-    else
-    {
-        std::cout << "not matched." << std::endl;
-    }
-
-    return { 0, matchedLength, matchedBranch };
-}
-
 // ===================================================================
-// Match API
+// Run DFA
 // ===================================================================
 
 DfaMatchResult Match(Dfa & dfa, const char * begin, const char * end)
@@ -927,7 +872,7 @@ std::vector<DfaMatchResult> Match(std::vector<std::string> patterns, std::string
         
         if (r.length == 0)
         {
-            std::string msg = "unexpected char: ";
+            std::string msg = "Unexpected char: ";
             msg.push_back(*pos);
             throw std::invalid_argument(msg);
         }
@@ -1015,7 +960,7 @@ void Test_OnePattern_Elements()
         auto & text = kv.first;
         bool result = kv.second;
         std::cout << "pattern: ab*c text: " << text << std::endl;
-        assert((dfa.Run(text).which == 1) == result);
+        assert((Match(dfa, text.data(), text.data() + text.length()).which == 1) == result);
     }
 }
 
@@ -1041,7 +986,7 @@ void Test_OnePattern_MatchPrefix()
         auto & text = kv.first;
         size_t length = kv.second;
         std::cout << "pattern: (a|b)+ text: " << text << std::endl;
-        EXPECT_EQ(dfa.Run(text).length, length);
+        EXPECT_EQ(Match(dfa, text.data(), text.data() + text.length()).length, length);
     }
 }
 
@@ -1076,7 +1021,7 @@ void Test_MultiplePattern_MatchFirst()
         auto & text = kv.first;
         auto which = kv.second;
         std::cout << "text: " << text << std::endl;
-        assert(dfa.Run(text).which == which);
+        assert(Match(dfa, text.data(), text.data() + text.length()).which == which);
     }
 }
 
@@ -1166,7 +1111,7 @@ void Test_MultiplePattern_CKeyword()
         auto & text = kv.first;
         auto which = kv.second;
         std::cout << "pattern: C-Lex text: " << text << std::endl;
-        assert(dfa.Run(text).which == which);
+        assert(Match(dfa, text.data(), text.data() + text.length()).which == which);
     }
 }
 
