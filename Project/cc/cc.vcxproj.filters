@@ -7,9 +7,6 @@
     <ClInclude Include="..\..\Source\ir\CallingConvention.h">
       <Filter>IR</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Source\Preprocess\Preprocess.h">
-      <Filter>Preprocess</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\Source\ir\TypeContext.h">
       <Filter>IR</Filter>
     </ClInclude>
@@ -79,9 +76,6 @@
     <ClInclude Include="..\..\Source\Memory\Win\WinAllocate.h">
       <Filter>Memory\Win</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Source\Preprocess\LineSlicer.h">
-      <Filter>Preprocess</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\Source\Preprocess\DfaMatcher.h">
       <Filter>Preprocess</Filter>
     </ClInclude>
@@ -92,9 +86,6 @@
   <ItemGroup>
     <ClCompile Include="..\..\Source\ir\CallingConvention.cpp">
       <Filter>IR</Filter>
-    </ClCompile>
-    <ClCompile Include="..\..\Source\Preprocess\Preprocess.cpp">
-      <Filter>Preprocess</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Source\ir\TypeContext.cpp">
       <Filter>IR</Filter>
@@ -148,14 +139,14 @@
     <ClCompile Include="..\..\Source\Memory\Win\WinAllocate.cpp">
       <Filter>Memory\Win</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Source\Preprocess\LineSlicer.cpp">
-      <Filter>Preprocess</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\Source\Preprocess\DfaMatcher.cpp">
       <Filter>Preprocess</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Source\UnitTest\UnitTestMain.cpp">
       <Filter>UnitTest</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\Preprocess\Lexer.cpp">
+      <Filter>Preprocess</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>

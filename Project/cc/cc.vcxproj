@@ -53,8 +53,7 @@
     <ClInclude Include="..\..\Source\Parse\ParseMacros.h" />
     <ClInclude Include="..\..\Source\Parse\TokenParser.h" />
     <ClInclude Include="..\..\Source\Preprocess\DfaMatcher.h" />
-    <ClInclude Include="..\..\Source\Preprocess\LineSlicer.h" />
-    <ClInclude Include="..\..\Source\Preprocess\Preprocess.h" />
+    <ClCompile Include="..\..\Source\Preprocess\Lexer.cpp" />
     <ClInclude Include="..\..\Source\UnitTest\UnitTest.h" />
   </ItemGroup>
   <ItemGroup>
@@ -78,8 +77,6 @@
     <ClCompile Include="..\..\Source\Parse\AstParser.cpp" />
     <ClCompile Include="..\..\Source\Parse\TokenParser.cpp" />
     <ClCompile Include="..\..\Source\Preprocess\DfaMatcher.cpp" />
-    <ClCompile Include="..\..\Source\Preprocess\LineSlicer.cpp" />
-    <ClCompile Include="..\..\Source\Preprocess\Preprocess.cpp" />
     <ClCompile Include="..\..\Source\UnitTest\UnitTestMain.cpp" />
     <None Include="..\..\DevLog\DEBUG.md" />
     <None Include="..\..\DevLog\MOD_ir.md" />

@@ -142,21 +142,21 @@ struct DfaCompileContext
 class NfaStateSetToDfaState
 {
 public:
-    NfaStateSetToDfaState() : ds(0) {}
+    NfaStateSetToDfaState() : nextDS(0) {}
 
     DfaState Add(const NfaStateSet & nss)
     {
-        auto result = m.try_emplace(nss, ds);
+        auto result = m.try_emplace(nss, nextDS);
         if (result.second)
         {
             v.emplace_back(result.first->first);
-            ++ds;
+            ++nextDS;
         }
         return result.first->second;
     }
     DfaState Guard() const
     {
-        return ds;
+        return nextDS;
     }
     const NfaStateSet & Get(DfaState ds)
     {
@@ -168,7 +168,7 @@ public:
     }
 
 private:
-    DfaState ds;
+    DfaState nextDS;
     std::unordered_map<NfaStateSet, DfaState> m;
     std::vector<NfaStateSet> v;
 };
@@ -732,6 +732,7 @@ Dfa Compile(DfaCompileInput & input)
                 nfa2dfa.Add(nss2);
         }
     }
+    assert(ds < nss.size());
 
     Dfa dfa;
 
@@ -816,6 +817,43 @@ std::vector<MatchResult> Match(std::vector<std::string> patterns, StringRef text
 
 #ifdef UNIT_TEST
 #include "../UnitTest/UnitTest.h"
+
+TEST(DfaMatcher_Escape)
+{
+    try
+    {
+        std::vector<std::string> patterns = {
+            "+=",
+            "+\\+",
+            "+",
+            "[ \t\r]+",
+            "\n",
+        };
+        std::vector<std::string> types = {
+            "ADD1",
+            "ADD2",
+            "ADD3",
+            "SPACE",
+            "NEW_LINE",
+        };
+        std::string text =
+            "+= ++ + "
+            " \t\r"
+            "\n\n"
+            ;
+        std::vector<MatchResult> mr = Match(patterns, StringRef(text.data(), text.length()));
+
+        for (auto r : mr)
+        {
+            if (r.which > 0)
+                std::cout << "Matched: " << types[r.which - 1] << " " << text.substr(r.offset, r.length) << std::endl;
+        }
+    }
+    catch (const std::invalid_argument& e)
+    {
+        std::cerr << "Caught exception: " << e.what() << std::endl;
+    }
+}
 
 TEST(DfaMatcher_Complete)
 {
