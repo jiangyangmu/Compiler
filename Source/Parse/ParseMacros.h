@@ -109,19 +109,3 @@ using namespace std;
             SyntaxWarningEx("Type '" + TypeBase::DebugType(ptr) + \
                             "' don't support " #op);              \
     } while (0)
-
-#define LexError(msg)                                       \
-    do                                                      \
-    {                                                       \
-        cerr << "Lex: " << msg << " at " << __FILE__ << ':' \
-             << to_string(__LINE__) << endl;                \
-        std::exit(EXIT_FAILURE);                            \
-    } while (0)
-
-#define IRError(msg)                                       \
-    do                                                     \
-    {                                                      \
-        cerr << "IR: " << msg << " at " << __FILE__ << ':' \
-             << to_string(__LINE__) << endl;               \
-        std::exit(EXIT_FAILURE);                           \
-    } while (0)

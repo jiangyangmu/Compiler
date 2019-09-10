@@ -4,6 +4,9 @@
 
 #include <iostream>
 #include <vector>
+#include <tuple>
+#include <unordered_set>
+#include <cassert>
 
 //#define COLOR_OUTPUT
 #ifdef COLOR_OUTPUT
@@ -20,7 +23,7 @@
 
 #endif
 
-#define TEST_FILTER "Dfa"
+#define TEST_FILTER "Lex"
 
 TestRunner & TestRunner::Get() {
     static TestRunner * runner = new TestRunner();
@@ -28,7 +31,12 @@ TestRunner & TestRunner::Get() {
 }
 
 void TestRunner::AddTest(Tester & test) {
-    all_tests_.push_back(&test);
+    all_tests_[""].push_back(&test);
+}
+
+void TestRunner::AddTest(const char * testClassName, Tester & test)
+{
+    all_tests_[testClassName].push_back(&test);
 }
 
 void TestRunner::SetError(bool has_error) {
@@ -39,28 +47,39 @@ void TestRunner::RunAllTest() {
     size_t count = 0;
     size_t failed = 0, passed = 0;
     std::string filter = TEST_FILTER;
-    for (auto test : all_tests_)
+    
+    for (auto testCaseSet : all_tests_)
     {
-        if (!filter.empty() && std::string(test->getName()).find(filter) == std::string::npos)
-            continue;
-        ++count;
-        std::cout << "[ RUN     ] " << test->getName() << std::endl;
-        has_error_ = false;
-        test->setUp();
-        test->run();
-        test->shutDown();
-        if (has_error_)
+        assert(!testCaseSet.second.empty());
+        testCaseSet.second.front()->BeforeAllTestCases();
+        for (auto test : testCaseSet.second)
         {
-            std::cout << COLOR_RED "[  FAILED ] " COLOR_END << test->getName()
-                      << std::endl;
-            ++failed;
-        } else
-        {
-            std::cout << COLOR_GREEN "[      OK ] " COLOR_END << test->getName()
-                      << std::endl;
-            ++passed;
+            std::string testName =
+                std::string(test->GetTestClassName()) + "_" + test->GetTestCaseName();
+            if (!filter.empty() && testName.find(filter) == std::string::npos)
+                continue;
+
+            std::cout << "[ RUN     ] " << testName.data() << std::endl;
+            ++count;
+            has_error_ = false;
+            test->BeforeTestCase();
+            test->RunTestCase();
+            test->AfterTestCase();
+            if (has_error_)
+            {
+                std::cout << COLOR_RED "[  FAILED ] " COLOR_END << test->GetTestCaseName()
+                          << std::endl;
+                ++failed;
+            } else
+            {
+                std::cout << COLOR_GREEN "[      OK ] " COLOR_END << test->GetTestCaseName()
+                          << std::endl;
+                ++passed;
+            }
         }
+        testCaseSet.second.front()->AfterAllTestCases();
     }
+
     std::cout << "[ DONE    ] tested " << count << " methods, " << passed
               << " passed, " << failed << " failed." << std::endl;
 }

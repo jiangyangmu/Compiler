@@ -35,7 +35,10 @@
 *.log
 *.pdb
 *.lnk
-Test/
 Debug/
 Release/
 */cc-integration-test/*.asm
+*.vsp
+*.psess
+DevLog/
+*.tlog

@@ -82,6 +82,9 @@
     <ClInclude Include="..\..\Source\UnitTest\UnitTest.h">
       <Filter>UnitTest</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\Source\Base\File.h">
+      <Filter>Base</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\Source\ir\CallingConvention.cpp">
@@ -148,6 +151,7 @@
     <ClCompile Include="..\..\Source\Preprocess\Lexer.cpp">
       <Filter>Preprocess</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\Source\Base\File.cpp" />
   </ItemGroup>
   <ItemGroup>
     <Filter Include="IR">

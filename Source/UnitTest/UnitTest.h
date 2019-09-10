@@ -5,20 +5,21 @@
 // #include <cassert>
 #include <iostream>
 #include <vector>
+#include <unordered_map>
 
 class Tester
 {
     friend class TestRunner;
 
 protected:
-    virtual const char * getName() = 0;
-    virtual void setUp()
-    {
-    }
-    virtual void shutDown()
-    {
-    }
-    virtual void run() = 0;
+    virtual const char * GetTestClassName() = 0;
+    virtual const char * GetTestCaseName() = 0;
+    virtual void RunTestCase() = 0;
+
+    virtual void BeforeAllTestCases() {}
+    virtual void BeforeTestCase() {}
+    virtual void AfterTestCase() {}
+    virtual void AfterAllTestCases() {}
 };
 
 class TestRunner
@@ -26,21 +27,25 @@ class TestRunner
 public:
     static TestRunner & Get();
     void AddTest(Tester & test);
+    void AddTest(const char * testClassName, Tester & test);
     void SetError(bool has_error);
     void RunAllTest();
 
 private:
-    std::vector<Tester *> all_tests_;
+    std::unordered_map<std::string, std::vector<Tester *>> all_tests_;
     bool has_error_;
 };
 
 #define TEST(CaseName)                        \
     class CaseName : public Tester {          \
     protected:                                \
-        virtual const char * getName() {      \
+        virtual const char * GetTestClassName() { \
+            return "";                        \
+        }                                     \
+        virtual const char * GetTestCaseName() { \
             return #CaseName;                 \
         }                                     \
-        virtual void run();                   \
+        virtual void RunTestCase();           \
                                               \
     public:                                   \
         CaseName() {                          \
@@ -48,28 +53,38 @@ private:
         }                                     \
     };                                        \
     static CaseName CaseName##_instance;      \
-    void CaseName::run()
+    void CaseName::RunTestCase()
 
-// TesterClassName is defined by user.
+// TesterClassName is defined by user, inherit from class Tester.
 #define TEST_F(TesterClassName, TestCaseName)                    \
     class TesterClassName##TestCaseName : public TesterClassName \
     {                                                            \
     protected:                                                   \
-        virtual const char * getName()                           \
+        virtual const char * GetTestClassName()                  \
         {                                                        \
-            return #TesterClassName "_" #TestCaseName;           \
+            return #TesterClassName;                             \
         }                                                        \
-        virtual void run();                                      \
+        virtual const char * GetTestCaseName()                   \
+        {                                                        \
+            return #TestCaseName;                                \
+        }                                                        \
+        virtual void RunTestCase();                              \
                                                                  \
     public:                                                      \
         TesterClassName##TestCaseName()                          \
         {                                                        \
-            TestRunner::Get().AddTest(*this);                    \
+            TestRunner::Get().AddTest(#TesterClassName, *this);  \
         }                                                        \
     };                                                           \
     static TesterClassName##TestCaseName                         \
         TesterClassName##TestCaseName##_instance;                \
-    void TesterClassName##TestCaseName::run()
+    void TesterClassName##TestCaseName::RunTestCase()
+
+#define EXPECT_NOT_REACH \
+    do { \
+        std::cerr << "Should not reach here." << std::endl; \
+        TestRunner::Get().SetError(true); \
+    } while (false)
 
 #define EXPECT_EQ(left, right)                                                \
     do                                                                        \

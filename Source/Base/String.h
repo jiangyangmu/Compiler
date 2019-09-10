@@ -107,6 +107,27 @@ public:
     {
         return (*this = StringRef(data));
     }
+    StringRef(const StringRef & other)
+        : begin_(other.begin_), end_(other.end_)
+    {
+    }
+    StringRef(StringRef && other)
+        : begin_(other.begin_), end_(other.end_)
+    {
+    }
+    StringRef & operator = (const StringRef & other)
+    {
+        begin_ = other.begin_;
+        end_ = other.end_;
+        return *this;
+    }
+    StringRef & operator = (StringRef && other)
+    {
+        begin_ = other.begin_;
+        end_ = other.end_;
+        return *this;
+    }
+    ~StringRef() {}
 
     void clear()
     {
@@ -272,3 +293,5 @@ private:
 
 // StrCat
 // int->str
+
+// IsSubStr -> KMP algorithm

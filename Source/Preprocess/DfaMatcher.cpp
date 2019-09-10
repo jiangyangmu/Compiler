@@ -7,6 +7,7 @@
 #include <deque>
 #include <memory>
 #include <iostream>
+#include <fstream>
 
 class CharSet
 {
@@ -809,6 +810,132 @@ std::vector<MatchResult> Match(std::vector<std::string> patterns, StringRef text
         }
 
         m.push_back({r.offset, r.length, r.which});
+        pos += r.length;
+    }
+
+    return m;
+}
+
+Matcher::Matcher()
+    : dfa(nullptr)
+{
+}
+
+Matcher::Matcher(Matcher && m)
+{
+    dfa = m.dfa;
+    m.dfa = nullptr;
+}
+
+Matcher & Matcher::operator=(Matcher && m)
+{
+    this->~Matcher();
+    new (this) Matcher(std::move(m));
+    return *this;
+}
+
+Matcher::~Matcher()
+{
+    if (dfa)
+        delete dfa;
+}
+
+void SaveToFile(std::string fileName, const Dfa & dfa)
+{
+    std::ofstream ofs(fileName, std::ofstream::out);
+
+    ofs << dfa.table.size() << ' ';
+    for (const DfaTableRow & tableRow : dfa.table)
+    {
+        for (size_t state : tableRow)
+            ofs << state << ' ';
+    }
+
+    ofs << dfa.action.size() << ' ';
+    for (const DfaAction & action : dfa.action)
+    {
+        ofs << action.bad << ' ' << action.cont << ' ' << action.goodBranch << ' ';
+    }
+}
+bool LoadFromFile(std::string fileName, Dfa * dfa)
+{
+    std::ifstream ifs(fileName, std::ifstream::in);
+    if (!ifs.is_open())
+        return false;
+
+    size_t tableSize = 0;
+    ifs >> tableSize;
+    assert(tableSize < 10000);
+
+    dfa->table.resize(tableSize);
+    for (DfaTableRow & tableRow : dfa->table)
+    {
+        for (size_t & state : tableRow)
+            ifs >> state;
+    }
+
+    size_t actionSize = 0;
+    ifs >> actionSize;
+    assert(actionSize < 10000);
+
+    dfa->action.resize(actionSize);
+    for (DfaAction & action : dfa->action)
+    {
+        ifs >> action.bad >> action.cont >> action.goodBranch;
+    }
+
+    return true;
+}
+
+void Matcher::Compile(std::vector<std::string> & patterns)
+{
+    DfaCompileInput input;
+    NfaStateFactoryScope scope(&input.nfaStateFactory);
+
+    input.nfaList.reserve(patterns.size());
+    for (auto & p : patterns)
+        input.nfaList.emplace_back(FromRegex(p));
+
+    // No cache
+    // this->dfa = new Dfa(std::move(::Compile(input)));
+
+    // With cache
+    this->dfa = new Dfa();
+    const std::string cacheFile = "lex_cache.bin";
+    if (LoadFromFile(cacheFile, this->dfa))
+    {
+        std::cout << "Load lex cache from file: " << cacheFile << std::endl;
+    }
+    else
+    {
+        *this->dfa = std::move(::Compile(input));
+        SaveToFile(cacheFile, *this->dfa);
+        std::cout << "Save lex cache to file: " << cacheFile << std::endl;
+    }
+}
+
+std::vector<MatchResult> Matcher::Match(StringRef text)
+{
+    assert(dfa);
+
+    std::vector<MatchResult> m;
+
+    const char * begin = text.data();
+    const char * end = text.data() + text.size();
+    const char * pos = begin;
+    while (pos < end)
+    {
+        DfaMatchResult r = ::Match(*dfa, pos, end);
+        r.offset = pos - begin;
+
+        if (r.length == 0)
+        {
+            std::string msg = "Unexpected char: ";
+            msg.push_back(*pos);
+            throw std::invalid_argument(msg);
+        }
+
+        m.push_back({ r.offset, r.length, r.which });
         pos += r.length;
     }
 
