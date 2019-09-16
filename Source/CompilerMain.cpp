@@ -10,6 +10,7 @@
 
 #include "Base/Common.h"
 #include "Base/String.h"
+#include "Base/File.h"
 #include "Preprocess/Preprocess.h"
 #include "Parse/AstParser.h"
 #include "CodeGeneration/AstCompiler.h"
@@ -17,61 +18,10 @@
 
 using namespace std;
 
-std::string GetFileContent(const char * fileName)
+std::string Compile(std::string fileName)
 {
-    std::ifstream ifs(fileName, std::ifstream::in);
-    //ifs.seekg(3);
-    return std::string(std::istreambuf_iterator<char>(ifs),
-                       std::istreambuf_iterator<char>());
-}
-
-void SetFileContent(const char * fileName, const std::string & content)
-{
-    std::ofstream ofs(fileName, std::ifstream::out);
-    ofs << content;
-    ofs.close();
-}
-
-std::string ChangeFileExtention(const std::string & filename,
-                                std::string from,
-                                std::string to)
-{
-    ASSERT(filename.size() > from.size());
-
-    auto i1 = filename.crbegin();
-    auto i2 = from.crbegin();
-    while (i2 != from.crend())
-    {
-        ASSERT(*i1 == *i2);
-        ++i1, ++i2;
-    }
-
-    std::string newFilename = std::string(filename.cbegin(), filename.cend() - from.size());
-    newFilename += to;
-    return newFilename;
-}
-
-std::string GetLineInput()
-{
-    std::string line;
-    std::getline(std::cin, line);
-    return line;
-}
-
-std::string Compile(std::string fileContent)
-{
-    // 0. Preprocess
-    ByteArray sourceCode(fileContent.data(), fileContent.size());
-
-    Preprocess::SourceContext sourceContext = Preprocess::Preprocess(sourceCode);
-    std::cout << "SourceContext:" << std::endl;
-    for (const ByteArray & sourceLine : sourceContext.lines)
-    {
-        std::cout << sourceLine;
-    }
-
     // 1. Token
-    std::vector<Token> tokens = Tokenize(sourceContext);
+    std::vector<Token> tokens = ::experiment::LexProcess(GetFileContent(fileName.data()));
     TokenIterator ti(tokens);
 
     // 2. Ast
@@ -113,8 +63,7 @@ int main(int argc, char *argv[])
         {
             std::cout << "Input: " << argv[i] << std::endl;
 
-            std::string sourceCode = GetFileContent(argv[i]);
-            std::string destCode = Compile(sourceCode);
+            std::string destCode = Compile(argv[i]);
 
             SetFileContent(
                 ChangeFileExtention(argv[i], ".c", ".asm").c_str(),
@@ -123,9 +72,9 @@ int main(int argc, char *argv[])
     }
     else
     {
-        std::cout << "Input: " << "C:\\Users\\celsi\\Documents\\Github\\cc\\Test\\SampleProgram\\Simple.c" << std::endl;
-        std::string sourceCode = GetFileContent("C:\\Users\\celsi\\Documents\\Github\\cc\\Test\\SampleProgram\\Simple.c");
-        (void)Compile(sourceCode);
+        const std::string fileName = "C:\\Users\\celsi\\Documents\\Github\\cc\\Test\\SampleProgram\\Simple.c";
+        std::cout << "Input: " << fileName << std::endl;
+        (void)Compile(fileName);
     }
     return 0;
 }

@@ -1,4 +1,4 @@
-#include "DfaMatcher.h"
+#include "RegexMatcher.h"
 
 #include <cassert>
 #include <bitset>
@@ -8,6 +8,8 @@
 #include <memory>
 #include <iostream>
 #include <fstream>
+#include <string>
+#include <numeric>
 
 class CharSet
 {
@@ -780,64 +782,10 @@ DfaMatchResult Match(Dfa & dfa, const char * begin, const char * end)
 
 // ==== API ====
 
-std::vector<MatchResult> Match(std::vector<std::string> patterns, StringRef text)
+Dfa * NewDfa()
 {
-    DfaCompileInput input;
-    NfaStateFactoryScope scope(&input.nfaStateFactory);
-
-    input.nfaList.reserve(patterns.size());
-    for (auto & p : patterns)
-        input.nfaList.emplace_back(FromRegex(p));
-
-    Dfa dfa = Compile(input);
-    //PrintDfa(dfa);
-
-    std::vector<MatchResult> m;
-
-    const char * begin = text.data();
-    const char * end = text.data() + text.size();
-    const char * pos = begin;
-    while (pos < end)
-    {
-        DfaMatchResult r = Match(dfa, pos, end);
-        r.offset = pos - begin;
-
-        if (r.length == 0)
-        {
-            std::string msg = "Unexpected char: ";
-            msg.push_back(*pos);
-            throw std::invalid_argument(msg);
-        }
-
-        m.push_back({r.offset, r.length, r.which});
-        pos += r.length;
-    }
-
-    return m;
-}
-
-Matcher::Matcher()
-    : dfa(nullptr)
-{
-}
-
-Matcher::Matcher(Matcher && m)
-{
-    dfa = m.dfa;
-    m.dfa = nullptr;
-}
-
-Matcher & Matcher::operator=(Matcher && m)
-{
-    this->~Matcher();
-    new (this) Matcher(std::move(m));
-    return *this;
-}
-
-Matcher::~Matcher()
-{
-    if (dfa)
-        delete dfa;
+    static std::vector<std::unique_ptr<Dfa>> gDfaPool;
+    return gDfaPool.emplace_back(new Dfa).get();
 }
 
 void SaveToFile(std::string fileName, const Dfa & dfa)
@@ -887,8 +835,10 @@ bool LoadFromFile(std::string fileName, Dfa * dfa)
     return true;
 }
 
-void Matcher::Compile(std::vector<std::string> & patterns)
+MatchEngine Compile(std::vector<std::string> & patterns)
 {
+    MatchEngine m;
+
     DfaCompileInput input;
     NfaStateFactoryScope scope(&input.nfaStateFactory);
 
@@ -900,32 +850,43 @@ void Matcher::Compile(std::vector<std::string> & patterns)
     // this->dfa = new Dfa(std::move(::Compile(input)));
 
     // With cache
-    this->dfa = new Dfa();
+    m.dfa = NewDfa();
     const std::string cacheFile = "lex_cache.bin";
-    if (LoadFromFile(cacheFile, this->dfa))
+    if (LoadFromFile(cacheFile, m.dfa))
     {
         std::cout << "Load lex cache from file: " << cacheFile << std::endl;
     }
     else
     {
-        *this->dfa = std::move(::Compile(input));
-        SaveToFile(cacheFile, *this->dfa);
+        *m.dfa = std::move(::Compile(input));
+        SaveToFile(cacheFile, *m.dfa);
         std::cout << "Save lex cache to file: " << cacheFile << std::endl;
     }
+
+    return m;
 }
 
-std::vector<MatchResult> Matcher::Match(StringRef text)
+MatchResult MatchPrefix(MatchEngine m, StringView text)
 {
-    assert(dfa);
+    assert(m.dfa);
 
-    std::vector<MatchResult> m;
+    DfaMatchResult r = ::Match(*m.dfa, text.Begin(), text.End());
 
-    const char * begin = text.data();
-    const char * end = text.data() + text.size();
+    return { r.offset, r.length, r.which };
+}
+
+std::vector<MatchResult> MatchAll(MatchEngine m, StringView text)
+{
+    assert(m.dfa);
+
+    std::vector<MatchResult> mrs;
+
+    const char * begin = text.Begin();
+    const char * end = text.End();
     const char * pos = begin;
     while (pos < end)
     {
-        DfaMatchResult r = ::Match(*dfa, pos, end);
+        DfaMatchResult r = ::Match(*m.dfa, pos, end);
         r.offset = pos - begin;
 
         if (r.length == 0)
@@ -935,7 +896,43 @@ std::vector<MatchResult> Matcher::Match(StringRef text)
             throw std::invalid_argument(msg);
         }
 
-        m.push_back({ r.offset, r.length, r.which });
+        mrs.push_back({ r.offset, r.length, r.which });
+        pos += r.length;
+    }
+
+    return mrs;
+}
+
+std::vector<MatchResult> MatchAll(std::vector<std::string> patterns, StringView text)
+{
+    DfaCompileInput input;
+    NfaStateFactoryScope scope(&input.nfaStateFactory);
+
+    input.nfaList.reserve(patterns.size());
+    for (auto & p : patterns)
+        input.nfaList.emplace_back(FromRegex(p));
+
+    Dfa dfa = Compile(input);
+    //PrintDfa(dfa);
+
+    std::vector<MatchResult> m;
+
+    const char * begin = text.Begin();
+    const char * end = text.End();
+    const char * pos = begin;
+    while (pos < end)
+    {
+        DfaMatchResult r = Match(dfa, pos, end);
+        r.offset = pos - begin;
+
+        if (r.length == 0)
+        {
+            std::string msg = "Unexpected char: ";
+            msg.push_back(*pos);
+            throw std::invalid_argument(msg);
+        }
+
+        m.push_back({r.offset, r.length, r.which});
         pos += r.length;
     }
 
@@ -945,7 +942,7 @@ std::vector<MatchResult> Matcher::Match(StringRef text)
 #ifdef UNIT_TEST
 #include "../UnitTest/UnitTest.h"
 
-TEST(DfaMatcher_Escape)
+TEST(RegexMatcher_Escape)
 {
     try
     {
@@ -968,7 +965,7 @@ TEST(DfaMatcher_Escape)
             " \t\r"
             "\n\n"
             ;
-        std::vector<MatchResult> mr = Match(patterns, StringRef(text.data(), text.length()));
+        std::vector<MatchResult> mr = MatchAll(patterns, StringView(text.data(), text.length()));
 
         for (auto r : mr)
         {
@@ -982,7 +979,7 @@ TEST(DfaMatcher_Escape)
     }
 }
 
-TEST(DfaMatcher_Complete)
+TEST(RegexMatcher_Complete)
 {
     try
     {
@@ -1019,7 +1016,7 @@ TEST(DfaMatcher_Complete)
             " \t\r"
             "\n\n"
             ;
-        std::vector<MatchResult> mr = Match(patterns, StringRef(text.data(), text.length()));
+        std::vector<MatchResult> mr = MatchAll(patterns, StringView(text.data(), text.length()));
 
         for (auto r : mr)
         {

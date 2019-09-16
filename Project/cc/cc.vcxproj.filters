@@ -58,9 +58,6 @@
     <ClInclude Include="..\..\Source\Parse\AstParser.h">
       <Filter>Parse</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Source\Parse\TokenParser.h">
-      <Filter>Parse</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\Source\Base\ErrorHandling.h">
       <Filter>Base</Filter>
     </ClInclude>
@@ -76,14 +73,17 @@
     <ClInclude Include="..\..\Source\Memory\Win\WinAllocate.h">
       <Filter>Memory\Win</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Source\Preprocess\DfaMatcher.h">
-      <Filter>Preprocess</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\Source\UnitTest\UnitTest.h">
       <Filter>UnitTest</Filter>
     </ClInclude>
     <ClInclude Include="..\..\Source\Base\File.h">
       <Filter>Base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\Preprocess\Lexer.h">
+      <Filter>Preprocess</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\Preprocess\RegexMatcher.h">
+      <Filter>Preprocess</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -123,9 +123,6 @@
     <ClCompile Include="..\..\Source\Parse\AstParser.cpp">
       <Filter>Parse</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Source\Parse\TokenParser.cpp">
-      <Filter>Parse</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\Source\CompilerMain.cpp" />
     <ClCompile Include="..\..\Source\Memory\SpanFreeList.cpp">
       <Filter>Memory</Filter>
@@ -142,16 +139,18 @@
     <ClCompile Include="..\..\Source\Memory\Win\WinAllocate.cpp">
       <Filter>Memory\Win</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Source\Preprocess\DfaMatcher.cpp">
-      <Filter>Preprocess</Filter>
-    </ClCompile>
     <ClCompile Include="..\..\Source\UnitTest\UnitTestMain.cpp">
       <Filter>UnitTest</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Source\Preprocess\Lexer.cpp">
       <Filter>Preprocess</Filter>
     </ClCompile>
-    <ClCompile Include="..\..\Source\Base\File.cpp" />
+    <ClCompile Include="..\..\Source\Preprocess\RegexMatcher.cpp">
+      <Filter>Preprocess</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\Base\File.cpp">
+      <Filter>Base</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="IR">

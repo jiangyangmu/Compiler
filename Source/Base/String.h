@@ -6,81 +6,6 @@
 
 #include "ErrorHandling.h"
 
-class StringBuf
-{
-public:
-    explicit StringBuf(const char *data)
-    {
-        ASSERT(data != nullptr);
-
-        size_t count = static_cast<size_t>(strlen(data));
-        char *data2 = new char[count + 1];
-
-        std::copy(data, data + count, stdext::make_checked_array_iterator(data2, count + 1));
-        data2[count] = '\0';
-
-        begin = now = data2;
-        end = begin + count;
-    }
-
-    StringBuf(const char *data, size_t n)
-    {
-        ASSERT(data != nullptr);
-
-        size_t count = static_cast<size_t>(strlen(data));
-        count = (count > n) ? n : count;
-        char *data2 = new char[count + 1];
-
-        std::copy(data, data + count, stdext::make_checked_array_iterator(data2, count + 1));
-        data2[count] = '\0';
-
-        begin = now = data2;
-        end = begin + count;
-    }
-
-    ~StringBuf()
-    {
-        delete[] begin;
-    }
-    char peak(size_t offset = 0) const
-    {
-        if (now + offset < end)
-            return now[offset];
-        else
-            return '\0';
-    }
-    char pop1()
-    {
-        if (now < end)
-            return *(now++);
-        else
-            return '\0';
-    }
-    void pop(size_t count = 1)
-    {
-        const char *now2 = now + count;
-        if (now2 < now || now2 > end)
-            now = end;
-        else
-            now = now2;
-    }
-    bool empty() const
-    {
-        return now == end;
-    }
-    size_t size() const
-    {
-        return end - now;
-    }
-    const char *data() const
-    {
-        return now;
-    }
-
-private:
-    const char *begin, *end, *now;
-};
-
 class StringRef
 {
 public:
@@ -127,6 +52,7 @@ public:
         end_ = other.end_;
         return *this;
     }
+    StringRef(const std::string & s) : begin_(s.data()), end_(s.data() + s.length()) {}
     ~StringRef() {}
 
     void clear()
@@ -237,9 +163,7 @@ private:
 };
 
 using String = std::string;
-
 void SetBytes(char * bytes, char value, size_t count);
-
 void CopyBytes(const char * from, char * to, size_t count);
 
 class ByteArray
@@ -291,7 +215,110 @@ private:
     size_t capacity_;
 };
 
-// StrCat
-// int->str
+class StringView
+{
+public:
+    StringView() : begin(nullptr), end(nullptr) {}
+    StringView(const StringView & other) : begin(other.begin), end(other.end) {}
+    StringView(StringView && other) : begin(other.begin), end(other.end) {}
+    StringView& operator = (const StringView & other) { begin = other.begin; end = other.end; }
+    StringView& operator = (StringView && other) { begin = other.begin; end = other.end; }
 
-// IsSubStr -> KMP algorithm
+    StringView(const char * str) : begin(str), end(str + strlen(str)) {}
+    StringView(const char * str, size_t n) : begin(str), end(str + n) {}
+    StringView(const std::string & str) : begin(str.data()), end(str.data() + str.length()) {}
+
+    // query
+    bool    Empty() const { return begin == end; }
+    size_t  Length() const { return end - begin; }
+    char    First() const
+    {
+        assert(!Empty());
+        return *begin;
+    }
+    char    Last() const
+    {
+        assert(!Empty());
+        return *(end - 1);
+    }
+
+    const char * Begin() const { return begin; }
+    const char * End() const { return end; }
+    char operator [] (size_t index) const
+    {
+        assert(index < Length());
+        return begin[index];
+    }
+
+    // modify
+    void    Clear() { begin = end = nullptr; }
+
+    // compare
+    bool operator < (const StringView & other) const
+    {
+        if (begin == other.begin)
+            return end < other.end;
+
+        const char *p1 = begin;
+        const char *p2 = other.begin;
+
+        while (p1 != end &&
+               p2 != other.end &&
+               *p1 == *p2)
+        {
+            ++p1, ++p2;
+        }
+
+        if (p1 != end)
+            return p2 != end && *p1 < *p2;
+        else
+            return p2 != end;
+    }
+    bool operator == (const StringView & other) const
+    {
+        if (Length() != other.Length())
+            return false;
+        if (begin == other.begin)
+            return true;
+
+        const char *p1 = begin;
+        const char *p2 = other.begin;
+
+        while (p1 != end &&
+               p2 != other.end &&
+               *p1 == *p2)
+        {
+            ++p1, ++p2;
+        }
+
+        return (p1 == end);
+    }
+    bool operator != (const StringView & other) const
+    {
+        return !(*this == other);
+    }
+
+    // interop
+    operator std::string () const { return Empty() ? std::string() : std::string(begin, end); }
+    // io
+    friend std::ostream &operator<<(std::ostream &o, const StringView & s)
+    {
+        std::copy(s.begin, s.end, std::ostream_iterator<char>(o));
+        return o;
+    }
+
+private:
+    const char * begin;
+    const char * end;
+};
+
+// StringView RemovePrefix(StringView);
+// StringView RemoveSuffix(StringView);
+
+class ImmutableStringTable
+{
+public:
+    static StringView Get(const std::string & str);
+    static StringView Get(const char * str);
+    static StringView Get(const char * str, size_t n);
+};

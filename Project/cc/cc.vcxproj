@@ -52,10 +52,10 @@
     <ClInclude Include="..\..\Source\Memory\Win\WinAllocate.h" />
     <ClInclude Include="..\..\Source\Parse\AstParser.h" />
     <ClInclude Include="..\..\Source\Parse\ParseMacros.h" />
-    <ClInclude Include="..\..\Source\Parse\TokenParser.h" />
-    <ClInclude Include="..\..\Source\Preprocess\DfaMatcher.h" />
+    <ClInclude Include="..\..\Source\Preprocess\RegexMatcher.h" />
     <ClCompile Include="..\..\Source\Base\File.cpp" />
     <ClCompile Include="..\..\Source\Preprocess\Lexer.cpp" />
+    <ClInclude Include="..\..\Source\Preprocess\Lexer.h" />
     <ClInclude Include="..\..\Source\UnitTest\UnitTest.h" />
   </ItemGroup>
   <ItemGroup>
@@ -77,8 +77,7 @@
     <ClCompile Include="..\..\Source\Memory\SpanFreeList.cpp" />
     <ClCompile Include="..\..\Source\Memory\Win\WinAllocate.cpp" />
     <ClCompile Include="..\..\Source\Parse\AstParser.cpp" />
-    <ClCompile Include="..\..\Source\Parse\TokenParser.cpp" />
-    <ClCompile Include="..\..\Source\Preprocess\DfaMatcher.cpp" />
+    <ClCompile Include="..\..\Source\Preprocess\RegexMatcher.cpp" />
     <ClCompile Include="..\..\Source\UnitTest\UnitTestMain.cpp" />
     <None Include="..\..\DevLog\DEBUG.md" />
     <None Include="..\..\DevLog\MOD_ir.md" />
@@ -202,6 +201,7 @@
       <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
       <AdditionalIncludeDirectories>%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
       <PreprocessorDefinitions>%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <LanguageStandard>stdcpp17</LanguageStandard>
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
