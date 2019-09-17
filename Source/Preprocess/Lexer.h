@@ -207,7 +207,7 @@ inline bool IsUnaryOp(Token::Type t)
 std::vector<Token> LexProcess(std::string text);
 
 namespace experiment {
-std::vector<Token> LexProcess(std::string fileName);
+std::vector<Token> LexProcess(std::string fileName, std::string * sourceAfterPreproc = nullptr);
 }
 
 class TokenIterator {

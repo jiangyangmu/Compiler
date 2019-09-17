@@ -21,8 +21,11 @@ using namespace std;
 std::string Compile(std::string fileName)
 {
     // 1. Token
-    std::vector<Token> tokens = ::experiment::LexProcess(fileName);
+    std::string sourceAfterPreproc;
+    std::vector<Token> tokens = ::experiment::LexProcess(fileName, &sourceAfterPreproc);
     TokenIterator ti(tokens);
+
+    std::cout << "Source:" << std::endl << sourceAfterPreproc << std::endl;
 
     // 2. Ast
     Ast * ast = ParseTranslationUnit(ti);

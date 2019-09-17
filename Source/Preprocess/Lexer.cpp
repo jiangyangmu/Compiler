@@ -20,6 +20,9 @@
     if ((actual).type != (expect_type)) \
         throw std::invalid_argument(std::string("Lex error: unexpect token ") + (actual).text); \
     } while (false)
+#define LEX_UNEXPECTED_TOKEN(token) do { \
+        throw std::invalid_argument(std::string("Lex error: unexpect token ") + (token).text); \
+    } while (false)
 
 // ==== C Lex Definition ====
 
@@ -316,10 +319,11 @@ struct PPContext
 {
     // macro object/func
     std::map<std::string, PPMacroSubstitution> macroSubs;
-    // expr eval
-    // file include
 
-    std::unordered_set<std::string> disabledMacroSubs;
+    bool IsMacroDefined(std::string macroName)
+    {
+        return macroSubs.find(macroName) != macroSubs.end();
+    }
 };
 PPType DecidePPType(PPContext & context, Token * tokens)
 {
@@ -936,13 +940,19 @@ struct AnnotatedToken
 
     operator Token () { return token; }
 };
+
+typedef std::vector<AnnotatedToken> TokenVector;
+typedef std::list<AnnotatedToken>   TokenList;
+typedef TokenList::iterator         TokenListIterator;
+typedef TokenList::const_iterator   TokenListConstIterator;
+
 AnnotatedToken                  Annotate(Token & token, std::shared_ptr<MacroSubNode> m)
 {
     return { token, m };
 }
-std::vector<AnnotatedToken>     AnnotateAll(std::vector<Token> & tokens, std::shared_ptr<MacroSubNode> m)
+TokenVector                     AnnotateAll(std::vector<Token> & tokens, std::shared_ptr<MacroSubNode> m)
 {
-    std::vector<AnnotatedToken> atokens;
+    TokenVector atokens;
     for (Token & token : tokens)
         atokens.emplace_back(Annotate(token, m));
     return atokens;
@@ -951,21 +961,17 @@ Token                           DeAnnotate(AnnotatedToken & token)
 {
     return token.token;
 }
-std::vector<Token>              DeAnnotateAll(std::vector<AnnotatedToken> & tokens)
+std::vector<Token>              DeAnnotateAll(TokenVector & tokens)
 {
     return std::vector<Token>(tokens.begin(), tokens.end());
 }
 
-typedef AnnotatedToken              TokenT;
-typedef std::vector<AnnotatedToken> TokenVector;
-typedef std::list<AnnotatedToken>   TokenList;
-typedef TokenList::iterator         TokenListIterator;
-typedef TokenList::const_iterator   TokenListConstIterator;
 
 struct TokenRange
 {
     bool                    Empty() const { return size == 0; }
     const AnnotatedToken &  First() const { assert(!Empty()); return *begin; }
+    const AnnotatedToken &  Last() const { assert(!Empty()); auto it = end; return *(--it); }
     size_t                  Size() const { return size; }
     operator                bool() const { return size > 0; }
 
@@ -985,8 +991,13 @@ struct TokenBuffer
 };
 struct TokenOut
 {
-    enum { VECTOR, TOKEN_BUFFER } tag;
+    enum { INVALID, VECTOR, TOKEN_BUFFER } tag;
 
+    TokenOut()
+        : tag(INVALID)
+        , vecTokens(nullptr)
+        , bufTokens(nullptr)
+    {}
     TokenOut(TokenVector * a0)
         : tag(VECTOR)
         , vecTokens(a0)
@@ -1025,7 +1036,7 @@ TokenRange EmptyRange()
     static std::list<AnnotatedToken> empty;
     return { empty.begin(), empty.end(), 0 };
 }
-TokenRange Shrink(TokenRange range, size_t size)
+TokenRange FirstN(TokenRange range, size_t size)
 {
     assert(size <= range.size);
     TokenListConstIterator begin, end;
@@ -1041,7 +1052,30 @@ TokenRange FromRange(TokenListConstIterator begin, TokenListConstIterator end)
 {
     return { begin, end, static_cast<size_t>(std::distance(begin, end)) };
 }
-TokenBuffer FromVector(std::vector<AnnotatedToken> & tokens)
+// [range.begin, first-token-with-type]
+TokenRange SubrangeUntilIncludeType(TokenRange range, Token::Type type)
+{
+    TokenListConstIterator end = range.begin;
+    while (end != range.end)
+    {
+        if (end->token.type == type)
+            return FromRange(range.begin, ++end);
+        ++end;
+    }
+    return EmptyRange();
+}
+TokenRange SubrangeBeforeTypes(TokenRange range, std::vector<Token::Type> types)
+{
+    TokenListConstIterator end = range.begin;
+    while (end != range.end)
+    {
+        if (std::find(types.begin(), types.end(), end->token.type) != types.end())
+            return FromRange(range.begin, end);
+        ++end;
+    }
+    return EmptyRange();
+}
+TokenBuffer FromVector(TokenVector & tokens)
 {
     TokenBuffer buffer;
     buffer.listToken.insert(buffer.listToken.end(),
@@ -1049,7 +1083,7 @@ TokenBuffer FromVector(std::vector<AnnotatedToken> & tokens)
                             tokens.end());
     return buffer;
 }
-TokenOut Inserter(std::vector<AnnotatedToken> & out)
+TokenOut Inserter(TokenVector & out)
 {
     return { &out };
 }
@@ -1058,16 +1092,6 @@ TokenOut Inserter(TokenBuffer & buffer, TokenListConstIterator itConst)
     TokenListIterator it = buffer.listToken.begin();
     std::advance(it, std::distance(buffer.listToken.cbegin(), itConst));
     return { &buffer.listToken, it };
-}
-TokenListConstIterator FindFirstOrBegin(TokenRange range, Token::Type type)
-{
-    TokenListConstIterator it = range.begin;
-    while (it != range.end)
-    {
-        if (it->token.type == type)
-            break;
-    }
-    return it == range.end ? range.begin : it;
 }
 
 class TokenReplacer
@@ -1085,7 +1109,7 @@ public:
 
     TokenRange                      Accept(TokenRange range) override
     {
-        return Shrink(range, 1);
+        return FirstN(range, 1);
     }
     void                            Replace(TokenRange range, TokenOut & _) override
     {
@@ -1112,7 +1136,7 @@ public:
                 ? PPType::DEF_MACRO_FUN
                 : PPType::DEF_MACRO_OBJ;
 
-            return FromRange(range.Begin(), FindFirstOrBegin(range, Token::NEW_LINE));
+            return SubrangeUntilIncludeType(range, Token::NEW_LINE);
         }
         else
         {
@@ -1135,7 +1159,7 @@ public:
 
             if (macroContext.macroSubs.find(id) != macroContext.macroSubs.end())
                 LEX_ERROR("Duplicate macro definition: " + id);
-            std::vector<AnnotatedToken> vecTokens(begin, end);
+            TokenVector vecTokens(begin, end);
             macroContext.macroSubs.emplace(id, DeAnnotateAll(vecTokens));
         }
         else
@@ -1334,8 +1358,8 @@ public:
             // collect argment tokens
             //  arglist := expr (',' expr)*
             //  expr := ([^,]+|\([^)]*\))
-            std::vector<std::vector<AnnotatedToken>> argReplaceTokens;
-            std::vector<AnnotatedToken> replaceTokens;
+            std::vector<TokenVector> argReplaceTokens;
+            TokenVector replaceTokens;
             while (true)
             {
                 int paren = 0;
@@ -1488,13 +1512,104 @@ public:
 
     TokenRange                      Accept(TokenRange range) override
     {
-        return {};
+        TokenRange acceptedRange;
+        switch (range.First().token.type)
+        {
+            case Token::PPD_IF:
+            case Token::PPD_IFDEF:
+            case Token::PPD_IFNDEF:
+                acceptedRange = SubrangeUntilIncludeType(range, Token::PPD_ENDIF);
+                ++acceptedRange.end;
+                LEX_EXPECT_TOKEN(acceptedRange.Last().token, Token::NEW_LINE);
+                break;
+            default:
+                acceptedRange = EmptyRange();
+                break;
+        }
+        return acceptedRange;
     }
-    void                            Replace(TokenRange range, TokenOut &) override
+    void                            Replace(TokenRange range, TokenOut & out) override
     {
+        TokenRange expr;
+        TokenRange body;
+        TokenRange rest;
+
+        body = EmptyRange();
+        rest = range;
+
+        while (!rest.Empty() && rest.First().token.type != Token::PPD_ENDIF)
+        {
+            expr = SubrangeUntilIncludeType(rest, Token::NEW_LINE);
+            body = SubrangeBeforeTypes(
+                FromRange(expr.End(), rest.End()),
+                { Token::PPD_ELIF,Token::PPD_ELSE, Token::PPD_ENDIF, }
+            );
+            rest = FromRange(body.End(), rest.End());
+
+            if (EvalPPExpr(expr))
+                break;
+            else
+                body = EmptyRange();
+        }
+
+        for (auto it = body.Begin(); it != body.End(); ++it)
+        {
+            out.Insert(*it);
+        }
     }
 
 private:
+    bool EvalPPExpr(TokenRange range)
+    {
+        /*
+            pp-expr     := '#if' '!'? 'defined' ID NL
+                        || '#elif' '!'? 'defined' ID NL
+                        || '#else' NL
+                        || '#ifdef' ID NL
+                        || '#ifndef' ID NL
+        */
+        bool isTrue = false;
+
+        bool neg = false;
+        auto it = range.Begin();
+        switch (it->token.type)
+        {
+            case Token::PPD_IF:
+            case Token::PPD_ELIF:
+                ++it;
+                if (it->token.type == Token::BOOL_NOT)
+                    neg = true, ++it;
+                if (it->token.type != Token::ID || it->token.text != "defined")
+                    LEX_ERROR("Expect 'defined'.");
+                ++it;
+                LEX_EXPECT_TOKEN(it->token, Token::ID);
+                isTrue = macroContext.IsMacroDefined(it->token.text);
+                if (neg) isTrue = !isTrue;
+                ++it;
+                break;
+            case Token::PPD_ELSE:
+                isTrue = true;
+                ++it;
+                break;
+            case Token::PPD_IFNDEF:
+                neg = true;
+            case Token::PPD_IFDEF:
+                ++it;
+                LEX_EXPECT_TOKEN(it->token, Token::ID);
+                isTrue = macroContext.IsMacroDefined(it->token.text);
+                if (neg) isTrue = !isTrue;
+                ++it;
+                break;
+            default:
+                LEX_UNEXPECTED_TOKEN(it->token);
+                break;
+        }
+
+        LEX_EXPECT_TOKEN(it->token, Token::NEW_LINE);
+
+        return isTrue;
+    }
+
     PPContext & macroContext;
 };
 class FileIncludeTokenReplacer : public TokenReplacer
@@ -1505,12 +1620,32 @@ public:
         : trFile(a0)
     {}
 
-    TokenRange                      Accept(TokenRange) override
+    TokenRange                      Accept(TokenRange range) override
     {
-        return {};
+        auto end = range.Begin();
+        if (end->token.type == Token::PPD_INCLUDE)
+        {
+            ++end;
+            LEX_EXPECT_TOKEN(end->token, Token::PP_LOCAL_PATH); // PP_ENV_PATH
+            ++end;
+            LEX_EXPECT_TOKEN(end->token, Token::NEW_LINE);
+            ++end;
+            return FromRange(range.Begin(), end);
+        }
+        else
+        {
+            return EmptyRange();
+        }
     }
-    void                            Replace(TokenRange, TokenOut &) override
+    void                            Replace(TokenRange range, TokenOut & out) override
     {
+        auto it = range.Begin();
+        ++it;
+        std::string fileName = it->token.text.substr(1, it->token.text.size() - 2);
+        for (Token & token : trFile->Read(fileName))
+        {
+            out.Insert(Annotate(token, {}));
+        }
     }
 
 private:
@@ -1585,22 +1720,46 @@ private:
 struct FilterTokenOut : public TokenOut
 {
     TokenFilter * filter;
+    TokenOut & out;
 
     FilterTokenOut(TokenOut & a0, TokenFilter * a1)
-        : TokenOut(a0)
+        : out(a0)
         , filter(a1)
     {}
 
     void Insert(AnnotatedToken token) override
     {
         if (!filter->Filter(token))
-            TokenOut::Insert(token);
+            out.Insert(token);
+    }
+};
+struct PrintTokenOut : public TokenOut
+{
+    std::string * printDest;
+    TokenOut & out;
+
+    PrintTokenOut(TokenOut & a0, std::string * a1)
+        : out(a0)
+        , printDest(a1)
+    {
+        if (printDest)
+            printDest->reserve(4096);
+    }
+
+    void Insert(AnnotatedToken token) override
+    {
+        if (printDest)
+        {
+            *printDest += token.token.text;
+            printDest->push_back(' ');
+        }
+        out.Insert(token);
     }
 };
 
-std::vector<Token> LexProcess(std::string sourceFile)
+std::vector<Token> LexProcess(std::string sourceFile, std::string * sourceAfterPreproc)
 {
-    std::vector<AnnotatedToken> output;
+    TokenVector output;
 
     MatchEngine                         me = Compile(LexPatterns);
 
@@ -1609,8 +1768,9 @@ std::vector<Token> LexProcess(std::string sourceFile)
 
     TokenReader<std::string> *          trFile = new FilterTokenReader(new FileTokenReader(me), tfSpace);
 
-    TokenOut                            emit = Inserter(output);
-    FilterTokenOut                      emitter = FilterTokenOut(emit, tfNewLine);
+    TokenOut                            e0 = Inserter(output);
+    FilterTokenOut                      e1(e0, tfNewLine);
+    PrintTokenOut                       emitter(e1, sourceAfterPreproc);
 
     EmitTokenReplacer *                 repEmit = new EmitTokenReplacer(emitter);
     MacroContextTokenReplacer *         repMacroContext = new MacroContextTokenReplacer;
@@ -1620,7 +1780,7 @@ std::vector<Token> LexProcess(std::string sourceFile)
 
     CompoundTokenReplacer               repPreproc({ repMacroContext, repMacroSub, repCondIncl, repFileIncl, repEmit });
 
-    std::vector<AnnotatedToken> tokens = AnnotateAll(trFile->Read(sourceFile), {});
+    TokenVector tokens = AnnotateAll(trFile->Read(sourceFile), {});
     TokenBuffer in = FromVector(tokens);
     while (in.More())
     {
@@ -1628,8 +1788,11 @@ std::vector<Token> LexProcess(std::string sourceFile)
         TokenRange accept = repPreproc.Accept(all);
         if (accept.Empty())
             LEX_ERROR("Unexpected token.");
-        repPreproc.Replace(accept, Inserter(in, accept.End()));
+        TokenVector tmp;
+        // Ideally should use Inserter(in, accept.End()), but accept.End() moves with Inserter.
+        repPreproc.Replace(accept, Inserter(tmp));
         in.Remove(accept);
+        in.listToken.insert(in.listToken.begin(), tmp.begin(), tmp.end());
     }
 
     return DeAnnotateAll(output);
