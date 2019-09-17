@@ -924,49 +924,84 @@ private:
 
 // ==== Token Replacer ====
 
-template <typename TokenT, typename TokenConstItT>
-struct TokenRangeT
+struct MacroSubNode
 {
-    bool            Empty() const { return size == 0; }
-    const TokenT &  First() const { assert(!Empty()); return *begin; }
-    size_t          Size() const { return size; }
-    operator bool() const { return size > 0; }
+    std::shared_ptr<MacroSubNode> parent;
+    std::string macroName;
+};
+struct AnnotatedToken
+{
+    Token token;
+    std::shared_ptr<MacroSubNode> macroSubInfo;
 
-    TokenConstItT   Begin() const { return begin; }
-    TokenConstItT   End() const { return end; }
+    operator Token () { return token; }
+};
+AnnotatedToken                  Annotate(Token & token, std::shared_ptr<MacroSubNode> m)
+{
+    return { token, m };
+}
+std::vector<AnnotatedToken>     AnnotateAll(std::vector<Token> & tokens, std::shared_ptr<MacroSubNode> m)
+{
+    std::vector<AnnotatedToken> atokens;
+    for (Token & token : tokens)
+        atokens.emplace_back(Annotate(token, m));
+    return atokens;
+}
+Token                           DeAnnotate(AnnotatedToken & token)
+{
+    return token.token;
+}
+std::vector<Token>              DeAnnotateAll(std::vector<AnnotatedToken> & tokens)
+{
+    return std::vector<Token>(tokens.begin(), tokens.end());
+}
 
-    TokenConstItT begin;
-    TokenConstItT end;
+typedef AnnotatedToken              TokenT;
+typedef std::vector<AnnotatedToken> TokenVector;
+typedef std::list<AnnotatedToken>   TokenList;
+typedef TokenList::iterator         TokenListIterator;
+typedef TokenList::const_iterator   TokenListConstIterator;
+
+struct TokenRange
+{
+    bool                    Empty() const { return size == 0; }
+    const AnnotatedToken &  First() const { assert(!Empty()); return *begin; }
+    size_t                  Size() const { return size; }
+    operator                bool() const { return size > 0; }
+
+    TokenListConstIterator  Begin() const { return begin; }
+    TokenListConstIterator  End() const { return end; }
+
+    TokenListConstIterator begin;
+    TokenListConstIterator end;
     size_t size;
 };
-template <typename TokenT, typename TokenConstItT>
-struct TokenBufferT
+struct TokenBuffer
 {
     bool More() const { return !listToken.empty(); }
-    void Remove(TokenRangeT<TokenT, TokenConstItT> range) { listToken.erase(range.begin, range.end); }
+    void Remove(TokenRange range) { listToken.erase(range.begin, range.end); }
 
-    std::list<TokenT> listToken;
+    TokenList listToken;
 };
-template <typename TokenT>
-struct TokenOutT
+struct TokenOut
 {
     enum { VECTOR, TOKEN_BUFFER } tag;
 
-    TokenOutT(std::vector<TokenT> * a0)
+    TokenOut(TokenVector * a0)
         : tag(VECTOR)
         , vecTokens(a0)
         , bufTokens(nullptr)
     {}
-    TokenOutT(std::list<TokenT> * a1,
-              typename std::list<TokenT>::iterator a2)
+    TokenOut(TokenList * a1,
+             TokenListIterator a2)
         : tag(TOKEN_BUFFER)
         , vecTokens(nullptr)
         , bufTokens(a1)
         , bufInsertPos(a2)
     {}
-    virtual ~TokenOutT() = default;
+    virtual ~TokenOut() = default;
 
-    virtual void Insert(TokenT token)
+    virtual void Insert(AnnotatedToken token)
     {
         if (tag == VECTOR)
         {
@@ -980,99 +1015,20 @@ struct TokenOutT
         }
     }
 
-    std::vector<TokenT> * vecTokens;
-    std::list<TokenT> * bufTokens;
-    typename std::list<TokenT>::iterator bufInsertPos;
+    TokenVector * vecTokens;
+    TokenList * bufTokens;
+    TokenListIterator bufInsertPos;
 };
-
-typedef std::list<Token>::iterator              TokenIterator;
-typedef std::list<Token>::const_iterator        ConstTokenIterator;
-typedef TokenRangeT<Token, ConstTokenIterator>  TokenRange;
-typedef TokenBufferT<Token, ConstTokenIterator> TokenBuffer;
-typedef TokenOutT<Token>                        TokenOut;
 
 TokenRange EmptyRange()
 {
-    static std::list<Token> empty;
-    return { empty.begin(), empty.end(), 0 };
-}
-TokenRange Shrink(TokenRange range, size_t size)
-{
-    assert(range.size <= size);
-    ConstTokenIterator begin, end;
-    begin = end = range.begin;
-    std::advance(end, size);
-    return { begin, end, size };
-}
-TokenRange FromTokenBuffer(TokenBuffer & buffer)
-{
-    return { buffer.listToken.begin(), buffer.listToken.end(), buffer.listToken.size() };
-}
-TokenRange FromRange(ConstTokenIterator begin, ConstTokenIterator end)
-{
-    return { begin, end, static_cast<size_t>(std::distance(begin, end)) };
-}
-TokenBuffer FromVector(std::vector<Token> & tokens)
-{
-    TokenBuffer buffer;
-    buffer.listToken.insert(buffer.listToken.end(),
-                            tokens.begin(),
-                            tokens.end());
-    return buffer;
-}
-TokenOut Inserter(std::vector<Token> & out)
-{
-    return { &out };
-}
-TokenOut Inserter(TokenBuffer & buffer, ConstTokenIterator itConst)
-{
-    TokenIterator it = buffer.listToken.begin();
-    std::advance(it, std::distance(buffer.listToken.cbegin(), itConst));
-    return { &buffer.listToken, it };
-}
-ConstTokenIterator FindFirstOrBegin(TokenRange range, Token::Type type)
-{
-    ConstTokenIterator it = range.begin;
-    while (it != range.end)
-    {
-        if (it->type == type)
-            break;
-    }
-    return it == range.end ? range.begin : it;
-}
-
-namespace Annotated
-{
-
-using NakedToken = ::Token;
-struct MacroSubNode
-{
-    std::shared_ptr<MacroSubNode> parent;
-    std::string macroName;
-};
-struct Token
-{
-    NakedToken token;
-    std::shared_ptr<MacroSubNode> macroSubInfo;
-
-    operator NakedToken () { return token; }
-};
-
-typedef std::list<Token>::iterator              TokenIterator;
-typedef std::list<Token>::const_iterator        ConstTokenIterator;
-typedef TokenRangeT<Token, ConstTokenIterator>  TokenRange;
-typedef TokenBufferT<Token, ConstTokenIterator> TokenBuffer;
-typedef TokenOutT<Token>                        TokenOut;
-
-TokenRange EmptyRange()
-{
-    static std::list<Token> empty;
+    static std::list<AnnotatedToken> empty;
     return { empty.begin(), empty.end(), 0 };
 }
 TokenRange Shrink(TokenRange range, size_t size)
 {
     assert(size <= range.size);
-    ConstTokenIterator begin, end;
+    TokenListConstIterator begin, end;
     begin = end = range.begin;
     std::advance(end, size);
     return { begin, end, size };
@@ -1081,11 +1037,11 @@ TokenRange FromTokenBuffer(TokenBuffer & buffer)
 {
     return { buffer.listToken.begin(), buffer.listToken.end(), buffer.listToken.size() };
 }
-TokenRange FromRange(ConstTokenIterator begin, ConstTokenIterator end)
+TokenRange FromRange(TokenListConstIterator begin, TokenListConstIterator end)
 {
     return { begin, end, static_cast<size_t>(std::distance(begin, end)) };
 }
-TokenBuffer FromVector(std::vector<Token> & tokens)
+TokenBuffer FromVector(std::vector<AnnotatedToken> & tokens)
 {
     TokenBuffer buffer;
     buffer.listToken.insert(buffer.listToken.end(),
@@ -1093,19 +1049,19 @@ TokenBuffer FromVector(std::vector<Token> & tokens)
                             tokens.end());
     return buffer;
 }
-TokenOut Inserter(std::vector<Token> & out)
+TokenOut Inserter(std::vector<AnnotatedToken> & out)
 {
     return { &out };
 }
-TokenOut Inserter(TokenBuffer & buffer, ConstTokenIterator itConst)
+TokenOut Inserter(TokenBuffer & buffer, TokenListConstIterator itConst)
 {
-    TokenIterator it = buffer.listToken.begin();
+    TokenListIterator it = buffer.listToken.begin();
     std::advance(it, std::distance(buffer.listToken.cbegin(), itConst));
     return { &buffer.listToken, it };
 }
-ConstTokenIterator FindFirstOrBegin(TokenRange range, NakedToken::Type type)
+TokenListConstIterator FindFirstOrBegin(TokenRange range, Token::Type type)
 {
-    ConstTokenIterator it = range.begin;
+    TokenListConstIterator it = range.begin;
     while (it != range.end)
     {
         if (it->token.type == type)
@@ -1113,29 +1069,6 @@ ConstTokenIterator FindFirstOrBegin(TokenRange range, NakedToken::Type type)
     }
     return it == range.end ? range.begin : it;
 }
-
-
-// To annotated
-Token Annotate(NakedToken & token, std::shared_ptr<MacroSubNode> m)
-{
-    return { token, m };
-}
-std::vector<Token> AnnotateAll(std::vector<NakedToken> & tokens, std::shared_ptr<MacroSubNode> m)
-{
-    std::vector<Token> atokens;
-    for (NakedToken & token : tokens)
-        atokens.emplace_back(Annotate(token, m));
-    return atokens;
-}
-NakedToken DeAnnotate(Token & token)
-{
-    return token.token;
-}
-std::vector<NakedToken> DeAnnotateAll(std::vector<Token> & tokens)
-{
-    return std::vector<NakedToken>(tokens.begin(), tokens.end());
-}
-
 
 class TokenReplacer
 {
@@ -1169,17 +1102,17 @@ class MacroContextTokenReplacer : public TokenReplacer
 public:
     TokenRange                      Accept(TokenRange range) override
     {
-        ConstTokenIterator it = range.Begin();
-        if (it->token.type == NakedToken::PPD_DEFINE)
+        TokenListConstIterator it = range.Begin();
+        if (it->token.type == Token::PPD_DEFINE)
         {
             ++it;
-            LEX_EXPECT_TOKEN(it->token, NakedToken::ID);
+            LEX_EXPECT_TOKEN(it->token, Token::ID);
             ++it;
-            macroType = it->token.type == NakedToken::PP_LPAREN
+            macroType = it->token.type == Token::PP_LPAREN
                 ? PPType::DEF_MACRO_FUN
                 : PPType::DEF_MACRO_OBJ;
 
-            return FromRange(range.Begin(), FindFirstOrBegin(range, NakedToken::NEW_LINE));
+            return FromRange(range.Begin(), FindFirstOrBegin(range, Token::NEW_LINE));
         }
         else
         {
@@ -1188,21 +1121,21 @@ public:
     }
     void                            Replace(TokenRange range, TokenOut & _) override
     {
-        ConstTokenIterator begin = range.Begin();
-        ConstTokenIterator end = range.End();
+        TokenListConstIterator begin = range.Begin();
+        TokenListConstIterator end = range.End();
 
         if (macroType == PPType::DEF_MACRO_OBJ)
         {
             ++begin; // skip #define
             --end; // ignore new-line
 
-            LEX_EXPECT_TOKEN(begin->token, NakedToken::ID);
+            LEX_EXPECT_TOKEN(begin->token, Token::ID);
             std::string id = begin->token.text;
             ++begin;
 
             if (macroContext.macroSubs.find(id) != macroContext.macroSubs.end())
                 LEX_ERROR("Duplicate macro definition: " + id);
-            std::vector<Token> vecTokens(begin, end);
+            std::vector<AnnotatedToken> vecTokens(begin, end);
             macroContext.macroSubs.emplace(id, DeAnnotateAll(vecTokens));
         }
         else
@@ -1210,16 +1143,16 @@ public:
             ++begin; // skip #define
             --end; // ignore new-line
 
-            LEX_EXPECT_TOKEN(begin->token, NakedToken::ID);
+            LEX_EXPECT_TOKEN(begin->token, Token::ID);
             std::string id = begin->token.text;
             ++begin;
 
-            LEX_EXPECT_TOKEN(begin->token, NakedToken::PP_LPAREN);
+            LEX_EXPECT_TOKEN(begin->token, Token::PP_LPAREN);
             ++begin;
 
             // parse param-list
             std::vector<std::string> paramIds;
-            while (begin->token.type != NakedToken::RPAREN)
+            while (begin->token.type != Token::RPAREN)
             {
                 for (std::string & paramId : paramIds)
                 {
@@ -1227,13 +1160,13 @@ public:
                         LEX_ERROR("Illegal macro function definition: duplicate parameter name '" + paramId + "'.");
                 }
 
-                LEX_EXPECT_TOKEN(begin->token, NakedToken::ID);
+                LEX_EXPECT_TOKEN(begin->token, Token::ID);
                 paramIds.emplace_back(begin->token.text);
                 ++begin;
 
-                if (begin->token.type != NakedToken::RPAREN)
+                if (begin->token.type != Token::RPAREN)
                 {
-                    LEX_EXPECT_TOKEN(begin->token, NakedToken::OP_COMMA);
+                    LEX_EXPECT_TOKEN(begin->token, Token::OP_COMMA);
                     ++begin;
                 }
             }
@@ -1242,11 +1175,11 @@ public:
                 LEX_ERROR("Illegal macro function definition: must has at least one parameter.");
 
             // put param-placeholder in body
-            std::vector<std::variant<NakedToken, int>> vTokenOrParam;
+            std::vector<std::variant<Token, int>> vTokenOrParam;
             while (begin != end)
             {
                 auto paramIdIt = std::find(paramIds.begin(), paramIds.end(), begin->token.text);
-                if (begin->token.type == NakedToken::ID && paramIdIt != paramIds.end())
+                if (begin->token.type == Token::ID && paramIdIt != paramIds.end())
                     vTokenOrParam.emplace_back(static_cast<int>(std::distance(paramIds.begin(), paramIdIt)));
                 else
                     vTokenOrParam.emplace_back(begin->token);
@@ -1281,7 +1214,7 @@ public:
 
     TokenRange                      Accept(TokenRange range) override
     {
-        if (range.First().token.type != NakedToken::ID)
+        if (range.First().token.type != Token::ID)
             return EmptyRange();
 
         auto it = macroContext.macroSubs.find(range.First().token.text);
@@ -1293,7 +1226,7 @@ public:
             ? PPType::MACRO_FUN_SUB
             : PPType::MACRO_OBJ_SUB;
 
-        ConstTokenIterator end = range.Begin();
+        TokenListConstIterator end = range.Begin();
         if (macroType == PPType::MACRO_OBJ_SUB)
         {
             ++end;
@@ -1302,14 +1235,14 @@ public:
         {
             ++end; // function name
 
-            LEX_EXPECT_TOKEN(end->token, NakedToken::LPAREN);
+            LEX_EXPECT_TOKEN(end->token, Token::LPAREN);
             ++end;
 
             for (int paren = 1; paren > 0;)
             {
-                if (end->token.type == NakedToken::LPAREN)
+                if (end->token.type == Token::LPAREN)
                     ++paren;
-                else if (end->token.type == NakedToken::RPAREN)
+                else if (end->token.type == Token::RPAREN)
                     --paren;
                 ++end;
             }
@@ -1319,8 +1252,8 @@ public:
     }
     void                            Replace(TokenRange range, TokenOut & out) override
     {
-        ConstTokenIterator begin = range.Begin();
-        ConstTokenIterator end = range.End();
+        TokenListConstIterator begin = range.Begin();
+        TokenListConstIterator end = range.End();
 
         if (macroType == PPType::MACRO_OBJ_SUB)
         {
@@ -1395,22 +1328,22 @@ public:
 
             ++begin;
 
-            LEX_EXPECT_TOKEN(begin->token, NakedToken::LPAREN);
+            LEX_EXPECT_TOKEN(begin->token, Token::LPAREN);
             ++begin;
 
             // collect argment tokens
             //  arglist := expr (',' expr)*
             //  expr := ([^,]+|\([^)]*\))
-            std::vector<std::vector<Token>> argReplaceTokens;
-            std::vector<Token> replaceTokens;
+            std::vector<std::vector<AnnotatedToken>> argReplaceTokens;
+            std::vector<AnnotatedToken> replaceTokens;
             while (true)
             {
                 int paren = 0;
                 while (paren > 0 ||
-                    (begin->token.type != NakedToken::RPAREN && begin->token.type != NakedToken::OP_COMMA))
+                    (begin->token.type != Token::RPAREN && begin->token.type != Token::OP_COMMA))
                 {
-                    if (begin->token.type == NakedToken::LPAREN) ++paren;
-                    else if (begin->token.type == NakedToken::RPAREN) --paren;
+                    if (begin->token.type == Token::LPAREN) ++paren;
+                    else if (begin->token.type == Token::RPAREN) --paren;
                     replaceTokens.push_back(*begin);
                     ++begin;
                     assert(begin != end);
@@ -1421,17 +1354,17 @@ public:
                 argReplaceTokens.push_back(replaceTokens);
                 replaceTokens.clear();
 
-                if (begin->token.type == NakedToken::RPAREN)
+                if (begin->token.type == Token::RPAREN)
                     break;
                 else
                 {
-                    assert(begin->token.type == NakedToken::OP_COMMA);
+                    assert(begin->token.type == Token::OP_COMMA);
                     ++begin;
                     assert(begin != end);
                 }
             }
 
-            LEX_EXPECT_TOKEN(begin->token, NakedToken::RPAREN);
+            LEX_EXPECT_TOKEN(begin->token, Token::RPAREN);
             ++begin;
 
             if (argReplaceTokens.size() != funcSub.paramCount)
@@ -1442,12 +1375,12 @@ public:
             //  2. handle argument substitution
             //  3. handle ##
             //  * avoid recursive expanison
-            std::vector<std::variant<Token, int>> rt;
-            std::vector<std::variant<Token, int>> rt2;
+            std::vector<std::variant<AnnotatedToken, int>> rt;
+            std::vector<std::variant<AnnotatedToken, int>> rt2;
 
             for (auto & v : funcSub.replaceTokens)
             {
-                std::variant<Token, int> vv;
+                std::variant<AnnotatedToken, int> vv;
                 if (v.index() == 0)
                     vv = Annotate(std::get<0>(v), annotation);
                 else
@@ -1458,7 +1391,7 @@ public:
             // stringizing operator (#)
             for (auto curr = rt.begin(); curr != rt.end(); ++curr)
             {
-                if (curr->index() == 0 && std::get<0>(*curr).token.type == NakedToken::OP_STRINGIZING)
+                if (curr->index() == 0 && std::get<0>(*curr).token.type == Token::OP_STRINGIZING)
                 {
                     ++curr; // skip #
                     assert(curr != rt.end());
@@ -1470,13 +1403,13 @@ public:
 
                     std::for_each(argReplaceTokens.at(argIndex).begin(),
                                   argReplaceTokens.at(argIndex).end(),
-                                  [leakyText](Token & token) { leakyText->append(token.token.text.data(), token.token.text.size()); leakyText->push_back(' '); });
+                                  [leakyText](AnnotatedToken & token) { leakyText->append(token.token.text.data(), token.token.text.size()); leakyText->push_back(' '); });
                     leakyText->pop_back();
                     leakyText->append("\"");
 
-                    NakedToken t;
+                    Token t;
                     t.text = *leakyText;
-                    t.type = NakedToken::STRING;
+                    t.type = Token::STRING;
                     rt2.emplace_back(Annotate(t, annotation));
                 }
                 else
@@ -1505,18 +1438,18 @@ public:
             rt.clear();
             std::swap(rt, rt2);
             // token-pasting operator (##)
-            assert(rt.front().index() == 1 || std::get<0>(rt.front()).token.type != NakedToken::OP_TOKEN_PASTING);
-            assert(rt.back().index() == 1 || std::get<0>(rt.back()).token.type != NakedToken::OP_TOKEN_PASTING);
+            assert(rt.front().index() == 1 || std::get<0>(rt.front()).token.type != Token::OP_TOKEN_PASTING);
+            assert(rt.back().index() == 1 || std::get<0>(rt.back()).token.type != Token::OP_TOKEN_PASTING);
             size_t l = 0;
             for (size_t m = 1, r = 2;
                  r < rt.size();
                  ++l, ++m, ++r)
             {
-                if (rt[m].index() == 0 && std::get<0>(rt[m]).token.type == NakedToken::OP_TOKEN_PASTING)
+                if (rt[m].index() == 0 && std::get<0>(rt[m]).token.type == Token::OP_TOKEN_PASTING)
                 {
                     // merge, re-pase, insert
                     std::string * leakyMergedText = new std::string(std::get<0>(rt[l]).token.text + std::get<0>(rt[r]).token.text);
-                    NakedToken mergedToken = ParseOneToken(matchEngine, *leakyMergedText);
+                    Token mergedToken = ParseOneToken(matchEngine, *leakyMergedText);
                     rt[r] = Annotate(mergedToken, {});
                     // remove 3, insert 1 -> add 2
                     ++l, ++m, ++r;
@@ -1534,7 +1467,7 @@ public:
 
             for (auto it = rt2.rbegin(); it != rt2.rend(); ++it)
             {
-                Token token = { std::get<Token>(*it).token, annotation };
+                AnnotatedToken token = { std::get<AnnotatedToken>(*it).token, annotation };
                 out.Insert(token);
             }
         }
@@ -1547,17 +1480,17 @@ private:
 };
 class ConditionalIncludeTokenReplacer : public TokenReplacer
 {
-    // Handle #if...#endif
+    // Handle #if...#elif...#endif, #ifdef...#endif, #ifndef...#endif
 public:
     ConditionalIncludeTokenReplacer(PPContext & a0)
         : macroContext(a0)
     {}
 
-    TokenRange                      Accept(TokenRange) override
+    TokenRange                      Accept(TokenRange range) override
     {
         return {};
     }
-    void                            Replace(TokenRange, TokenOut &) override
+    void                            Replace(TokenRange range, TokenOut &) override
     {
     }
 
@@ -1616,11 +1549,9 @@ private:
     size_t acceptedTokenReplacerIndex;
 };
 
-}
-
 // ==== Token Filter Adapter ====
 
-class FilterTokenReader             : public TokenReader<std::string>
+class FilterTokenReader : public TokenReader<std::string>
 {
 public:
     FilterTokenReader(TokenReader<std::string> * a0,
@@ -1651,44 +1582,6 @@ private:
     TokenReader<std::string> * tokenReader;
     TokenFilter * tokenFilter;
 };
-namespace Annotated
-{
-//class FilterTokenReplacer           : public TokenReplacer
-//{
-//public:
-//    FilterTokenReplacer(TokenReplacer * a0,
-//                        TokenFilter * a1)
-//        : tokenReplacer(a0)
-//        , tokenFilter(a1)
-//    {}
-//
-//    TokenRange                      Accept(TokenRange range) override
-//    {
-//        return tokenReplacer->Accept(range);
-//    }
-//    void                            Replace(TokenRange range, TokenOut & out) override
-//    {
-//        struct FilterTokenOut : public TokenOut
-//        {
-//            TokenFilter * filter;
-//            FilterTokenOut(TokenOut & a0, TokenFilter * a1)
-//                : TokenOut(a0)
-//                , filter(a1)
-//            {}
-//
-//            void Insert(Token token) override
-//            {
-//                if (!filter->Filter(token))
-//                    TokenOut::Insert(token);
-//            }
-//        } filterOut(out, tokenFilter);
-//        return tokenReplacer->Replace(range, filterOut);
-//    }
-//
-//private:
-//    TokenReplacer * tokenReplacer;
-//    TokenFilter * tokenFilter;
-//};
 struct FilterTokenOut : public TokenOut
 {
     TokenFilter * filter;
@@ -1698,17 +1591,16 @@ struct FilterTokenOut : public TokenOut
         , filter(a1)
     {}
 
-    void Insert(Token token) override
+    void Insert(AnnotatedToken token) override
     {
         if (!filter->Filter(token))
             TokenOut::Insert(token);
     }
 };
-}
 
 std::vector<Token> LexProcess(std::string sourceFile)
 {
-    std::vector<Annotated::Token> output;
+    std::vector<AnnotatedToken> output;
 
     MatchEngine                         me = Compile(LexPatterns);
 
@@ -1717,9 +1609,7 @@ std::vector<Token> LexProcess(std::string sourceFile)
 
     TokenReader<std::string> *          trFile = new FilterTokenReader(new FileTokenReader(me), tfSpace);
 
-    using namespace Annotated;
-
-    Annotated::TokenOut                 emit = Inserter(output);
+    TokenOut                            emit = Inserter(output);
     FilterTokenOut                      emitter = FilterTokenOut(emit, tfNewLine);
 
     EmitTokenReplacer *                 repEmit = new EmitTokenReplacer(emitter);
@@ -1730,12 +1620,12 @@ std::vector<Token> LexProcess(std::string sourceFile)
 
     CompoundTokenReplacer               repPreproc({ repMacroContext, repMacroSub, repCondIncl, repFileIncl, repEmit });
 
-    std::vector<Token> tokens = AnnotateAll(trFile->Read(sourceFile), {});
-    Annotated::TokenBuffer in = FromVector(tokens);
+    std::vector<AnnotatedToken> tokens = AnnotateAll(trFile->Read(sourceFile), {});
+    TokenBuffer in = FromVector(tokens);
     while (in.More())
     {
-        Annotated::TokenRange all = FromTokenBuffer(in);
-        Annotated::TokenRange accept = repPreproc.Accept(all);
+        TokenRange all = FromTokenBuffer(in);
+        TokenRange accept = repPreproc.Accept(all);
         if (accept.Empty())
             LEX_ERROR("Unexpected token.");
         repPreproc.Replace(accept, Inserter(in, accept.End()));

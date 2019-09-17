@@ -21,7 +21,7 @@ using namespace std;
 std::string Compile(std::string fileName)
 {
     // 1. Token
-    std::vector<Token> tokens = ::experiment::LexProcess(GetFileContent(fileName.data()));
+    std::vector<Token> tokens = ::experiment::LexProcess(fileName);
     TokenIterator ti(tokens);
 
     // 2. Ast
