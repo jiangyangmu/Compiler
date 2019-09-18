@@ -13,16 +13,6 @@
 #include "Lexer.h"
 #include "../Base/File.h"
 
-// ==== Error Handling ====
-
-#define LEX_ERROR(message) do { throw std::invalid_argument(std::string("Lex error: ") + message); } while (false)
-#define LEX_EXPECT_TOKEN(actual, expect_type) do { \
-    if ((actual).type != (expect_type)) \
-        throw std::invalid_argument(std::string("Lex error: unexpect token ") + (actual).text); \
-    } while (false)
-#define LEX_UNEXPECTED_TOKEN(token) do { \
-        throw std::invalid_argument(std::string("Lex error: unexpect token ") + (token).text); \
-    } while (false)
 
 // ==== C Lex Definition ====
 
@@ -138,7 +128,76 @@ static std::vector<Token::Type> LexTypes = {
     Token::END,
 };
 
-// ==== Parse Tokens ====
+// ==== Error Handling ====
+
+#define LEX_ERROR(message) do { throw std::invalid_argument(std::string("Lex error: ") + message); } while (false)
+#define LEX_EXPECT_TOKEN(actual, expect_type) do { \
+    if ((actual).type != (expect_type)) \
+        throw std::invalid_argument(std::string("Lex error: unexpect token ") + (actual).text); \
+    } while (false)
+#define LEX_UNEXPECTED_TOKEN(token) do { \
+        throw std::invalid_argument(std::string("Lex error: unexpect token ") + (token).text); \
+    } while (false)
+
+// ==== Comments ====
+
+// Remove /* ... */, keep new line.
+std::string RemoveComments(std::string input)
+{
+    std::string output;
+
+    output.reserve(input.size());
+
+    bool inComment = false;
+    const char * in = input.data();
+    const char * inEnd = input.data() + input.length();
+    while (in < inEnd)
+    {
+        // toggle in comment state
+        if (in + 1 < inEnd)
+        {
+            if (!inComment && *in == '/' && *(in + 1) == '*')
+            {
+                inComment = true;
+                in += 2;
+                continue;
+            }
+            else if (inComment && *in == '*' && *(in + 1) == '/')
+            {
+                inComment = false;
+                in += 2;
+                continue;
+            }
+            else if (!inComment && *in == '/' && *(in + 1) == '/')
+            {
+                ASSERT("C++ comment not allowed" && false);
+            }
+        }
+
+        if (inComment)
+        {
+            // keep new line in comment
+            if (*in == '\n')
+            {
+                output += *in++;
+            }
+            else
+            {
+                ++in;
+            }
+        }
+        else
+        {
+            output += *in++;
+        }
+    }
+
+    ASSERT(!inComment);
+
+    return output;
+}
+
+// ==== Parse & Eval Token ====
 
 Token ToToken(MatchResult mr, std::string & text)
 {
@@ -155,8 +214,7 @@ Token ParseOneToken(MatchEngine & me, std::string & text)
         LEX_ERROR("Can't parse text into one token: " + text);
     return ToToken(mr, text);
 }
-
-std::vector<Token> StringToTokens(MatchEngine & me, std::string & text)
+std::vector<Token> ParseAllTokens(MatchEngine & me, std::string & text)
 {
     // Text --dfa--> Raw Tokens (keyword, id, flt/int/char/str-const, op, punc, pp-directive, pp-path, pp-lparen, space, nl)
     std::vector<MatchResult> mrs = MatchAll(me, StringView(text.data(), text.length()));
@@ -187,26 +245,6 @@ std::vector<Token> StringToTokens(MatchEngine & me, std::string & text)
 
     return tokens;
 }
-std::vector<Token> FileToTokens(MatchEngine & me, std::string & fileName)
-{
-    return StringToTokens(me,
-                          GetFileContent(fileName.data()));
-}
-
-// ==== Filter Tokens ====
-
-std::vector<Token> FilterTokens(std::vector<Token> & in, Token::Type filteredType)
-{
-    std::vector<Token> out;
-    for (Token & token : in)
-    {
-        if (token.type != filteredType)
-            out.emplace_back(token);
-    }
-    return out;
-}
-
-// ==== Eval Tokens ====
 
 int StringToInt(const char * begin, const char * end)
 {
@@ -284,7 +322,202 @@ void EvalTokens(std::vector<Token> & in)
     }
 }
 
-// ==== Preprocess Tokens ====
+// ==== Token Reader ====
+
+// T -> std::vector<Token>
+
+template <typename T>
+class TokenReader
+{
+public:
+    virtual std::vector<Token>      Read(T) = 0;
+};
+
+class FileTokenReader : public TokenReader<std::string>
+{
+public:
+    FileTokenReader(MatchEngine a0)
+        : matchEngine(a0)
+    {}
+
+    std::vector<Token>              Read(std::string fileName) override
+    {
+        return ParseAllTokens(matchEngine,
+                              RemoveComments(GetFileContent(fileName.data())));
+    }
+
+private:
+    MatchEngine matchEngine;
+};
+
+// ==== Helper: Token Replacer ====
+
+struct MacroSubNode
+{
+    std::shared_ptr<MacroSubNode> parent;
+    std::string macroName;
+};
+struct AnnotatedToken
+{
+    Token token;
+    std::shared_ptr<MacroSubNode> macroSubInfo;
+
+    operator Token () { return token; }
+};
+
+typedef std::vector<AnnotatedToken> TokenVector;
+typedef std::list<AnnotatedToken>   TokenList;
+typedef TokenList::iterator         TokenListIterator;
+typedef TokenList::const_iterator   TokenListConstIterator;
+
+AnnotatedToken                  Annotate(const Token & token, std::shared_ptr<MacroSubNode> m)
+{
+    return { token, m };
+}
+TokenVector                     AnnotateAll(const std::vector<Token> & tokens, std::shared_ptr<MacroSubNode> m)
+{
+    TokenVector atokens;
+    for (const Token & token : tokens)
+        atokens.emplace_back(Annotate(token, m));
+    return atokens;
+}
+Token                           DeAnnotate(const AnnotatedToken & token)
+{
+    return token.token;
+}
+std::vector<Token>              DeAnnotateAll(TokenVector & tokens)
+{
+    return std::vector<Token>(tokens.begin(), tokens.end());
+}
+
+struct TokenRange
+{
+    bool                    Empty() const { return size == 0; }
+    const AnnotatedToken &  First() const { assert(!Empty()); return *begin; }
+    const AnnotatedToken &  Last() const { assert(!Empty()); auto it = end; return *(--it); }
+    size_t                  Size() const { return size; }
+    operator                bool() const { return size > 0; }
+
+    TokenListConstIterator  Begin() const { return begin; }
+    TokenListConstIterator  End() const { return end; }
+
+    TokenListConstIterator begin;
+    TokenListConstIterator end;
+    size_t size;
+};
+struct TokenBuffer
+{
+    bool More() const { return !listToken.empty(); }
+    void Remove(TokenRange range) { listToken.erase(range.begin, range.end); }
+
+    TokenList listToken;
+};
+struct TokenOut
+{
+    enum { INVALID, VECTOR, TOKEN_BUFFER } tag;
+
+    TokenOut()
+        : tag(INVALID)
+        , vecTokens(nullptr)
+        , bufTokens(nullptr)
+    {}
+    TokenOut(TokenVector * a0)
+        : tag(VECTOR)
+        , vecTokens(a0)
+        , bufTokens(nullptr)
+    {}
+    TokenOut(TokenList * a1,
+             TokenListIterator a2)
+        : tag(TOKEN_BUFFER)
+        , vecTokens(nullptr)
+        , bufTokens(a1)
+        , bufInsertPos(a2)
+    {}
+    virtual ~TokenOut() = default;
+
+    virtual void Insert(AnnotatedToken token)
+    {
+        if (tag == VECTOR)
+        {
+            assert(vecTokens);
+            vecTokens->push_back(token);
+        }
+        else
+        {
+            assert(bufTokens);
+            bufTokens->insert(bufInsertPos, token);
+        }
+    }
+
+    TokenVector * vecTokens;
+    TokenList * bufTokens;
+    TokenListIterator bufInsertPos;
+};
+
+TokenRange EmptyRange()
+{
+    static TokenList empty;
+    return { empty.begin(), empty.end(), 0 };
+}
+TokenRange FirstN(TokenRange range, size_t size)
+{
+    assert(size <= range.size);
+    TokenListConstIterator begin, end;
+    begin = end = range.begin;
+    std::advance(end, size);
+    return { begin, end, size };
+}
+TokenRange FromTokenBuffer(TokenBuffer & buffer)
+{
+    return { buffer.listToken.begin(), buffer.listToken.end(), buffer.listToken.size() };
+}
+TokenRange FromRange(TokenListConstIterator begin, TokenListConstIterator end)
+{
+    return { begin, end, static_cast<size_t>(std::distance(begin, end)) };
+}
+// [range.begin, first-token-with-type]
+TokenRange SubrangeUntilIncludeType(TokenRange range, Token::Type type)
+{
+    TokenListConstIterator end = range.begin;
+    while (end != range.end)
+    {
+        if (end->token.type == type)
+            return FromRange(range.begin, ++end);
+        ++end;
+    }
+    return EmptyRange();
+}
+TokenRange SubrangeBeforeTypes(TokenRange range, std::vector<Token::Type> types)
+{
+    TokenListConstIterator end = range.begin;
+    while (end != range.end)
+    {
+        if (std::find(types.begin(), types.end(), end->token.type) != types.end())
+            return FromRange(range.begin, end);
+        ++end;
+    }
+    return EmptyRange();
+}
+TokenBuffer FromVector(TokenVector & tokens)
+{
+    TokenBuffer buffer;
+    buffer.listToken.insert(buffer.listToken.end(),
+                            tokens.begin(),
+                            tokens.end());
+    return buffer;
+}
+TokenOut Inserter(TokenVector & out)
+{
+    return { &out };
+}
+TokenOut Inserter(TokenBuffer & buffer, TokenListConstIterator itConst)
+{
+    TokenListIterator it = buffer.listToken.begin();
+    std::advance(it, std::distance(buffer.listToken.cbegin(), itConst));
+    return { &buffer.listToken, it };
+}
+
+// ==== Helper: Macro Token Replacer ====
 
 enum class PPType
 {
@@ -362,737 +595,8 @@ PPType DecidePPType(PPContext & context, Token * tokens)
         ? PPType::EMIT
         : PPType::UNKNOWN;
 }
-std::vector<Token> PreprocessTokens(MatchEngine & me, const std::vector<Token> & in)
-{
-    std::vector<Token> out;
-
-    PPContext context;
-
-    struct MacroSubNode
-    {
-        std::shared_ptr<MacroSubNode> parent;
-        std::string macroName;
-    };
-
-    struct AnnotatedToken
-    {
-        Token token;
-        std::shared_ptr<MacroSubNode> macroSubInfo;
-
-        AnnotatedToken() {}
-        AnnotatedToken(Token t) : token(t) {}
-        AnnotatedToken(Token t, std::shared_ptr<MacroSubNode> m) : token(t), macroSubInfo(m) {}
-        operator Token () { return token; }
-    };
-
-    std::deque<AnnotatedToken> unprocessed(in.cbegin(), in.cend());
-
-    while (!unprocessed.empty())
-    {
-        Token peekTokens[3] = {
-            unprocessed.front(),
-            unprocessed.size() > 1 ? unprocessed[1] : Token{ Token::UNKNOWN, "" },
-            unprocessed.size() > 2 ? unprocessed[2] : Token{ Token::UNKNOWN, "" },
-        };
-
-        // Decide process type (token -> pp-type)
-        // 1. Emit
-        // 2. PP Define Macro Object
-        // 3. PP Define Macro Function
-        // 4. PP Macro Substitution
-        // 5. PP Conditional Include
-        // 6. PP File Include
-        PPType ppt = DecidePPType(context, peekTokens);
-
-        // Find all tokens in this process (token-range -> token-range) - modify right bound
-        // 1. One
-        // 2. Until new line
-        // 3. Until new line
-        // 4. One/Until arglist end
-        // 5. Until #endif
-        // 6. Until new line
-        auto begin = unprocessed.cbegin();
-        auto end = begin;
-        if (ppt == PPType::EMIT || ppt == PPType::MACRO_OBJ_SUB)
-        {
-            ++end;
-        }
-        else if (ppt == PPType::MACRO_FUN_SUB)
-        {
-            ++end; // function name
-
-            LEX_EXPECT_TOKEN(end->token, Token::LPAREN);
-            ++end;
-
-            for (int paren = 1; paren > 0;)
-            {
-                if (end->token.type == Token::LPAREN)
-                    ++paren;
-                else if (end->token.type == Token::RPAREN)
-                    --paren;
-                ++end;
-            }
-        }
-        else if (ppt == PPType::COND_INCL)
-        {
-            ++end; // skip #if
-            while (end->token.type != Token::PPD_ENDIF)
-                ++end;
-            ++end; // include #endif
-        }
-        else
-        {
-            assert(ppt == PPType::DEF_MACRO_FUN || ppt == PPType::DEF_MACRO_OBJ);
-            ++end; // skip #define
-            while (end->token.type != Token::NEW_LINE)
-                ++end;
-            ++end; // include new-line
-        }
-
-        std::vector<AnnotatedToken> tokensCopy(begin, end);
-
-        //std::cout << "Expand macro..." << std::endl;
-        //for (AnnotatedToken & at : tokensCopy)
-        //{
-        //    std::cout << "\t" << at.token.text << " [";
-        //    auto msi = at.macroSubInfo;
-        //    while (msi)
-        //    {
-        //        std::cout << msi->macroName << ",";
-        //        msi = msi->parent;
-        //    }
-        //    std::cout << "]" << std::endl;
-        //}
-
-        unprocessed.erase(begin, end);
-
-        // Apply actions (token-range, context -> token-range) - output, update state, read file, ...
-        // 1. add to output
-        // 2. update pp-macro-table
-        // 3. update pp-macro-table
-        // 4. replace pp-macro
-        // 5. use pp-expr-eval, replace tokens
-        // 6. get file content, convert to tokens, insert to in.
-        {
-            auto begin = tokensCopy.cbegin();
-            auto end = tokensCopy.cend();
-
-            if (ppt == PPType::EMIT)
-            {
-                std::transform(begin,
-                               end,
-                               std::back_inserter(out),
-                               [](const AnnotatedToken & token) -> const Token &{ return token.token; });
-            }
-            else if (ppt == PPType::DEF_MACRO_OBJ)
-            {
-                ++begin; // skip #define
-                --end; // ignore new-line
-
-                LEX_EXPECT_TOKEN(begin->token, Token::ID);
-                std::string id = begin->token.text;
-                ++begin;
-
-                if (context.macroSubs.find(id) != context.macroSubs.end())
-                    LEX_ERROR("Duplicate macro definition: " + id);
-                std::vector<Token> replaceTokens;
-                std::transform(begin,
-                               end,
-                               std::back_inserter(replaceTokens),
-                               [](const AnnotatedToken & token) -> const Token &{ return token.token; });
-                context.macroSubs.emplace(id, replaceTokens);
-            }
-            else if (ppt == PPType::DEF_MACRO_FUN)
-            {
-                ++begin; // skip #define
-                --end; // ignore new-line
-
-                LEX_EXPECT_TOKEN(begin->token, Token::ID);
-                std::string id = begin->token.text;
-                ++begin;
-
-                LEX_EXPECT_TOKEN(begin->token, Token::PP_LPAREN);
-                ++begin;
-
-                // parse param-list
-                std::vector<std::string> paramIds;
-                while (begin->token.type != Token::RPAREN)
-                {
-                    for (std::string & paramId : paramIds)
-                    {
-                        if (paramId == begin->token.text)
-                            LEX_ERROR("Illegal macro function definition: duplicate parameter name '" + paramId + "'.");
-                    }
-
-                    LEX_EXPECT_TOKEN(begin->token, Token::ID);
-                    paramIds.emplace_back(begin->token.text);
-                    ++begin;
-
-                    if (begin->token.type != Token::RPAREN)
-                    {
-                        LEX_EXPECT_TOKEN(begin->token, Token::OP_COMMA);
-                        ++begin;
-                    }
-                }
-                ++begin; // skip ')'
-                if (paramIds.empty())
-                    LEX_ERROR("Illegal macro function definition: must has at least one parameter.");
-
-                // put param-placeholder in body
-                std::vector<std::variant<Token, int>> vTokenOrParam;
-                while (begin != end)
-                {
-                    auto paramIdIt = std::find(paramIds.begin(), paramIds.end(), begin->token.text);
-                    if (begin->token.type == Token::ID && paramIdIt != paramIds.end())
-                        vTokenOrParam.emplace_back(static_cast<int>(std::distance(paramIds.begin(), paramIdIt)));
-                    else
-                        vTokenOrParam.emplace_back(begin->token);
-                    ++begin;
-                }
-
-                if (context.macroSubs.find(id) != context.macroSubs.end())
-                    LEX_ERROR("Duplicate macro definition: " + id);
-                context.macroSubs.emplace(id, PPMacroSubstitution(paramIds.size(), vTokenOrParam));
-            }
-            else if (ppt == PPType::MACRO_OBJ_SUB)
-            {
-                // Expand macro object
-
-                std::string macroName = begin->token.text;
-
-                bool hasRecursion = false;
-                std::shared_ptr<MacroSubNode> disableChain = begin->macroSubInfo;
-                while (disableChain)
-                {
-                    if (disableChain->macroName == macroName)
-                    {
-                        hasRecursion = true;
-                        break;
-                    }
-                    else
-                        disableChain = disableChain->parent;
-                }
-                if (hasRecursion)
-                {
-                    std::transform(begin,
-                                   end,
-                                   std::back_inserter(out),
-                                   [](const AnnotatedToken & token) -> const Token &{ return token.token; });
-                    continue;
-                }
-
-                auto & objSub = context.macroSubs.find(macroName)->second.object;
-
-                auto annotate = std::make_shared<MacroSubNode>();
-                annotate->parent = begin->macroSubInfo;
-                annotate->macroName = macroName;
-
-                std::transform(objSub.replaceTokens.begin(),
-                               objSub.replaceTokens.end(),
-                               std::front_inserter(unprocessed),
-                               [annotate](const Token & token) -> AnnotatedToken { return { token, annotate }; });
-            }
-            else if (ppt == PPType::MACRO_FUN_SUB)
-            {
-                // Expand macro function
-
-                std::string macroName = begin->token.text;
-
-                bool hasRecursion = false;
-                std::shared_ptr<MacroSubNode> disableChain = begin->macroSubInfo;
-                while (disableChain)
-                {
-                    if (disableChain->macroName == macroName)
-                    {
-                        hasRecursion = true;
-                        break;
-                    }
-                    else
-                        disableChain = disableChain->parent;
-                }
-                if (hasRecursion)
-                {
-                    std::transform(begin,
-                                   end,
-                                   std::back_inserter(out),
-                                   [](const AnnotatedToken & token) -> const Token &{ return token.token; });
-                    continue;
-                }
-
-                auto & funcSub = context.macroSubs.find(macroName)->second.function;
-
-                auto annotate = std::make_shared<MacroSubNode>();
-                annotate->parent = begin->macroSubInfo;
-                annotate->macroName = macroName;
-
-                ++begin;
-
-                LEX_EXPECT_TOKEN(begin->token, Token::LPAREN);
-                ++begin;
-
-                // collect argment tokens
-                //  arglist := expr (',' expr)*
-                //  expr := ([^,]+|\([^)]*\))
-                std::vector<std::vector<AnnotatedToken>> argReplaceTokens;
-                std::vector<AnnotatedToken> replaceTokens;
-                while (true)
-                {
-                    int paren = 0;
-                    while (paren > 0 ||
-                        (begin->token.type != Token::RPAREN && begin->token.type != Token::OP_COMMA))
-                    {
-                        if (begin->token.type == Token::LPAREN) ++paren;
-                        else if (begin->token.type == Token::RPAREN) --paren;
-                        replaceTokens.push_back(*begin);
-                        ++begin;
-                        assert(begin != end);
-                    }
-
-                    if (replaceTokens.empty())
-                        LEX_ERROR("Illegal macro function call: unexpected comma.");
-                    argReplaceTokens.push_back(replaceTokens);
-                    replaceTokens.clear();
-
-                    if (begin->token.type == Token::RPAREN)
-                        break;
-                    else
-                    {
-                        assert(begin->token.type == Token::OP_COMMA);
-                        ++begin;
-                        assert(begin != end);
-                    }
-                }
-
-                LEX_EXPECT_TOKEN(begin->token, Token::RPAREN);
-                ++begin;
-
-                if (argReplaceTokens.size() != funcSub.paramCount)
-                    LEX_ERROR("Illegal macro function call: mismatched argument count.");
-
-                // apply macro function
-                //  1. handle #
-                //  2. handle argument substitution
-                //  3. handle ##
-                //  * avoid recursive expanison
-                std::vector<std::variant<AnnotatedToken, int>> rt;
-                std::vector<std::variant<AnnotatedToken, int>> rt2;
-
-                std::transform(funcSub.replaceTokens.begin(),
-                               funcSub.replaceTokens.end(),
-                               std::back_inserter(rt),
-                               [](const std::variant<Token, int> & v) -> std::variant<AnnotatedToken, int> {
-                                   return v.index() == 0
-                                       ? std::variant<AnnotatedToken, int>(std::get<0>(v))
-                                       : std::variant<AnnotatedToken, int>(std::get<1>(v));
-                               });
-
-                // stringizing operator (#)
-                for (auto curr = rt.begin(); curr != rt.end(); ++curr)
-                {
-                    if (curr->index() == 0 && std::get<0>(*curr).token.type == Token::OP_STRINGIZING)
-                    {
-                        ++curr; // skip #
-                        assert(curr != rt.end());
-                        assert(curr->index() == 1);
-
-                        int argIndex = std::get<1>(*curr);
-
-                        std::string * leakyText = new std::string("\"");
-
-                        std::for_each(argReplaceTokens.at(argIndex).begin(),
-                                      argReplaceTokens.at(argIndex).end(),
-                                      [leakyText](AnnotatedToken & token) { leakyText->append(token.token.text.data(), token.token.text.size()); leakyText->push_back(' '); });
-                        leakyText->pop_back();
-                        leakyText->append("\"");
-
-                        Token t;
-                        t.text = *leakyText;
-                        t.type = Token::STRING;
-                        rt2.emplace_back(t);
-                    }
-                    else
-                    {
-                        rt2.emplace_back(*curr);
-                    }
-                }
-                rt.clear();
-                std::swap(rt, rt2);
-                // argument substitution
-                for (auto curr = rt.begin(); curr != rt.end(); ++curr)
-                {
-                    if (curr->index() == 1)
-                    {
-                        int argIndex = std::get<1>(*curr);
-
-                        rt2.insert(rt2.end(),
-                                   argReplaceTokens.at(argIndex).begin(),
-                                   argReplaceTokens.at(argIndex).end());
-                    }
-                    else
-                    {
-                        rt2.emplace_back(*curr);
-                    }
-                }
-                rt.clear();
-                std::swap(rt, rt2);
-                // token-pasting operator (##)
-                assert(rt.front().index() == 1 || std::get<0>(rt.front()).token.type != Token::OP_TOKEN_PASTING);
-                assert(rt.back().index() == 1 || std::get<0>(rt.back()).token.type != Token::OP_TOKEN_PASTING);
-                size_t l = 0;
-                for (size_t m = 1, r = 2;
-                     r < rt.size();
-                     ++l, ++m, ++r)
-                {
-                    if (rt[m].index() == 0 && std::get<0>(rt[m]).token.type == Token::OP_TOKEN_PASTING)
-                    {
-                        // merge, re-pase, insert
-                        std::string * leakyMergedText = new std::string(std::get<0>(rt[l]).token.text + std::get<0>(rt[r]).token.text);
-                        Token mergedToken = ParseOneToken(me, *leakyMergedText);
-                        rt[r] = mergedToken;
-                        // remove 3, insert 1 -> add 2
-                        ++l, ++m, ++r;
-                    }
-                    else
-                    {
-                        rt2.emplace_back(rt[l]);
-                    }
-                }
-                while (l < rt.size())
-                {
-                    rt2.emplace_back(rt[l]);
-                    ++l;
-                }
-
-                std::transform(rt2.rbegin(),
-                               rt2.rend(),
-                               std::front_inserter(unprocessed),
-                               [annotate](const std::variant<AnnotatedToken, int> & v) -> AnnotatedToken { return { std::get<AnnotatedToken>(v).token, annotate }; });
-            }
-            else if (ppt == PPType::COND_INCL)
-            {
-                // expr | body | rest
-                // #if defined ID
-                // #ifdef ID
-                // #ifndef ID
-                // #elif defined ID
-                // #else
-                // #endif
-
-                // 0. input -> tokens
-                // 1. decide tokens -> expr/body/rest
-                // 2. eval expr
-                //      if true, body -> output
-                //      else tokens <- rest, goto 1
-                // 3. insert output to unprocessed
-            }
-            else if (ppt == PPType::FILE_INCL)
-            {
-                // #include local-file/env-file
-
-                // 0. read file to text
-                // 1. call ParseTokens(text) -> tokens
-                // 2. insert tokens to unprocessed
-            }
-        }
-    }
-
-    return out;
-}
-
-// ==== Lexer ====
-
-// Remove /* ... */, keep new line.
-std::string RemoveComments(std::string input)
-{
-    std::string output;
-
-    output.reserve(input.size());
-
-    bool inComment = false;
-    const char * in = input.data();
-    const char * inEnd = input.data() + input.length();
-    while (in < inEnd)
-    {
-        // toggle in comment state
-        if (in + 1 < inEnd)
-        {
-            if (!inComment && *in == '/' && *(in + 1) == '*')
-            {
-                inComment = true;
-                in += 2;
-                continue;
-            }
-            else if (inComment && *in == '*' && *(in + 1) == '/')
-            {
-                inComment = false;
-                in += 2;
-                continue;
-            }
-            else if (!inComment && *in == '/' && *(in + 1) == '/')
-            {
-                ASSERT("C++ comment not allowed" && false);
-            }
-        }
-
-        if (inComment)
-        {
-            // keep new line in comment
-            if (*in == '\n')
-            {
-                output += *in++;
-            }
-            else
-            {
-                ++in;
-            }
-        }
-        else
-        {
-            output += *in++;
-        }
-    }
-
-    ASSERT(!inComment);
-
-    return output;
-}
-
-std::vector<Token> LexProcess(std::string text)
-{
-    MatchEngine matchEngine = Compile(LexPatterns);
-
-    std::vector<Token> tokens;
-
-    tokens = StringToTokens(matchEngine, RemoveComments(text));
-    tokens = FilterTokens(tokens, Token::SPACE);
-    tokens = PreprocessTokens(matchEngine, tokens);
-    tokens = FilterTokens(tokens, Token::NEW_LINE);
-    EvalTokens(tokens);
-
-    return tokens;
-}
-
-// ==== Experiment ====
-
-namespace experiment {
-
-// ==== Token Reader ====
-
-template <typename T>
-class TokenReader
-{
-public:
-    virtual std::vector<Token>      Read(T) = 0;
-};
-
-class FileTokenReader : public TokenReader<std::string>
-{
-public:
-    FileTokenReader(MatchEngine a0)
-        : matchEngine(a0)
-    {}
-
-    std::vector<Token>              Read(std::string fileName) override
-    {
-        return StringToTokens(matchEngine,
-                              RemoveComments(GetFileContent(fileName.data())));
-    }
-
-private:
-    MatchEngine matchEngine;
-};
-
-// ==== Token Filter ====
-
-class TokenFilter
-{
-public:
-    virtual bool                    Filter(const Token &) = 0;
-};
-
-class TypeTokenFilter : public TokenFilter
-{
-public:
-    TypeTokenFilter(Token::Type type)
-        : filteredType(type)
-    {}
-
-    bool                            Filter(const Token & token)
-    {
-        return token.type == filteredType;
-    }
-
-private:
-    Token::Type filteredType;
-};
 
 // ==== Token Replacer ====
-
-struct MacroSubNode
-{
-    std::shared_ptr<MacroSubNode> parent;
-    std::string macroName;
-};
-struct AnnotatedToken
-{
-    Token token;
-    std::shared_ptr<MacroSubNode> macroSubInfo;
-
-    operator Token () { return token; }
-};
-
-typedef std::vector<AnnotatedToken> TokenVector;
-typedef std::list<AnnotatedToken>   TokenList;
-typedef TokenList::iterator         TokenListIterator;
-typedef TokenList::const_iterator   TokenListConstIterator;
-
-AnnotatedToken                  Annotate(Token & token, std::shared_ptr<MacroSubNode> m)
-{
-    return { token, m };
-}
-TokenVector                     AnnotateAll(std::vector<Token> & tokens, std::shared_ptr<MacroSubNode> m)
-{
-    TokenVector atokens;
-    for (Token & token : tokens)
-        atokens.emplace_back(Annotate(token, m));
-    return atokens;
-}
-Token                           DeAnnotate(AnnotatedToken & token)
-{
-    return token.token;
-}
-std::vector<Token>              DeAnnotateAll(TokenVector & tokens)
-{
-    return std::vector<Token>(tokens.begin(), tokens.end());
-}
-
-
-struct TokenRange
-{
-    bool                    Empty() const { return size == 0; }
-    const AnnotatedToken &  First() const { assert(!Empty()); return *begin; }
-    const AnnotatedToken &  Last() const { assert(!Empty()); auto it = end; return *(--it); }
-    size_t                  Size() const { return size; }
-    operator                bool() const { return size > 0; }
-
-    TokenListConstIterator  Begin() const { return begin; }
-    TokenListConstIterator  End() const { return end; }
-
-    TokenListConstIterator begin;
-    TokenListConstIterator end;
-    size_t size;
-};
-struct TokenBuffer
-{
-    bool More() const { return !listToken.empty(); }
-    void Remove(TokenRange range) { listToken.erase(range.begin, range.end); }
-
-    TokenList listToken;
-};
-struct TokenOut
-{
-    enum { INVALID, VECTOR, TOKEN_BUFFER } tag;
-
-    TokenOut()
-        : tag(INVALID)
-        , vecTokens(nullptr)
-        , bufTokens(nullptr)
-    {}
-    TokenOut(TokenVector * a0)
-        : tag(VECTOR)
-        , vecTokens(a0)
-        , bufTokens(nullptr)
-    {}
-    TokenOut(TokenList * a1,
-             TokenListIterator a2)
-        : tag(TOKEN_BUFFER)
-        , vecTokens(nullptr)
-        , bufTokens(a1)
-        , bufInsertPos(a2)
-    {}
-    virtual ~TokenOut() = default;
-
-    virtual void Insert(AnnotatedToken token)
-    {
-        if (tag == VECTOR)
-        {
-            assert(vecTokens);
-            vecTokens->push_back(token);
-        }
-        else
-        {
-            assert(bufTokens);
-            bufTokens->insert(bufInsertPos, token);
-        }
-    }
-
-    TokenVector * vecTokens;
-    TokenList * bufTokens;
-    TokenListIterator bufInsertPos;
-};
-
-TokenRange EmptyRange()
-{
-    static std::list<AnnotatedToken> empty;
-    return { empty.begin(), empty.end(), 0 };
-}
-TokenRange FirstN(TokenRange range, size_t size)
-{
-    assert(size <= range.size);
-    TokenListConstIterator begin, end;
-    begin = end = range.begin;
-    std::advance(end, size);
-    return { begin, end, size };
-}
-TokenRange FromTokenBuffer(TokenBuffer & buffer)
-{
-    return { buffer.listToken.begin(), buffer.listToken.end(), buffer.listToken.size() };
-}
-TokenRange FromRange(TokenListConstIterator begin, TokenListConstIterator end)
-{
-    return { begin, end, static_cast<size_t>(std::distance(begin, end)) };
-}
-// [range.begin, first-token-with-type]
-TokenRange SubrangeUntilIncludeType(TokenRange range, Token::Type type)
-{
-    TokenListConstIterator end = range.begin;
-    while (end != range.end)
-    {
-        if (end->token.type == type)
-            return FromRange(range.begin, ++end);
-        ++end;
-    }
-    return EmptyRange();
-}
-TokenRange SubrangeBeforeTypes(TokenRange range, std::vector<Token::Type> types)
-{
-    TokenListConstIterator end = range.begin;
-    while (end != range.end)
-    {
-        if (std::find(types.begin(), types.end(), end->token.type) != types.end())
-            return FromRange(range.begin, end);
-        ++end;
-    }
-    return EmptyRange();
-}
-TokenBuffer FromVector(TokenVector & tokens)
-{
-    TokenBuffer buffer;
-    buffer.listToken.insert(buffer.listToken.end(),
-                            tokens.begin(),
-                            tokens.end());
-    return buffer;
-}
-TokenOut Inserter(TokenVector & out)
-{
-    return { &out };
-}
-TokenOut Inserter(TokenBuffer & buffer, TokenListConstIterator itConst)
-{
-    TokenListIterator it = buffer.listToken.begin();
-    std::advance(it, std::distance(buffer.listToken.cbegin(), itConst));
-    return { &buffer.listToken, it };
-}
 
 class TokenReplacer
 {
@@ -1241,6 +745,29 @@ public:
         if (range.First().token.type != Token::ID)
             return EmptyRange();
 
+        // Avoid recursive expansion.
+        {
+            TokenListConstIterator begin = range.Begin();
+            TokenListConstIterator end = range.End();
+
+            std::string macroName = begin->token.text;
+
+            bool hasRecursion = false;
+            std::shared_ptr<MacroSubNode> disableChain = begin->macroSubInfo;
+            while (disableChain)
+            {
+                if (disableChain->macroName == macroName)
+                {
+                    hasRecursion = true;
+                    break;
+                }
+                else
+                    disableChain = disableChain->parent;
+            }
+            if (hasRecursion)
+                return EmptyRange();
+        }
+
         auto it = macroContext.macroSubs.find(range.First().token.text);
         if (it == macroContext.macroSubs.end())
             return EmptyRange();
@@ -1279,38 +806,18 @@ public:
         TokenListConstIterator begin = range.Begin();
         TokenListConstIterator end = range.End();
 
+        std::string macroName = begin->token.text;
+        ++begin;
+
+        auto annotation = std::make_shared<MacroSubNode>();
+        annotation->parent = begin->macroSubInfo;
+        annotation->macroName = macroName;
+
         if (macroType == PPType::MACRO_OBJ_SUB)
         {
             // Expand macro object
 
-            std::string macroName = begin->token.text;
-
-            bool hasRecursion = false;
-            std::shared_ptr<MacroSubNode> disableChain = begin->macroSubInfo;
-            while (disableChain)
-            {
-                if (disableChain->macroName == macroName)
-                {
-                    hasRecursion = true;
-                    break;
-                }
-                else
-                    disableChain = disableChain->parent;
-            }
-            if (hasRecursion)
-            {
-                for (auto it = begin; it != end; ++it)
-                {
-                    out.Insert(*it);
-                }
-                return;
-            }
-
             auto & objSub = macroContext.macroSubs.find(macroName)->second.object;
-
-            auto annotation = std::make_shared<MacroSubNode>();
-            annotation->parent = begin->macroSubInfo;
-            annotation->macroName = macroName;
 
             for (auto & token : objSub.replaceTokens)
             {
@@ -1320,37 +827,7 @@ public:
         else if (macroType == PPType::MACRO_FUN_SUB)
         {
             // Expand macro function
-
-            std::string macroName = begin->token.text;
-
-            bool hasRecursion = false;
-            std::shared_ptr<MacroSubNode> disableChain = begin->macroSubInfo;
-            while (disableChain)
-            {
-                if (disableChain->macroName == macroName)
-                {
-                    hasRecursion = true;
-                    break;
-                }
-                else
-                    disableChain = disableChain->parent;
-            }
-            if (hasRecursion)
-            {
-                for (auto it = begin; it != end; ++it)
-                {
-                    out.Insert(*it);
-                }
-                return;
-            }
-
             auto & funcSub = macroContext.macroSubs.find(macroName)->second.function;
-
-            auto annotation = std::make_shared<MacroSubNode>();
-            annotation->parent = begin->macroSubInfo;
-            annotation->macroName = macroName;
-
-            ++begin;
 
             LEX_EXPECT_TOKEN(begin->token, Token::LPAREN);
             ++begin;
@@ -1489,7 +966,7 @@ public:
                 ++l;
             }
 
-            for (auto it = rt2.rbegin(); it != rt2.rend(); ++it)
+            for (auto it = rt2.begin(); it != rt2.end(); ++it)
             {
                 AnnotatedToken token = { std::get<AnnotatedToken>(*it).token, annotation };
                 out.Insert(token);
@@ -1651,10 +1128,10 @@ public:
 private:
     TokenReader<std::string> * trFile;
 };
-class CompoundTokenReplacer : public TokenReplacer
+class ChainedTokenReplacer : public TokenReplacer
 {
 public:
-    CompoundTokenReplacer(std::vector<TokenReplacer *> a0)
+    ChainedTokenReplacer(std::vector<TokenReplacer *> a0)
         : tokenReplacerList(a0)
     {}
 
@@ -1669,13 +1146,13 @@ public:
             else ++acceptedIndex;
         }
 
-        assert(acceptedRange);
         acceptedTokenReplacerIndex = acceptedIndex;
 
         return acceptedRange;
     }
     void                            Replace(TokenRange range, TokenOut & inserter) override
     {
+        assert(acceptedTokenReplacerIndex < tokenReplacerList.size());
         tokenReplacerList[acceptedTokenReplacerIndex]->Replace(range, inserter);
     }
 
@@ -1684,12 +1161,35 @@ private:
     size_t acceptedTokenReplacerIndex;
 };
 
-// ==== Token Filter Adapter ====
+// ==== Token Filter ====
 
-class FilterTokenReader : public TokenReader<std::string>
+// Token -> bool
+
+class TokenFilter
 {
 public:
-    FilterTokenReader(TokenReader<std::string> * a0,
+    virtual bool                    Filter(const Token &) = 0;
+};
+class TypeTokenFilter : public TokenFilter
+{
+public:
+    TypeTokenFilter(Token::Type type)
+        : filteredType(type)
+    {}
+
+    bool                            Filter(const Token & token)
+    {
+        return token.type == filteredType;
+    }
+
+private:
+    Token::Type filteredType;
+};
+
+class FilteredTokenReader : public TokenReader<std::string>
+{
+public:
+    FilteredTokenReader(TokenReader<std::string> * a0,
                       TokenFilter * a1)
         : tokenReader(a0)
         , tokenFilter(a1)
@@ -1717,12 +1217,12 @@ private:
     TokenReader<std::string> * tokenReader;
     TokenFilter * tokenFilter;
 };
-struct FilterTokenOut : public TokenOut
+struct FilteredTokenOut : public TokenOut
 {
     TokenFilter * filter;
     TokenOut & out;
 
-    FilterTokenOut(TokenOut & a0, TokenFilter * a1)
+    FilteredTokenOut(TokenOut & a0, TokenFilter * a1)
         : out(a0)
         , filter(a1)
     {}
@@ -1733,6 +1233,9 @@ struct FilterTokenOut : public TokenOut
             out.Insert(token);
     }
 };
+
+// ==== Print ====
+
 struct PrintTokenOut : public TokenOut
 {
     std::string * printDest;
@@ -1757,6 +1260,53 @@ struct PrintTokenOut : public TokenOut
     }
 };
 
+// ==== Batch ====
+
+template <typename T>
+std::vector<Token> ReadAllTokens(T input, TokenReader<T> & reader)
+{
+    return reader.Read(input);
+}
+std::vector<Token> FilterAllTokens(const std::vector<Token> & input, TokenFilter & filter)
+{
+    std::vector<Token> output;
+
+    std::copy_if(input.begin(),
+                 input.end(),
+                 std::back_inserter(output),
+                 [&filter] (const Token & token) -> bool { return !filter.Filter(token); });
+    
+    return output;
+}
+std::vector<Token> ReplaceAllTokens(const std::vector<Token> & input, TokenReplacer & replacer)
+{
+    std::vector<Token> output;
+
+    TokenBuffer in = FromVector(AnnotateAll(input, {}));
+    while (in.More())
+    {
+        TokenRange all = FromTokenBuffer(in);
+        TokenRange accept = replacer.Accept(all);
+        if (accept.Empty())
+        {
+            output.emplace_back(DeAnnotate(all.First()));
+            in.Remove(FirstN(all, 1));
+        }
+        else
+        {
+            TokenVector tmp;
+            // Ideally should use Inserter(in, accept.End()), but accept.End() moves with Inserter.
+            replacer.Replace(accept, Inserter(tmp));
+            in.Remove(accept);
+            in.listToken.insert(in.listToken.begin(), tmp.begin(), tmp.end());
+        }
+    }
+
+    return output;
+}
+
+// ==== API ====
+
 std::vector<Token> LexProcess(std::string sourceFile, std::string * sourceAfterPreproc)
 {
     TokenVector output;
@@ -1766,10 +1316,10 @@ std::vector<Token> LexProcess(std::string sourceFile, std::string * sourceAfterP
     TokenFilter *                       tfSpace = new TypeTokenFilter({ Token::SPACE });
     TokenFilter *                       tfNewLine = new TypeTokenFilter({ Token::NEW_LINE });
 
-    TokenReader<std::string> *          trFile = new FilterTokenReader(new FileTokenReader(me), tfSpace);
+    TokenReader<std::string> *          trFile = new FilteredTokenReader(new FileTokenReader(me), tfSpace);
 
     TokenOut                            e0 = Inserter(output);
-    FilterTokenOut                      e1(e0, tfNewLine);
+    FilteredTokenOut                    e1(e0, tfNewLine);
     PrintTokenOut                       emitter(e1, sourceAfterPreproc);
 
     EmitTokenReplacer *                 repEmit = new EmitTokenReplacer(emitter);
@@ -1778,7 +1328,7 @@ std::vector<Token> LexProcess(std::string sourceFile, std::string * sourceAfterP
     ConditionalIncludeTokenReplacer *   repCondIncl = new ConditionalIncludeTokenReplacer(repMacroContext->GetMacroContext());
     FileIncludeTokenReplacer *          repFileIncl = new FileIncludeTokenReplacer(trFile);
 
-    CompoundTokenReplacer               repPreproc({ repMacroContext, repMacroSub, repCondIncl, repFileIncl, repEmit });
+    ChainedTokenReplacer                repPreproc({ repMacroContext, repMacroSub, repCondIncl, repFileIncl, repEmit });
 
     TokenVector tokens = AnnotateAll(trFile->Read(sourceFile), {});
     TokenBuffer in = FromVector(tokens);
@@ -1797,10 +1347,6 @@ std::vector<Token> LexProcess(std::string sourceFile, std::string * sourceAfterP
 
     return DeAnnotateAll(output);
 }
-
-}
-
-// ==== Helper ====
 
 TokenIterator::TokenIterator(std::vector<Token> & tokens)
     : tokens_(tokens)
@@ -1846,7 +1392,7 @@ private:
 MatchEngine LexerTest::lexMatcher;
 
 // string -> Token[]
-TEST_F(LexerTest, StringToTokens)
+TEST_F(LexerTest, ParseToken)
 {
     std::string input =
         "while volatile void unsigned union typedef switch struct static sizeof signed short return register long int if goto for float extern enum else double do default continue const char case break auto "
@@ -1963,7 +1509,7 @@ TEST_F(LexerTest, StringToTokens)
     };
     try
     {
-        std::vector<Token> tokens = FilterTokens(StringToTokens(GetMatcher(), input), Token::SPACE);
+        std::vector<Token> tokens = FilterAllTokens(ParseAllTokens(GetMatcher(), input), TypeTokenFilter(Token::SPACE));
         EXPECT_EQ(tokens.size(), output.size());
         for (size_t i = 0; i < output.size(); ++i)
         {
@@ -1983,7 +1529,7 @@ TEST_F(LexerTest, StringToTokens)
 }
 
 // Token[] -> Token[]
-TEST_F(LexerTest, EvalTokens)
+TEST_F(LexerTest, EvalToken)
 {
     std::string input =
         "0 -1 1 2147483647 -2147483648 "
@@ -2006,7 +1552,7 @@ TEST_F(LexerTest, EvalTokens)
     };
     try
     {
-        std::vector<Token> tokens = FilterTokens(StringToTokens(GetMatcher(), input), Token::SPACE);
+        std::vector<Token> tokens = FilterAllTokens(ParseAllTokens(GetMatcher(), input), TypeTokenFilter(Token::SPACE));
         EvalTokens(tokens);
 
         EXPECT_EQ(tokens.size(), output.size());
@@ -2033,40 +1579,45 @@ TEST_F(LexerTest, EvalTokens)
 }
 
 // Token[] -> Token[]
-TEST_F(LexerTest, PreprocessTokens)
+TEST_F(LexerTest, MacroSubstitution)
 {
     try
     {
         std::string input =
-            "#define I 5                \n"
-            "#define ADD(a, b) (a + b)  \n"
-            "#define STR(x) #x          \n"
-            "#define CONCAT(x, y) x##y  \n"
-            "#define FOO(x) BAR(x)BAR(x)\n"
-            "#define BAR(x) FOO(x)      \n"
-            "I                          \n"
-            "ADD(2, 3)                  \n"
-            "ADD(I, I)                  \n"
-            "STR(apple)                 \n"
-            "CONCAT(ye, ah)             \n"
-            "FOO(a)                     \n"
-            "BAR(a)                     \n"
+            "#define I 5                 \n"
+            "#define ADD(a, b) (a + b)   \n"
+            "#define STR(x) #x           \n"
+            "#define CONCAT(x, y) x##y   \n"
+            "#define FOO(x) BAR(x)BAR(x) \n"
+            "#define BAR(x) FOO(x)       \n"
+            "I                           \n"
+            "ADD(2, 3)                   \n"
+            "ADD(I, I)                   \n"
+            "STR(apple)                  \n"
+            "CONCAT(ye, ah)              \n"
+            "FOO(a)                      \n"
+            "BAR(a)                      \n"
             ;
         std::string output =
-            "5                          \n"
-            "(2 + 3)                    \n"
-            "(5 + 5)                    \n"
-            "\"apple\"                  \n"
-            "yeah                       \n"
-            "FOO(a) FOO(a)              \n"
-            "BAR(a) BAR(a)              \n"
+            "5                           \n"
+            "(2 + 3)                     \n"
+            "(5 + 5)                     \n"
+            "\"apple\"                   \n"
+            "yeah                        \n"
+            "FOO(a) FOO(a)               \n"
+            "BAR(a) BAR(a)               \n"
             ;
 
-        std::vector<Token> expectTokens = FilterTokens(StringToTokens(GetMatcher(), output), Token::SPACE);
+        std::vector<Token>          expectTokens = FilterAllTokens(ParseAllTokens(GetMatcher(), output),
+                                                                   TypeTokenFilter(Token::SPACE));
 
-        std::vector<Token> inputTokens = FilterTokens(StringToTokens(GetMatcher(), input), Token::SPACE);
-        std::vector<Token> actualTokens = PreprocessTokens(GetMatcher(), inputTokens);
-
+        MacroContextTokenReplacer   repMacroContext ;
+        MacroSubTokenReplacer       repMacroSub(repMacroContext.GetMacroContext(), GetMatcher());
+        ChainedTokenReplacer        rep({ &repMacroContext, &repMacroSub });
+        std::vector<Token>          actualTokens = ReplaceAllTokens(FilterAllTokens(ParseAllTokens(GetMatcher(), input),
+                                                                                    TypeTokenFilter(Token::SPACE)),
+                                                                    rep);
+        
         EXPECT_EQ(actualTokens.size(), expectTokens.size());
         for (size_t i = 0; i < expectTokens.size(); ++i)
         {

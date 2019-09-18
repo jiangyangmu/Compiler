@@ -22,7 +22,7 @@ std::string Compile(std::string fileName)
 {
     // 1. Token
     std::string sourceAfterPreproc;
-    std::vector<Token> tokens = ::experiment::LexProcess(fileName, &sourceAfterPreproc);
+    std::vector<Token> tokens = LexProcess(fileName, &sourceAfterPreproc);
     TokenIterator ti(tokens);
 
     std::cout << "Source:" << std::endl << sourceAfterPreproc << std::endl;
