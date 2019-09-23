@@ -24,7 +24,7 @@
 
 */
 
-// ==== Entity: Left, Right ====
+// ==== Entity: Left, Right, Grammer ====
 
 typedef std::string Token;
 struct TokenIterator
@@ -62,91 +62,160 @@ struct TokenMatcher
 
 typedef std::string Left;
 
-// Right type
+// Right node type
 // * Left reference
 // * Token matcher
 // * Structural
-struct Right
+struct RightNode
 {
+    enum Type { LEFT_REF, TOKEN_MATCHER, STRUCTURAL };
+
     Left * leftRef;
     TokenMatcher * tokenMatcher;
 
-    Right * next;
-    Right * alt;
+    RightNode * next;
+    RightNode * alt;
 };
-Right * FromLeftRef(Left left)
+struct Right
 {
-    Right * right = new Right;
-    right->leftRef = new Left(left);
-    right->tokenMatcher = nullptr;
-    right->next = nullptr;
-    right->alt = nullptr;
-    return right;
+    RightNode * in;
+    RightNode ** next;
+    RightNode ** alt;
+};
+RightNode * FromLeftRef(Left left)
+{
+    RightNode * node = new RightNode;
+    node->leftRef = new Left(left);
+    node->tokenMatcher = nullptr;
+    node->next = nullptr;
+    node->alt = nullptr;
+    return node;
 }
-Right * FromTokenMatcher(TokenMatcher tm)
+RightNode * FromTokenMatcher(TokenMatcher tm)
 {
-    Right * right = new Right;
-    right->leftRef = nullptr;
-    right->tokenMatcher = new TokenMatcher(tm);
-    right->next = nullptr;
-    right->alt = nullptr;
-    return right;
+    RightNode * node = new RightNode;
+    node->leftRef = nullptr;
+    node->tokenMatcher = new TokenMatcher(tm);
+    node->next = nullptr;
+    node->alt = nullptr;
+    return node;
 }
-bool IsTerm(Right * right)
+RightNode * NewStructural()
 {
-    return right->tokenMatcher != nullptr;
+    RightNode * node = new RightNode;
+    node->leftRef = nullptr;
+    node->tokenMatcher = nullptr;
+    node->next = nullptr;
+    node->alt = nullptr;
+    return node;
+}
+Right Node(RightNode * node)
+{
+    return { node, &node->next, &node->alt };
+}
+Right Concat(Right r1, Right r2)
+{
+    *r1.next = r2.in;
+
+    return { r1.in, r2.next , r1.alt };
+}
+Right Rep1(Right right)
+{
+    RightNode * st = NewStructural();
+    st->alt = right.in;
+    *right.next = st;
+
+    return { right.in, &st->next, right.alt };
+}
+RightNode::Type GetType(RightNode * node)
+{
+    if (node->leftRef)
+        return RightNode::LEFT_REF;
+    else if (node->tokenMatcher)
+        return RightNode::TOKEN_MATCHER;
+    else
+        return RightNode::STRUCTURAL;
 }
 
 struct Grammer
 {
-    static void Init()
+    static Right Expand(Left left)
     {
         if (rules.empty())
         {
-            auto b = FromLeftRef("B");
-            auto c = FromLeftRef("C");
-            auto d = FromLeftRef("D");
-            b->next = c; c->next = d;
-
-            rules["A"] = b;
-            rules["B"] = FromTokenMatcher(TokenMatcher("b"));
-            rules["C"] = FromTokenMatcher(TokenMatcher("c"));
-            rules["D"] = FromTokenMatcher(TokenMatcher("d"));
+            rules["A"] =
+                Concat(Concat(
+                    Node(FromLeftRef("B")),
+                    Rep1(Node(FromLeftRef("C")))),
+                    Node(FromLeftRef("D")));
+            rules["B"] = Node(FromTokenMatcher(TokenMatcher("b")));
+            rules["C"] = Node(FromTokenMatcher(TokenMatcher("c")));
+            rules["D"] = Node(FromTokenMatcher(TokenMatcher("d")));
         }
-    }
-    static Right * Expand(Left left)
-    {
-        Init();
         return rules.at(left);
     }
 
-    static std::map<Left, Right *> rules;
+    static std::map<Left, Right> rules;
 };
-std::map<Left, Right *> Grammer::rules;
+std::map<Left, Right> Grammer::rules;
 
 // ==== Non-Term ====
 
-bool First(Left left, TokenIterator & ti)
+bool FIRST(Left left, TokenIterator & ti)
 {
-    Right * right = Grammer::Expand(left);
-    if (IsTerm(right))
+    // assert no left recursion
+    RightNode * right = Grammer::Expand(left).in;
+    
+    bool result = false;
+    switch (GetType(right))
     {
-        return right->tokenMatcher->Match(ti.Peek());
+        case RightNode::LEFT_REF:       result = FIRST(*right->leftRef, ti); break;
+        case RightNode::TOKEN_MATCHER:  result = right->tokenMatcher->Match(ti.Peek()); break;
+        default:                        assert(false); break;
     }
-    else
+    return result;
+}
+std::set<RightNode *> Closure(RightNode * right)
+{
+    std::set<RightNode *> clo;
+
+    std::vector<RightNode *> q = { right };
+    std::set<RightNode *> visited = { nullptr };
+    while (!q.empty())
     {
-        return First(*right->leftRef, ti);
+        RightNode * r = q.back();
+        q.pop_back();
+
+        if (visited.find(r) != visited.end())
+            continue;
+        else
+            visited.insert(r);
+
+        if (GetType(r) != RightNode::STRUCTURAL)
+            clo.insert(r);
+
+        if (GetType(r) == RightNode::STRUCTURAL)
+            q.push_back(r->next);
+        q.push_back(r->alt);
     }
+
+    return clo;
 }
 // First x (all alt + all with null left)
-Right * Predict(Right * node, TokenIterator & ti)
+RightNode * Predict(RightNode * node, TokenIterator & ti)
 {
-    for (Right * n = node; n; n = n->alt)
+    RightNode * pred = nullptr;
+    int count = 0;
+    for (RightNode * n : Closure(node))
     {
-        if (First(*n->leftRef, ti))
-            return n;
+        if (FIRST(*n->leftRef, ti))
+        {
+            pred = n;
+            ++count;
+        }
     }
-    return nullptr;
+    assert(count <= 1);
+    return pred;
 }
 
 // ==== API ====
@@ -167,30 +236,32 @@ void Parse(Left left, Visitor & vi, TokenIterator & ti)
 {
     vi.Before(left);
     
-    Right * right = Grammer::Expand(left);
-    if (IsTerm(right))
+    RightNode * right = Grammer::Expand(left).in;
+    RightNode::Type type = GetType(right);
+    if (type == RightNode::TOKEN_MATCHER)
     {
         // Match terminal
         assert(right->tokenMatcher->Match(ti.Next()));
     }
-    else
+    else if (type == RightNode::LEFT_REF)
     {
-        Right * next = right;
+        RightNode * next = right;
         while ((next = Predict(next, ti)) != nullptr)
         {
             Parse(*next->leftRef, vi, ti);
             next = next->next;
         }
     }
+    else
+    {
+        assert(false);
+    }
     vi.After(left);
 }
-
-// TODO: production construction API
-// TODO: string -> production
 
 void Test_ParserGen()
 {
     Visitor vi;
-    TokenIterator ti({"b", "c", "d"});
+    TokenIterator ti({ "b", "c","c","c","c", "d" });
     Parse("A", vi, ti);
 }
