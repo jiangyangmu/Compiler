@@ -24,84 +24,118 @@
 
 */
 
+// ==== Entity: Left, Right ====
+
+typedef std::string Token;
 struct TokenIterator
 {
-    TokenIterator(std::string str)
-        : s(str)
+    TokenIterator(std::vector<Token> t)
+        : tokens(t)
         , i(0)
     {}
 
-    char Peek()
+    const std::string & Peek()
     {
-        return s.at(i);
+        return tokens.at(i);
     }
-    char Next()
+    const std::string & Next()
     {
-        return s.at(i++);
+        return tokens.at(i++);
     }
 
-    std::string s;
+    std::vector<Token> tokens;
     size_t i;
 };
-typedef char Left;
+struct TokenMatcher
+{
+    TokenMatcher(Token token)
+        : testToken(token)
+    {}
 
+    bool Match(const Token & token)
+    {
+        return testToken == token;
+    }
+
+    Token testToken;
+};
+
+typedef std::string Left;
+
+// Right type
+// * Left reference
+// * Token matcher
+// * Structural
 struct Right
 {
-    Left left;
+    Left * leftRef;
+    TokenMatcher * tokenMatcher;
+
     Right * next;
     Right * alt;
 };
-Right * Node(Left left)
+Right * FromLeftRef(Left left)
 {
     Right * right = new Right;
-    right->left = left;
+    right->leftRef = new Left(left);
+    right->tokenMatcher = nullptr;
     right->next = nullptr;
     right->alt = nullptr;
     return right;
 }
+Right * FromTokenMatcher(TokenMatcher tm)
+{
+    Right * right = new Right;
+    right->leftRef = nullptr;
+    right->tokenMatcher = new TokenMatcher(tm);
+    right->next = nullptr;
+    right->alt = nullptr;
+    return right;
+}
+bool IsTerm(Right * right)
+{
+    return right->tokenMatcher != nullptr;
+}
 
 struct Grammer
 {
-    static Right * ExpandNonTerm(Left left)
+    static void Init()
     {
-        static std::map<Left, Right *> nonTerms;
-        if (nonTerms.empty())
+        if (rules.empty())
         {
-            auto b = Node('B'); auto c = Node('C'); auto d = Node('D');
+            auto b = FromLeftRef("B");
+            auto c = FromLeftRef("C");
+            auto d = FromLeftRef("D");
             b->next = c; c->next = d;
-            nonTerms['A'] = b;
+
+            rules["A"] = b;
+            rules["B"] = FromTokenMatcher(TokenMatcher("b"));
+            rules["C"] = FromTokenMatcher(TokenMatcher("c"));
+            rules["D"] = FromTokenMatcher(TokenMatcher("d"));
         }
-        return nonTerms.at(left);
     }
-    static char ExpandTerm(Left left)
+    static Right * Expand(Left left)
     {
-        static std::map<Left, char> terms;
-        if (terms.empty())
-        {
-            terms['B'] = 'b';
-            terms['C'] = 'c';
-            terms['D'] = 'd';
-        }
-        return terms.at(left);
+        Init();
+        return rules.at(left);
     }
-    static bool IsTerm(Left left)
-    {
-        return 'B' <= left && left <= 'D';
-    }
+
+    static std::map<Left, Right *> rules;
 };
+std::map<Left, Right *> Grammer::rules;
 
 // ==== Non-Term ====
+
 bool First(Left left, TokenIterator & ti)
 {
-    if (Grammer::IsTerm(left))
+    Right * right = Grammer::Expand(left);
+    if (IsTerm(right))
     {
-        char term = Grammer::ExpandTerm(left);
-        return term == ti.Peek();
+        return right->tokenMatcher->Match(ti.Peek());
     }
     else
     {
-        Right * right = Grammer::ExpandNonTerm(left);
-        return First(right->left, ti);
+        return First(*right->leftRef, ti);
     }
 }
 // First x (all alt + all with null left)
@@ -109,50 +143,54 @@ Right * Predict(Right * node, TokenIterator & ti)
 {
     for (Right * n = node; n; n = n->alt)
     {
-        if (First(n->left, ti))
+        if (First(*n->leftRef, ti))
             return n;
     }
     return nullptr;
 }
 
+// ==== API ====
+
 struct Visitor
 {
     void Before(Left left)
     {
-        std::cout << "Before " << left << std::endl;
+        std::cout << "Before " << left.data() << std::endl;
     }
     void After(Left left)
-{
-    std::cout << "After " << left << std::endl;
-}
+    {
+        std::cout << "After " << left.data() << std::endl;
+    }
 };
 
 void Parse(Left left, Visitor & vi, TokenIterator & ti)
 {
     vi.Before(left);
-    if (Grammer::IsTerm(left))
+    
+    Right * right = Grammer::Expand(left);
+    if (IsTerm(right))
     {
-        Left term = Grammer::ExpandTerm(left);
         // Match terminal
-        assert(term == tolower(ti.Next()));
+        assert(right->tokenMatcher->Match(ti.Next()));
     }
     else
     {
-        Right * right = Grammer::ExpandNonTerm(left);
-    
         Right * next = right;
         while ((next = Predict(next, ti)) != nullptr)
         {
-            Parse(next->left, vi, ti);
+            Parse(*next->leftRef, vi, ti);
             next = next->next;
         }
     }
     vi.After(left);
 }
 
+// TODO: production construction API
+// TODO: string -> production
+
 void Test_ParserGen()
 {
     Visitor vi;
-    TokenIterator ti("bcd");
-    Parse('A', vi, ti);
+    TokenIterator ti({"b", "c", "d"});
+    Parse("A", vi, ti);
 }
