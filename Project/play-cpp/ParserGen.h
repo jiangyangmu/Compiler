@@ -137,39 +137,23 @@ RightNode::Type GetType(RightNode * node)
         return RightNode::STRUCTURAL;
 }
 
-struct Grammer
+class Grammer
 {
-    static Right Expand(Left left)
-    {
-        if (rules.empty())
-        {
-            rules["A"] =
-                Concat(Concat(
-                    Node(FromLeftRef("B")),
-                    Rep1(Node(FromLeftRef("C")))),
-                    Node(FromLeftRef("D")));
-            rules["B"] = Node(FromTokenMatcher(TokenMatcher("b")));
-            rules["C"] = Node(FromTokenMatcher(TokenMatcher("c")));
-            rules["D"] = Node(FromTokenMatcher(TokenMatcher("d")));
-        }
-        return rules.at(left);
-    }
-
-    static std::map<Left, Right> rules;
+public:
+    virtual Right Expand(Left left) = 0;
 };
-std::map<Left, Right> Grammer::rules;
 
-// ==== Non-Term ====
+// ==== Parse Helper ====
 
-bool FIRST(Left left, TokenIterator & ti)
+bool FIRST(Left left, Grammer & g, TokenIterator & ti)
 {
     // assert no left recursion
-    RightNode * right = Grammer::Expand(left).in;
+    RightNode * right = g.Expand(left).in;
     
     bool result = false;
     switch (GetType(right))
     {
-        case RightNode::LEFT_REF:       result = FIRST(*right->leftRef, ti); break;
+        case RightNode::LEFT_REF:       result = FIRST(*right->leftRef, g, ti); break;
         case RightNode::TOKEN_MATCHER:  result = right->tokenMatcher->Match(ti.Peek()); break;
         default:                        assert(false); break;
     }
@@ -202,13 +186,13 @@ std::set<RightNode *> Closure(RightNode * right)
     return clo;
 }
 // First x (all alt + all with null left)
-RightNode * Predict(RightNode * node, TokenIterator & ti)
+RightNode * Predict(RightNode * node, Grammer & g, TokenIterator & ti)
 {
     RightNode * pred = nullptr;
     int count = 0;
     for (RightNode * n : Closure(node))
     {
-        if (FIRST(*n->leftRef, ti))
+        if (FIRST(*n->leftRef, g, ti))
         {
             pred = n;
             ++count;
@@ -232,11 +216,11 @@ struct Visitor
     }
 };
 
-void Parse(Left left, Visitor & vi, TokenIterator & ti)
+void Parse(Left left, Grammer & g, Visitor & vi, TokenIterator & ti)
 {
     vi.Before(left);
     
-    RightNode * right = Grammer::Expand(left).in;
+    RightNode * right = g.Expand(left).in;
     RightNode::Type type = GetType(right);
     if (type == RightNode::TOKEN_MATCHER)
     {
@@ -246,9 +230,9 @@ void Parse(Left left, Visitor & vi, TokenIterator & ti)
     else if (type == RightNode::LEFT_REF)
     {
         RightNode * next = right;
-        while ((next = Predict(next, ti)) != nullptr)
+        while ((next = Predict(next, g, ti)) != nullptr)
         {
-            Parse(*next->leftRef, vi, ti);
+            Parse(*next->leftRef, g, vi, ti);
             next = next->next;
         }
     }
@@ -259,9 +243,36 @@ void Parse(Left left, Visitor & vi, TokenIterator & ti)
     vi.After(left);
 }
 
-void Test_ParserGen()
+void Test_ABCD()
 {
+    class ABCDGrammer : public Grammer
+    {
+    public:
+        Right Expand(Left left) override
+        {
+            if (rules.empty())
+            {
+                rules["A"] =
+                    Concat(Concat(
+                        Node(FromLeftRef("B")),
+                        Rep1(Node(FromLeftRef("C")))),
+                        Node(FromLeftRef("D")));
+                rules["B"] = Node(FromTokenMatcher(TokenMatcher("b")));
+                rules["C"] = Node(FromTokenMatcher(TokenMatcher("c")));
+                rules["D"] = Node(FromTokenMatcher(TokenMatcher("d")));
+            }
+            return rules.at(left);
+        }
+
+        std::map<Left, Right> rules;
+    } abcd;
+
     Visitor vi;
     TokenIterator ti({ "b", "c","c","c","c", "d" });
-    Parse("A", vi, ti);
+    Parse("A", abcd, vi, ti);
+}
+
+void Test_ParserGen()
+{
+    Test_ABCD();
 }
