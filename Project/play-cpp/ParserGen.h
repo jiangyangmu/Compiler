@@ -32,7 +32,9 @@ struct TokenIterator
     TokenIterator(std::vector<Token> t)
         : tokens(t)
         , i(0)
-    {}
+    {
+        tokens.push_back("");
+    }
 
     const std::string & Peek()
     {
@@ -48,16 +50,44 @@ struct TokenIterator
 };
 struct TokenMatcher
 {
-    TokenMatcher(Token token)
+    virtual bool Match(const Token & token) = 0;
+};
+struct ExactMatcher : public TokenMatcher
+{
+    ExactMatcher(Token token)
         : testToken(token)
     {}
 
-    bool Match(const Token & token)
+    bool Match(const Token & token) override
     {
         return testToken == token;
     }
 
     Token testToken;
+};
+struct IdMatcher : public TokenMatcher
+{
+    bool Match(const Token & token) override
+    {
+        for (char c : token)
+        {
+            if (c != '_' && !isalpha(c))
+                return false;
+        }
+        return true;
+    }
+};
+struct NumberMatcher : public TokenMatcher
+{
+    bool Match(const Token & token) override
+    {
+        for (char c : token)
+        {
+            if (!isdigit(c))
+                return false;
+        }
+        return true;
+    }
 };
 
 typedef std::string Left;
@@ -91,11 +121,11 @@ RightNode * FromLeftRef(Left left)
     node->alt = nullptr;
     return node;
 }
-RightNode * FromTokenMatcher(TokenMatcher tm)
+RightNode * FromTokenMatcher(TokenMatcher * tm)
 {
     RightNode * node = new RightNode;
     node->leftRef = nullptr;
-    node->tokenMatcher = new TokenMatcher(tm);
+    node->tokenMatcher = tm;
     node->next = nullptr;
     node->alt = nullptr;
     return node;
@@ -119,13 +149,38 @@ Right Concat(Right r1, Right r2)
 
     return { r1.in, r2.next , r1.alt };
 }
+Right Alt(Right r1, Right r2)
+{
+    RightNode * n = NewStructural();
+    *r1.next = n;
+    *r1.alt = r2.in;
+    *r2.next = n;
+
+    return { r1.in, &n->next, r2.alt };
+}
+Right Rep0(Right r)
+{
+    RightNode * n = NewStructural();
+    n->alt = r.in;
+    *r.next = n;
+
+    return { n, &n->next, r.alt };
+}
 Right Rep1(Right right)
 {
-    RightNode * st = NewStructural();
-    st->alt = right.in;
-    *right.next = st;
+    RightNode * n = NewStructural();
+    n->alt = right.in;
+    *right.next = n;
 
-    return { right.in, &st->next, right.alt };
+    return { right.in, &n->next, right.alt };
+}
+Right Opt(Right r)
+{
+    RightNode * n = NewStructural();
+    *r.next = n;
+    *r.alt = n;
+
+    return { r.in, &n->next, &n->alt };
 }
 RightNode::Type GetType(RightNode * node)
 {
@@ -208,12 +263,16 @@ struct Visitor
 {
     void Before(Left left)
     {
-        std::cout << "Before " << left.data() << std::endl;
+        std::cout << indent.data() << "Before " << left.data() << std::endl;
+        indent += "  ";
     }
     void After(Left left)
     {
-        std::cout << "After " << left.data() << std::endl;
+        indent.pop_back();
+        indent.pop_back();
+        std::cout << indent.data() << "After " << left.data() << std::endl;
     }
+    std::string indent;
 };
 
 void Parse(Left left, Grammer & g, Visitor & vi, TokenIterator & ti)
@@ -243,36 +302,239 @@ void Parse(Left left, Grammer & g, Visitor & vi, TokenIterator & ti)
     vi.After(left);
 }
 
-void Test_ABCD()
+void Test_ParserGen_ABCD()
 {
-    class ABCDGrammer : public Grammer
+    /*
+        A -> BCD
+        B -> b
+        C -> c
+        D -> d
+    */
     {
-    public:
-        Right Expand(Left left) override
+        class ABCDGrammer : public Grammer
         {
-            if (rules.empty())
+        public:
+            Right Expand(Left left) override
             {
-                rules["A"] =
-                    Concat(Concat(
-                        Node(FromLeftRef("B")),
-                        Rep1(Node(FromLeftRef("C")))),
-                        Node(FromLeftRef("D")));
-                rules["B"] = Node(FromTokenMatcher(TokenMatcher("b")));
-                rules["C"] = Node(FromTokenMatcher(TokenMatcher("c")));
-                rules["D"] = Node(FromTokenMatcher(TokenMatcher("d")));
+                if (rules.empty())
+                {
+                    rules["A"] =
+                        Concat(Concat(
+                            Node(FromLeftRef("B")),
+                            Node(FromLeftRef("C"))),
+                            Node(FromLeftRef("D")));
+                    rules["B"] = Node(FromTokenMatcher(new ExactMatcher("b")));
+                    rules["C"] = Node(FromTokenMatcher(new ExactMatcher("c")));
+                    rules["D"] = Node(FromTokenMatcher(new ExactMatcher("d")));
+                }
+                return rules.at(left);
             }
-            return rules.at(left);
+
+            std::map<Left, Right> rules;
+        } abcd;
+
+        Visitor vi;
+        TokenIterator ti({ "b", "c", "d" });
+        Parse("A", abcd, vi, ti);
+    }
+
+    /*
+        A -> B|C|D
+        B -> b
+        C -> c
+        D -> d
+    */
+    {
+        class ABCDGrammer : public Grammer
+        {
+        public:
+            Right Expand(Left left) override
+            {
+                if (rules.empty())
+                {
+                    rules["A"] =
+                        Alt(Alt(
+                            Node(FromLeftRef("B")),
+                            Node(FromLeftRef("C"))),
+                            Node(FromLeftRef("D")));
+                    rules["B"] = Node(FromTokenMatcher(new ExactMatcher("b")));
+                    rules["C"] = Node(FromTokenMatcher(new ExactMatcher("c")));
+                    rules["D"] = Node(FromTokenMatcher(new ExactMatcher("d")));
+                }
+                return rules.at(left);
+            }
+
+            std::map<Left, Right> rules;
+        } abcd;
+
+        {
+            Visitor vi;
+            TokenIterator ti({ "b" });
+            Parse("A", abcd, vi, ti);
         }
+        {
+            Visitor vi;
+            TokenIterator ti({ "c" });
+            Parse("A", abcd, vi, ti);
+        }
+        {
+            Visitor vi;
+            TokenIterator ti({ "d" });
+            Parse("A", abcd, vi, ti);
+        }
+    }
 
-        std::map<Left, Right> rules;
-    } abcd;
+    /*
+        A -> B?C*D+
+        B -> b
+        C -> c
+        D -> d
+    */
+    {
+        class ABCDGrammer : public Grammer
+        {
+        public:
+            Right Expand(Left left) override
+            {
+                if (rules.empty())
+                {
+                    rules["A"] =
+                        Concat(Concat(
+                            Opt(Node(FromLeftRef("B"))),
+                            Rep0(Node(FromLeftRef("C")))),
+                            Rep1(Node(FromLeftRef("D"))));
+                    rules["B"] = Node(FromTokenMatcher(new ExactMatcher("b")));
+                    rules["C"] = Node(FromTokenMatcher(new ExactMatcher("c")));
+                    rules["D"] = Node(FromTokenMatcher(new ExactMatcher("d")));
+                }
+                return rules.at(left);
+            }
 
-    Visitor vi;
-    TokenIterator ti({ "b", "c","c","c","c", "d" });
-    Parse("A", abcd, vi, ti);
+            std::map<Left, Right> rules;
+        } abcd;
+
+        {
+            Visitor vi;
+            TokenIterator ti({ "b", "c", "d" });
+            Parse("A", abcd, vi, ti);
+        }
+        {
+            Visitor vi;
+            TokenIterator ti({ "c", "d" });
+            Parse("A", abcd, vi, ti);
+        }
+        {
+            Visitor vi;
+            TokenIterator ti({ "b", "d" });
+            Parse("A", abcd, vi, ti);
+        }
+        {
+            Visitor vi;
+            TokenIterator ti({ "b", "c", "c", "d" });
+            Parse("A", abcd, vi, ti);
+        }
+        {
+            Visitor vi;
+            TokenIterator ti({ "b", "c", "d", "d" });
+            Parse("A", abcd, vi, ti);
+        }
+    }
+}
+
+std::vector<Token> Tokenize(std::string str)
+{
+    std::vector<Token> tokens;
+    Token t;
+    for (char c : str)
+    {
+        if (isspace(c))
+        {
+            if (!t.empty())
+            {
+                tokens.emplace_back();
+                std::swap(tokens.back(), t);
+            }
+        }
+        else
+        {
+            t.push_back(c);
+        }
+    }
+    if (!t.empty())
+    {
+        tokens.emplace_back();
+        std::swap(tokens.back(), t);
+    }
+    return tokens;
+}
+
+void Test_ParserGen_Decl()
+{
+    /*
+        declarator  := ( pointer )? ( identifier | '(' declarator ')' ) ( '[' [constant_expr] ']' | '(' ')' )*
+        pointer     := ( '*' )+
+        identifier  := '\w+'
+        constant_expr := '\d+'
+    */
+    {
+        class DeclGrammer : public Grammer
+        {
+        public:
+            Right Expand(Left left) override
+            {
+                if (rules.empty())
+                {
+                    rules["declarator"] =
+                        Concat(Concat(
+                            Node(FromLeftRef("pointer")),
+                            Alt(
+                                Node(FromLeftRef("identifier")),
+                                Concat(Concat(
+                                    Node(FromLeftRef("LP")),
+                                    Node(FromLeftRef("declarator"))),
+                                    Node(FromLeftRef("RP"))))),
+                            Rep0(
+                                Alt(
+                                    Concat(Concat(
+                                        Node(FromLeftRef("LSB")),
+                                        Node(FromLeftRef("constant_expr"))),
+                                        Node(FromLeftRef("RSB"))),
+                                    Concat(
+                                        Node(FromLeftRef("LP")),
+                                        Node(FromLeftRef("RP"))))));
+                    rules["pointer"] =
+                        Rep1(
+                            Node(FromLeftRef("STAR")));
+                    rules["identifier"] =
+                        Node(FromTokenMatcher(new IdMatcher()));
+                    rules["constant_expr"] =
+                        Node(FromTokenMatcher(new NumberMatcher()));
+                    rules["LP"] =
+                        Node(FromTokenMatcher(new ExactMatcher("(")));
+                    rules["RP"] =
+                        Node(FromTokenMatcher(new ExactMatcher(")")));
+                    rules["LSB"] =
+                        Node(FromTokenMatcher(new ExactMatcher("[")));
+                    rules["RSB"] =
+                        Node(FromTokenMatcher(new ExactMatcher("]")));
+                    rules["STAR"] =
+                        Node(FromTokenMatcher(new ExactMatcher("*")));
+                }
+                return rules.at(left);
+            }
+
+            std::map<Left, Right> rules;
+        } decl;
+
+        Visitor vi;
+        TokenIterator ti(Tokenize("* ( * p ) [ 3 ] [ 10 ]"));
+        Parse("declarator", decl, vi, ti);
+    }
+
 }
 
 void Test_ParserGen()
 {
-    Test_ABCD();
+    Test_ParserGen_ABCD();
+    Test_ParserGen_Decl();
 }
