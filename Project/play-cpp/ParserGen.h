@@ -24,7 +24,7 @@
 
 */
 
-// ==== Entity: Left, Right, Grammer ====
+// ==== Token Iterator & Matcher ====
 
 typedef std::string Token;
 struct TokenIterator
@@ -65,6 +65,24 @@ struct ExactMatcher : public TokenMatcher
 
     Token testToken;
 };
+struct MultiExactMatcher : public TokenMatcher
+{
+    MultiExactMatcher(std::vector<Token> tokens)
+        : testTokens(tokens)
+    {}
+
+    bool Match(const Token & token) override
+    {
+        for (const Token & testToken : testTokens)
+        {
+            if (testToken == token)
+                return true;
+        }
+        return false;
+    }
+
+    std::vector<Token> testTokens;
+};
 struct IdMatcher : public TokenMatcher
 {
     bool Match(const Token & token) override
@@ -89,6 +107,8 @@ struct NumberMatcher : public TokenMatcher
         return true;
     }
 };
+
+// ==== Grammer ====
 
 typedef std::string Left;
 
@@ -210,7 +230,12 @@ bool FIRST(Left left, Grammer & g, TokenIterator & ti)
     {
         case RightNode::LEFT_REF:       result = FIRST(*right->leftRef, g, ti); break;
         case RightNode::TOKEN_MATCHER:  result = right->tokenMatcher->Match(ti.Peek()); break;
-        default:                        assert(false); break;
+        default:
+            if (right->next)
+                result = FIRST(*right->next->leftRef, g, ti);
+            if (!result && right->alt)
+                result = FIRST(*right->alt->leftRef, g, ti);
+            break;
     }
     return result;
 }
@@ -241,11 +266,11 @@ std::set<RightNode *> Closure(RightNode * right)
     return clo;
 }
 // First x (all alt + all with null left)
-RightNode * Predict(RightNode * node, Grammer & g, TokenIterator & ti)
+RightNode * Predict(std::set<RightNode *> nodes, Grammer & g, TokenIterator & ti)
 {
     RightNode * pred = nullptr;
     int count = 0;
-    for (RightNode * n : Closure(node))
+    for (RightNode * n : nodes)
     {
         if (FIRST(*n->leftRef, g, ti))
         {
@@ -261,45 +286,50 @@ RightNode * Predict(RightNode * node, Grammer & g, TokenIterator & ti)
 
 struct Visitor
 {
-    void Before(Left left)
+    void Before(Left left, const Token * token = nullptr)
     {
-        std::cout << indent.data() << "Before " << left.data() << std::endl;
+        std::cout << indent.data() << "Before " << left.data() << " " << (token ? token->data() : "") << std::endl;
         indent += "  ";
     }
-    void After(Left left)
+    void After(Left left, const Token * token = nullptr)
     {
         indent.pop_back();
         indent.pop_back();
-        std::cout << indent.data() << "After " << left.data() << std::endl;
+        std::cout << indent.data() << "After " << left.data() << " " << (token ? token->data() : "") << std::endl;
     }
     std::string indent;
 };
 
 void Parse(Left left, Grammer & g, Visitor & vi, TokenIterator & ti)
 {
-    vi.Before(left);
+    // Left -> TokenMatcher
+    // Left -> (LeftRef|Structural)*
     
     RightNode * right = g.Expand(left).in;
     RightNode::Type type = GetType(right);
     if (type == RightNode::TOKEN_MATCHER)
     {
+        Token token = ti.Peek();
+        vi.Before(left, &token);
+
         // Match terminal
         assert(right->tokenMatcher->Match(ti.Next()));
+    
+        vi.After(left, &token);
     }
-    else if (type == RightNode::LEFT_REF)
+    else
     {
+        vi.Before(left);
+
         RightNode * next = right;
-        while ((next = Predict(next, g, ti)) != nullptr)
+        while ((next = Predict(Closure(next), g, ti)) != nullptr)
         {
             Parse(*next->leftRef, g, vi, ti);
             next = next->next;
         }
+
+        vi.After(left);
     }
-    else
-    {
-        assert(false);
-    }
-    vi.After(left);
 }
 
 void Test_ParserGen_ABCD()
@@ -439,6 +469,44 @@ void Test_ParserGen_ABCD()
             Parse("A", abcd, vi, ti);
         }
     }
+
+    /*
+        Right recursion
+
+        A -> BA?
+        B -> b
+    */
+    {
+        class ABCDGrammer : public Grammer
+        {
+        public:
+            Right Expand(Left left) override
+            {
+                if (rules.empty())
+                {
+                    rules["A"] =
+                        Concat(
+                            Node(FromLeftRef("B")),
+                            Opt(Node(FromLeftRef("A"))));
+                    rules["B"] = Node(FromTokenMatcher(new ExactMatcher("b")));
+                }
+                return rules.at(left);
+            }
+
+            std::map<Left, Right> rules;
+        } abcd;
+
+        {
+            Visitor vi;
+            TokenIterator ti({ "b" });
+            Parse("A", abcd, vi, ti);
+        }
+        {
+            Visitor vi;
+            TokenIterator ti({ "b", "b", "b" });
+            Parse("A", abcd, vi, ti);
+        }
+    }
 }
 
 std::vector<Token> Tokenize(std::string str)
@@ -476,65 +544,184 @@ void Test_ParserGen_Decl()
         identifier  := '\w+'
         constant_expr := '\d+'
     */
+    class DeclGrammer : public Grammer
     {
-        class DeclGrammer : public Grammer
+    public:
+        Right Expand(Left left) override
         {
-        public:
-            Right Expand(Left left) override
+            if (rules.empty())
             {
-                if (rules.empty())
-                {
-                    rules["declarator"] =
-                        Concat(Concat(
-                            Node(FromLeftRef("pointer")),
+                rules["declarator"] =
+                    Concat(Concat(
+                        Node(FromLeftRef("pointer")),
+                        Alt(
+                            Node(FromLeftRef("identifier")),
+                            Concat(Concat(
+                                Node(FromLeftRef("LP")),
+                                Node(FromLeftRef("declarator"))),
+                                Node(FromLeftRef("RP"))))),
+                        Rep0(
                             Alt(
-                                Node(FromLeftRef("identifier")),
                                 Concat(Concat(
+                                    Node(FromLeftRef("LSB")),
+                                    Node(FromLeftRef("constant_expr"))),
+                                    Node(FromLeftRef("RSB"))),
+                                Concat(
                                     Node(FromLeftRef("LP")),
-                                    Node(FromLeftRef("declarator"))),
-                                    Node(FromLeftRef("RP"))))),
-                            Rep0(
-                                Alt(
-                                    Concat(Concat(
-                                        Node(FromLeftRef("LSB")),
-                                        Node(FromLeftRef("constant_expr"))),
-                                        Node(FromLeftRef("RSB"))),
-                                    Concat(
-                                        Node(FromLeftRef("LP")),
-                                        Node(FromLeftRef("RP"))))));
-                    rules["pointer"] =
-                        Rep1(
-                            Node(FromLeftRef("STAR")));
-                    rules["identifier"] =
-                        Node(FromTokenMatcher(new IdMatcher()));
-                    rules["constant_expr"] =
-                        Node(FromTokenMatcher(new NumberMatcher()));
-                    rules["LP"] =
-                        Node(FromTokenMatcher(new ExactMatcher("(")));
-                    rules["RP"] =
-                        Node(FromTokenMatcher(new ExactMatcher(")")));
-                    rules["LSB"] =
-                        Node(FromTokenMatcher(new ExactMatcher("[")));
-                    rules["RSB"] =
-                        Node(FromTokenMatcher(new ExactMatcher("]")));
-                    rules["STAR"] =
-                        Node(FromTokenMatcher(new ExactMatcher("*")));
-                }
-                return rules.at(left);
+                                    Node(FromLeftRef("RP"))))));
+                rules["pointer"] =
+                    Rep1(
+                        Node(FromLeftRef("STAR")));
+                rules["identifier"] =
+                    Node(FromTokenMatcher(new IdMatcher()));
+                rules["constant_expr"] =
+                    Node(FromTokenMatcher(new NumberMatcher()));
+                rules["LP"] =
+                    Node(FromTokenMatcher(new ExactMatcher("(")));
+                rules["RP"] =
+                    Node(FromTokenMatcher(new ExactMatcher(")")));
+                rules["LSB"] =
+                    Node(FromTokenMatcher(new ExactMatcher("[")));
+                rules["RSB"] =
+                    Node(FromTokenMatcher(new ExactMatcher("]")));
+                rules["STAR"] =
+                    Node(FromTokenMatcher(new ExactMatcher("*")));
             }
+            return rules.at(left);
+        }
 
-            std::map<Left, Right> rules;
-        } decl;
+        std::map<Left, Right> rules;
+    } decl;
 
+    Visitor vi;
+    TokenIterator ti(Tokenize("* ( * p ) [ 3 ] [ 10 ]"));
+    Parse("declarator", decl, vi, ti);
+}
+
+void Test_ParserGen_Expr()
+{
+    /*
+        TODO: cast_expr, sizeof(type_name)
+
+        expr                    := comma_expr
+        comma_expr              := assign_expr  (comma_op           assign_expr)*
+        assign_expr             := cond_expr    (assign_op          cond_expr)*
+        cond_expr               := or_expr      (cond_op            expr cond_op2 cond_expr)?
+        or_expr                 := and_expr     (or_op              and_expr)*
+        and_expr                := bit_or_expr  (and_op             bit_or_expr)*
+        bit_or_expr             := bit_xor_expr (bit_or_op          bit_xor_expr)*
+        bit_xor_expr            := bit_and_expr (bit_xor_op         bit_and_expr)*
+        bit_and_expr            := eq_expr      (bit_and_op         bit_and_expr)*
+        eq_expr                 := rel_expr     (eq_op              rel_expr)*
+        rel_expr                := shift_expr   (rel_op             shift_expr)*
+        shift_expr              := add_expr     (shift_op           add_expr)*
+        add_expr                := mul_expr     (add_op             mul_expr)*
+        mul_expr                := prefix_expr  (mul_op             prefix_expr)*
+        prefix_expr             :=              (prefix_op)*        postfix_expr
+        postfix_expr            := primary_expr (idx_op | arg_op | postfix_op | postfix_op2 identifier)*
+        primary_expr            := identifier | '(' expr ')'
+
+        comma_op                := ,
+        assign_op               := = *= /= %= += -= <<= >>= &= ^= |=
+        cond_op                 := ?
+        cond_op2                := :
+        or_op                   := ||
+        and_op                  := &&
+        bit_or_op               := |
+        bit_xor_op              := ^
+        bit_and_op              := &
+        eq_op                   := == !=
+        rel_op                  := < <= > >=
+        shift_op                := << >>
+        add_op                  := + -
+        mul_op                  := * / %
+        postfix_op              := ++ --
+        postfix_op2             := . ->
+        arg_begin               := (
+        arg_end                 := )
+        arg_op                  := arg_begin (assign_expr (comma_op assign_expr)*)? arg_end
+        idx_begin               := [
+        idx_end                 := ]
+        idx_op                  := idx_begin expr idx_end
+        prefix_op               := & * + - ~ ! ++ -- sizeof
+        identifier              := '\w+'
+    */
+    class ExprGrammer : public Grammer
+    {
+    public:
+        Right Expand(Left left) override
+        {
+            if (rules.empty())
+            {
+                rules["expr"] =         Node(FromLeftRef("comma_expr"));
+                rules["comma_expr"] =   Concat(Node(FromLeftRef("assign_expr")),Rep0(Concat(Node(FromLeftRef("comma_op")),Node(FromLeftRef("assign_expr")))));
+                rules["assign_expr"] =  Concat(Node(FromLeftRef("cond_expr")),Rep0(Concat(Node(FromLeftRef("assign_op")),Node(FromLeftRef("cond_expr")))));
+                rules["cond_expr"] =    Concat(Node(FromLeftRef("or_expr")),Opt(Concat(Concat(Concat(Node(FromLeftRef("cond_op")),Node(FromLeftRef("expr"))),Node(FromLeftRef("cond_op2"))),Node(FromLeftRef("cond_expr")))));
+                rules["or_expr"] =      Concat(Node(FromLeftRef("and_expr")),Rep0(Concat(Node(FromLeftRef("or_op")),Node(FromLeftRef("and_expr")))));
+                rules["and_expr"] =     Concat(Node(FromLeftRef("bit_or_expr")),Rep0(Concat(Node(FromLeftRef("and_op")),Node(FromLeftRef("bit_or_expr")))));
+                rules["bit_or_expr"] =  Concat(Node(FromLeftRef("bit_xor_expr")),Rep0(Concat(Node(FromLeftRef("bit_or_op")),Node(FromLeftRef("bit_xor_expr")))));
+                rules["bit_xor_expr"] = Concat(Node(FromLeftRef("bit_and_expr")),Rep0(Concat(Node(FromLeftRef("bit_xor_op")),Node(FromLeftRef("bit_and_expr")))));
+                rules["bit_and_expr"] = Concat(Node(FromLeftRef("eq_expr")),Rep0(Concat(Node(FromLeftRef("bit_and_op")),Node(FromLeftRef("bit_and_expr")))));
+                rules["eq_expr"] =      Concat(Node(FromLeftRef("rel_expr")),Rep0(Concat(Node(FromLeftRef("eq_op")),Node(FromLeftRef("rel_expr")))));
+                rules["rel_expr"] =     Concat(Node(FromLeftRef("shift_expr")),Rep0(Concat(Node(FromLeftRef("rel_op")),Node(FromLeftRef("shift_expr")))));
+                rules["shift_expr"] =   Concat(Node(FromLeftRef("add_expr")),Rep0(Concat(Node(FromLeftRef("shift_op")),Node(FromLeftRef("add_expr")))));
+                rules["add_expr"] =     Concat(Node(FromLeftRef("mul_expr")),Rep0(Concat(Node(FromLeftRef("add_op")),Node(FromLeftRef("mul_expr")))));
+                rules["mul_expr"] =     Concat(Node(FromLeftRef("prefix_expr")),Rep0(Concat(Node(FromLeftRef("mul_op")),Node(FromLeftRef("prefix_expr")))));
+                rules["prefix_expr"] =  Concat(Rep0(Node(FromLeftRef("prefix_op"))),Node(FromLeftRef("postfix_expr")));
+                rules["postfix_expr"] = Concat(Node(FromLeftRef("primary_expr")),Rep0(Concat(Concat(Concat(Node(FromLeftRef("idx_op")),Node(FromLeftRef("arg_op"))),Node(FromLeftRef("postfix_op"))),Concat(Node(FromLeftRef("postfix_op2")),Node(FromLeftRef("identifier"))))));
+                rules["primary_expr"] = Alt(Node(FromLeftRef("identifier")),Concat(Concat(Node(FromLeftRef("arg_begin")),Node(FromLeftRef("expr"))),Node(FromLeftRef("arg_end"))));
+
+                rules["comma_op"] =     Node(FromTokenMatcher(new MultiExactMatcher(Tokenize(","))));
+                rules["assign_op"] =    Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("= *= /= %= += -= <<= >>= &= ^= |="))));
+                rules["cond_op"] =      Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("?"))));
+                rules["cond_op2"] =     Node(FromTokenMatcher(new MultiExactMatcher(Tokenize(":"))));
+                rules["or_op"] =        Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("||"))));
+                rules["and_op"] =       Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("&&"))));
+                rules["bit_or_op"] =    Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("|"))));
+                rules["bit_xor_op"] =   Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("^"))));
+                rules["bit_and_op"] =   Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("&"))));
+                rules["eq_op"] =        Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("== !="))));
+                rules["rel_op"] =       Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("< <= > >="))));
+                rules["shift_op"] =     Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("<< >>"))));
+                rules["add_op"] =       Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("+ -"))));
+                rules["mul_op"] =       Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("* / %"))));
+                rules["postfix_op"] =   Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("++ --"))));
+                rules["postfix_op2"] =  Node(FromTokenMatcher(new MultiExactMatcher(Tokenize(". ->"))));
+                rules["arg_begin"] =    Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("("))));
+                rules["arg_end"] =      Node(FromTokenMatcher(new MultiExactMatcher(Tokenize(")"))));
+                rules["idx_begin"] =    Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("["))));
+                rules["idx_end"] =      Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("]"))));
+                rules["prefix_op"] =    Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("& * + - ~ ! ++ -- sizeof"))));
+                rules["arg_op"] =       Concat(Concat(Node(FromLeftRef("arg_begin")),Opt(Concat(Node(FromLeftRef("assign_expr")),Rep0(Concat(Node(FromLeftRef("comma_op")),Node(FromLeftRef("assign_expr"))))))),Node(FromLeftRef("arg_end")));
+                rules["idx_op"] =       Concat(Concat(Node(FromLeftRef("idx_begin")),Node(FromLeftRef("expr"))),Node(FromLeftRef("idx_end")));
+                rules["identifier"] =   Node(FromTokenMatcher(new IdMatcher()));
+            }
+            return rules.at(left);
+        }
+
+        std::map<Left, Right> rules;
+    } expr;
+
+    {
         Visitor vi;
-        TokenIterator ti(Tokenize("* ( * p ) [ 3 ] [ 10 ]"));
-        Parse("declarator", decl, vi, ti);
+        TokenIterator ti(Tokenize("a , b"));
+        Parse("expr", expr, vi, ti);
     }
-
+    {
+        Visitor vi;
+        TokenIterator ti(Tokenize("++ a + ++ b"));
+        Parse("expr", expr, vi, ti);
+    }
+    {
+        Visitor vi;
+        TokenIterator ti(Tokenize("a ? b : c ? d : e"));
+        Parse("expr", expr, vi, ti);
+    }
 }
 
 void Test_ParserGen()
 {
     Test_ParserGen_ABCD();
     Test_ParserGen_Decl();
+    Test_ParserGen_Expr();
 }
