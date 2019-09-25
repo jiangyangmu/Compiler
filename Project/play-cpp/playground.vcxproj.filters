@@ -10,11 +10,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="Main.cpp">
-      <Filter>Main</Filter>
-    </ClCompile>
-  </ItemGroup>
-  <ItemGroup>
     <ClInclude Include="WinMem.h">
       <Filter>Category</Filter>
     </ClInclude>
@@ -27,5 +22,13 @@
     <ClInclude Include="Lexer.h">
       <Filter>Category</Filter>
     </ClInclude>
+    <ClInclude Include="ParserGen.h">
+      <Filter>Category</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Main.cpp">
+      <Filter>Main</Filter>
+    </ClCompile>
   </ItemGroup>
 </Project>

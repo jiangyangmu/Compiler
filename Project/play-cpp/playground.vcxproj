@@ -211,6 +211,7 @@
     <ClCompile Include="Main.cpp" />
     <ClInclude Include="CxxException.h" />
     <ClInclude Include="Lexer.h" />
+    <ClInclude Include="ParserGen.h" />
     <ClInclude Include="PositionLinkedList.h" />
     <ClInclude Include="WinMem.h" />
   </ItemGroup>
