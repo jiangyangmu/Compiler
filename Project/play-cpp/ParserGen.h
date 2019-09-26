@@ -118,10 +118,12 @@ typedef std::string Left;
 // * Structural
 struct RightNode
 {
-    enum Type { LEFT_REF, TOKEN_MATCHER, STRUCTURAL };
+    enum Type { LEFT_REF, TOKEN_MATCHER, STRUCTURAL, DONE };
 
+    // one of
     Left * leftRef;
     TokenMatcher * tokenMatcher;
+    bool isDone;
 
     RightNode * next;
     RightNode * alt;
@@ -137,6 +139,7 @@ RightNode * FromLeftRef(Left left)
     RightNode * node = new RightNode;
     node->leftRef = new Left(left);
     node->tokenMatcher = nullptr;
+    node->isDone = false;
     node->next = nullptr;
     node->alt = nullptr;
     return node;
@@ -146,6 +149,7 @@ RightNode * FromTokenMatcher(TokenMatcher * tm)
     RightNode * node = new RightNode;
     node->leftRef = nullptr;
     node->tokenMatcher = tm;
+    node->isDone = false;
     node->next = nullptr;
     node->alt = nullptr;
     return node;
@@ -155,6 +159,7 @@ RightNode * NewStructural()
     RightNode * node = new RightNode;
     node->leftRef = nullptr;
     node->tokenMatcher = nullptr;
+    node->isDone = false;
     node->next = nullptr;
     node->alt = nullptr;
     return node;
@@ -202,6 +207,14 @@ Right Opt(Right r)
 
     return { r.in, &n->next, &n->alt };
 }
+Right Done(Right r)
+{
+    RightNode * n = NewStructural();
+    n->isDone = true;
+    *r.next = n;
+
+    return { r.in, &n->next, r.alt };
+}
 RightNode::Type GetType(RightNode * node)
 {
     if (node->leftRef)
@@ -209,7 +222,11 @@ RightNode::Type GetType(RightNode * node)
     else if (node->tokenMatcher)
         return RightNode::TOKEN_MATCHER;
     else
-        return RightNode::STRUCTURAL;
+        return node->isDone ? RightNode::DONE : RightNode::STRUCTURAL;
+}
+bool IsDoneNode(RightNode * node)
+{
+    return node && node->isDone;
 }
 
 class Grammer
@@ -218,27 +235,34 @@ public:
     virtual Right Expand(Left left) = 0;
 };
 
-// ==== Parse Helper ====
+// ==== Parse ====
 
-bool FIRST(Left left, Grammer & g, TokenIterator & ti)
+struct Visitor
 {
-    // assert no left recursion
-    RightNode * right = g.Expand(left).in;
-    
-    bool result = false;
-    switch (GetType(right))
+    void Before(Left  * left, const Token * token = nullptr)
     {
-        case RightNode::LEFT_REF:       result = FIRST(*right->leftRef, g, ti); break;
-        case RightNode::TOKEN_MATCHER:  result = right->tokenMatcher->Match(ti.Peek()); break;
-        default:
-            if (right->next)
-                result = FIRST(*right->next->leftRef, g, ti);
-            if (!result && right->alt)
-                result = FIRST(*right->alt->leftRef, g, ti);
-            break;
+        std::cout << indent.data() << "Before";
+        if (left)
+            std::cout << " " << left->data();
+        if (token)
+            std::cout << " " << token->data();
+        std::cout << std::endl;
+        indent += "  ";
     }
-    return result;
-}
+    void After(Left * left, const Token * token = nullptr)
+    {
+        indent.pop_back();
+        indent.pop_back();
+        std::cout << indent.data() << "After";
+        if (left)
+            std::cout << " " << left->data();
+        if (token)
+            std::cout << " " << token->data();
+        std::cout << std::endl;
+    }
+    std::string indent;
+};
+
 std::set<RightNode *> Closure(RightNode * right)
 {
     std::set<RightNode *> clo;
@@ -265,72 +289,81 @@ std::set<RightNode *> Closure(RightNode * right)
 
     return clo;
 }
-// First x (all alt + all with null left)
-RightNode * Predict(std::set<RightNode *> nodes, Grammer & g, TokenIterator & ti)
+
+// Peek one token, find next node to match. Or done node. Or nullptr.
+RightNode * LL1Predict(RightNode * node, Grammer & g, const Token & token)
 {
-    RightNode * pred = nullptr;
-    int count = 0;
-    for (RightNode * n : nodes)
+    std::set<RightNode *> canMatchNodes;
+    RightNode * doneNode = nullptr;
+
+    for (RightNode * n : Closure(node))
     {
-        if (FIRST(*n->leftRef, g, ti))
+        switch (GetType(n))
         {
-            pred = n;
-            ++count;
+            case RightNode::LEFT_REF:
+                if (LL1Predict(g.Expand(*n->leftRef).in, g, token))
+                    canMatchNodes.insert(n);
+                break;
+            case RightNode::TOKEN_MATCHER:
+                if (n->tokenMatcher->Match(token))
+                    canMatchNodes.insert(n);
+                break;
+            case RightNode::DONE:
+                doneNode = n;
+                break;
+            default:
+                assert(false);
+                break;
         }
     }
-    assert(count <= 1);
-    return pred;
+    assert(canMatchNodes.size() <= 1);
+    return canMatchNodes.empty() ? doneNode : *canMatchNodes.begin();
+}
+void LL1Match(RightNode * right, Grammer & g, Visitor & vi, TokenIterator & ti)
+{
+    assert(right);
+
+    RightNode * node = right;
+    while (true)
+    {
+        node = LL1Predict(node, g, ti.Peek());
+        assert(node);
+        if (IsDoneNode(node))
+            break;
+        
+        Token token;
+        switch (GetType(node))
+        {
+            case RightNode::LEFT_REF:
+                vi.Before(node->leftRef, nullptr);
+                LL1Match(g.Expand(*node->leftRef).in, g, vi, ti);
+                vi.After(node->leftRef, nullptr);
+                break;
+            case RightNode::TOKEN_MATCHER:
+                token = ti.Next();
+                vi.Before(nullptr, &token);
+                assert(node->tokenMatcher->Match(token));
+                vi.After(nullptr, &token);
+                break;
+            default:
+                assert(false);
+                break;
+        }
+
+        node = node->next;
+    }
 }
 
 // ==== API ====
 
-struct Visitor
-{
-    void Before(Left left, const Token * token = nullptr)
-    {
-        std::cout << indent.data() << "Before " << left.data() << " " << (token ? token->data() : "") << std::endl;
-        indent += "  ";
-    }
-    void After(Left left, const Token * token = nullptr)
-    {
-        indent.pop_back();
-        indent.pop_back();
-        std::cout << indent.data() << "After " << left.data() << " " << (token ? token->data() : "") << std::endl;
-    }
-    std::string indent;
-};
-
 void Parse(Left left, Grammer & g, Visitor & vi, TokenIterator & ti)
 {
-    // Left -> TokenMatcher
-    // Left -> (LeftRef|Structural)*
-    
-    RightNode * right = g.Expand(left).in;
-    RightNode::Type type = GetType(right);
-    if (type == RightNode::TOKEN_MATCHER)
-    {
-        Token token = ti.Peek();
-        vi.Before(left, &token);
-
-        // Match terminal
-        assert(right->tokenMatcher->Match(ti.Next()));
-    
-        vi.After(left, &token);
-    }
-    else
-    {
-        vi.Before(left);
-
-        RightNode * next = right;
-        while ((next = Predict(Closure(next), g, ti)) != nullptr)
-        {
-            Parse(*next->leftRef, g, vi, ti);
-            next = next->next;
-        }
-
-        vi.After(left);
-    }
+    vi.Before(&left, nullptr);
+    LL1Match(g.Expand(left).in, g, vi, ti);
+    vi.After(&left, nullptr);
 }
+
+// ==== Test ====
 
 void Test_ParserGen_ABCD()
 {
@@ -348,14 +381,10 @@ void Test_ParserGen_ABCD()
             {
                 if (rules.empty())
                 {
-                    rules["A"] =
-                        Concat(Concat(
-                            Node(FromLeftRef("B")),
-                            Node(FromLeftRef("C"))),
-                            Node(FromLeftRef("D")));
-                    rules["B"] = Node(FromTokenMatcher(new ExactMatcher("b")));
-                    rules["C"] = Node(FromTokenMatcher(new ExactMatcher("c")));
-                    rules["D"] = Node(FromTokenMatcher(new ExactMatcher("d")));
+                    rules["A"] = Done(Concat(Concat(Node(FromLeftRef("B")),Node(FromLeftRef("C"))),Node(FromLeftRef("D"))));
+                    rules["B"] = Done(Node(FromTokenMatcher(new ExactMatcher("b"))));
+                    rules["C"] = Done(Node(FromTokenMatcher(new ExactMatcher("c"))));
+                    rules["D"] = Done(Node(FromTokenMatcher(new ExactMatcher("d"))));
                 }
                 return rules.at(left);
             }
@@ -382,14 +411,10 @@ void Test_ParserGen_ABCD()
             {
                 if (rules.empty())
                 {
-                    rules["A"] =
-                        Alt(Alt(
-                            Node(FromLeftRef("B")),
-                            Node(FromLeftRef("C"))),
-                            Node(FromLeftRef("D")));
-                    rules["B"] = Node(FromTokenMatcher(new ExactMatcher("b")));
-                    rules["C"] = Node(FromTokenMatcher(new ExactMatcher("c")));
-                    rules["D"] = Node(FromTokenMatcher(new ExactMatcher("d")));
+                    rules["A"] = Done(Alt(Alt(Node(FromLeftRef("B")),Node(FromLeftRef("C"))),Node(FromLeftRef("D"))));
+                    rules["B"] = Done(Node(FromTokenMatcher(new ExactMatcher("b"))));
+                    rules["C"] = Done(Node(FromTokenMatcher(new ExactMatcher("c"))));
+                    rules["D"] = Done(Node(FromTokenMatcher(new ExactMatcher("d"))));
                 }
                 return rules.at(left);
             }
@@ -428,14 +453,10 @@ void Test_ParserGen_ABCD()
             {
                 if (rules.empty())
                 {
-                    rules["A"] =
-                        Concat(Concat(
-                            Opt(Node(FromLeftRef("B"))),
-                            Rep0(Node(FromLeftRef("C")))),
-                            Rep1(Node(FromLeftRef("D"))));
-                    rules["B"] = Node(FromTokenMatcher(new ExactMatcher("b")));
-                    rules["C"] = Node(FromTokenMatcher(new ExactMatcher("c")));
-                    rules["D"] = Node(FromTokenMatcher(new ExactMatcher("d")));
+                    rules["A"] = Done(Concat(Concat(Opt(Node(FromLeftRef("B"))),Rep0(Node(FromLeftRef("C")))),Rep1(Node(FromLeftRef("D")))));
+                    rules["B"] = Done(Node(FromTokenMatcher(new ExactMatcher("b"))));
+                    rules["C"] = Done(Node(FromTokenMatcher(new ExactMatcher("c"))));
+                    rules["D"] = Done(Node(FromTokenMatcher(new ExactMatcher("d"))));
                 }
                 return rules.at(left);
             }
@@ -484,11 +505,8 @@ void Test_ParserGen_ABCD()
             {
                 if (rules.empty())
                 {
-                    rules["A"] =
-                        Concat(
-                            Node(FromLeftRef("B")),
-                            Opt(Node(FromLeftRef("A"))));
-                    rules["B"] = Node(FromTokenMatcher(new ExactMatcher("b")));
+                    rules["A"] = Done(Concat(Node(FromLeftRef("B")),Opt(Node(FromLeftRef("A")))));
+                    rules["B"] = Done(Node(FromTokenMatcher(new ExactMatcher("b"))));
                 }
                 return rules.at(left);
             }
@@ -552,7 +570,7 @@ void Test_ParserGen_Decl()
             if (rules.empty())
             {
                 rules["declarator"] =
-                    Concat(Concat(
+                    Done(Concat(Concat(
                         Node(FromLeftRef("pointer")),
                         Alt(
                             Node(FromLeftRef("identifier")),
@@ -568,24 +586,24 @@ void Test_ParserGen_Decl()
                                     Node(FromLeftRef("RSB"))),
                                 Concat(
                                     Node(FromLeftRef("LP")),
-                                    Node(FromLeftRef("RP"))))));
+                                    Node(FromLeftRef("RP")))))));
                 rules["pointer"] =
-                    Rep1(
-                        Node(FromLeftRef("STAR")));
+                    Done(Rep1(
+                        Node(FromLeftRef("STAR"))));
                 rules["identifier"] =
-                    Node(FromTokenMatcher(new IdMatcher()));
+                    Done(Node(FromTokenMatcher(new IdMatcher())));
                 rules["constant_expr"] =
-                    Node(FromTokenMatcher(new NumberMatcher()));
+                    Done(Node(FromTokenMatcher(new NumberMatcher())));
                 rules["LP"] =
-                    Node(FromTokenMatcher(new ExactMatcher("(")));
+                    Done(Node(FromTokenMatcher(new ExactMatcher("("))));
                 rules["RP"] =
-                    Node(FromTokenMatcher(new ExactMatcher(")")));
+                    Done(Node(FromTokenMatcher(new ExactMatcher(")"))));
                 rules["LSB"] =
-                    Node(FromTokenMatcher(new ExactMatcher("[")));
+                    Done(Node(FromTokenMatcher(new ExactMatcher("["))));
                 rules["RSB"] =
-                    Node(FromTokenMatcher(new ExactMatcher("]")));
+                    Done(Node(FromTokenMatcher(new ExactMatcher("]"))));
                 rules["STAR"] =
-                    Node(FromTokenMatcher(new ExactMatcher("*")));
+                    Done(Node(FromTokenMatcher(new ExactMatcher("*"))));
             }
             return rules.at(left);
         }
@@ -653,48 +671,47 @@ void Test_ParserGen_Expr()
         {
             if (rules.empty())
             {
-                rules["expr"] =         Node(FromLeftRef("comma_expr"));
-                rules["comma_expr"] =   Concat(Node(FromLeftRef("assign_expr")),Rep0(Concat(Node(FromLeftRef("comma_op")),Node(FromLeftRef("assign_expr")))));
-                rules["assign_expr"] =  Concat(Node(FromLeftRef("cond_expr")),Rep0(Concat(Node(FromLeftRef("assign_op")),Node(FromLeftRef("cond_expr")))));
-                rules["cond_expr"] =    Concat(Node(FromLeftRef("or_expr")),Opt(Concat(Concat(Concat(Node(FromLeftRef("cond_op")),Node(FromLeftRef("expr"))),Node(FromLeftRef("cond_op2"))),Node(FromLeftRef("cond_expr")))));
-                rules["or_expr"] =      Concat(Node(FromLeftRef("and_expr")),Rep0(Concat(Node(FromLeftRef("or_op")),Node(FromLeftRef("and_expr")))));
-                rules["and_expr"] =     Concat(Node(FromLeftRef("bit_or_expr")),Rep0(Concat(Node(FromLeftRef("and_op")),Node(FromLeftRef("bit_or_expr")))));
-                rules["bit_or_expr"] =  Concat(Node(FromLeftRef("bit_xor_expr")),Rep0(Concat(Node(FromLeftRef("bit_or_op")),Node(FromLeftRef("bit_xor_expr")))));
-                rules["bit_xor_expr"] = Concat(Node(FromLeftRef("bit_and_expr")),Rep0(Concat(Node(FromLeftRef("bit_xor_op")),Node(FromLeftRef("bit_and_expr")))));
-                rules["bit_and_expr"] = Concat(Node(FromLeftRef("eq_expr")),Rep0(Concat(Node(FromLeftRef("bit_and_op")),Node(FromLeftRef("bit_and_expr")))));
-                rules["eq_expr"] =      Concat(Node(FromLeftRef("rel_expr")),Rep0(Concat(Node(FromLeftRef("eq_op")),Node(FromLeftRef("rel_expr")))));
-                rules["rel_expr"] =     Concat(Node(FromLeftRef("shift_expr")),Rep0(Concat(Node(FromLeftRef("rel_op")),Node(FromLeftRef("shift_expr")))));
-                rules["shift_expr"] =   Concat(Node(FromLeftRef("add_expr")),Rep0(Concat(Node(FromLeftRef("shift_op")),Node(FromLeftRef("add_expr")))));
-                rules["add_expr"] =     Concat(Node(FromLeftRef("mul_expr")),Rep0(Concat(Node(FromLeftRef("add_op")),Node(FromLeftRef("mul_expr")))));
-                rules["mul_expr"] =     Concat(Node(FromLeftRef("prefix_expr")),Rep0(Concat(Node(FromLeftRef("mul_op")),Node(FromLeftRef("prefix_expr")))));
-                rules["prefix_expr"] =  Concat(Rep0(Node(FromLeftRef("prefix_op"))),Node(FromLeftRef("postfix_expr")));
-                rules["postfix_expr"] = Concat(Node(FromLeftRef("primary_expr")),Rep0(Concat(Concat(Concat(Node(FromLeftRef("idx_op")),Node(FromLeftRef("arg_op"))),Node(FromLeftRef("postfix_op"))),Concat(Node(FromLeftRef("postfix_op2")),Node(FromLeftRef("identifier"))))));
-                rules["primary_expr"] = Alt(Node(FromLeftRef("identifier")),Concat(Concat(Node(FromLeftRef("arg_begin")),Node(FromLeftRef("expr"))),Node(FromLeftRef("arg_end"))));
-
-                rules["comma_op"] =     Node(FromTokenMatcher(new MultiExactMatcher(Tokenize(","))));
-                rules["assign_op"] =    Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("= *= /= %= += -= <<= >>= &= ^= |="))));
-                rules["cond_op"] =      Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("?"))));
-                rules["cond_op2"] =     Node(FromTokenMatcher(new MultiExactMatcher(Tokenize(":"))));
-                rules["or_op"] =        Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("||"))));
-                rules["and_op"] =       Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("&&"))));
-                rules["bit_or_op"] =    Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("|"))));
-                rules["bit_xor_op"] =   Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("^"))));
-                rules["bit_and_op"] =   Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("&"))));
-                rules["eq_op"] =        Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("== !="))));
-                rules["rel_op"] =       Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("< <= > >="))));
-                rules["shift_op"] =     Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("<< >>"))));
-                rules["add_op"] =       Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("+ -"))));
-                rules["mul_op"] =       Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("* / %"))));
-                rules["postfix_op"] =   Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("++ --"))));
-                rules["postfix_op2"] =  Node(FromTokenMatcher(new MultiExactMatcher(Tokenize(". ->"))));
-                rules["arg_begin"] =    Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("("))));
-                rules["arg_end"] =      Node(FromTokenMatcher(new MultiExactMatcher(Tokenize(")"))));
-                rules["idx_begin"] =    Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("["))));
-                rules["idx_end"] =      Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("]"))));
-                rules["prefix_op"] =    Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("& * + - ~ ! ++ -- sizeof"))));
-                rules["arg_op"] =       Concat(Concat(Node(FromLeftRef("arg_begin")),Opt(Concat(Node(FromLeftRef("assign_expr")),Rep0(Concat(Node(FromLeftRef("comma_op")),Node(FromLeftRef("assign_expr"))))))),Node(FromLeftRef("arg_end")));
-                rules["idx_op"] =       Concat(Concat(Node(FromLeftRef("idx_begin")),Node(FromLeftRef("expr"))),Node(FromLeftRef("idx_end")));
-                rules["identifier"] =   Node(FromTokenMatcher(new IdMatcher()));
+                rules["expr"] =         Done(Node(FromLeftRef("comma_expr")));
+                rules["comma_expr"] =   Done(Concat(Node(FromLeftRef("assign_expr")),Rep0(Concat(Node(FromLeftRef("comma_op")),Node(FromLeftRef("assign_expr"))))));
+                rules["assign_expr"] =  Done(Concat(Node(FromLeftRef("cond_expr")),Rep0(Concat(Node(FromLeftRef("assign_op")),Node(FromLeftRef("cond_expr"))))));
+                rules["cond_expr"] =    Done(Concat(Node(FromLeftRef("or_expr")),Opt(Concat(Concat(Concat(Node(FromLeftRef("cond_op")),Node(FromLeftRef("expr"))),Node(FromLeftRef("cond_op2"))),Node(FromLeftRef("cond_expr"))))));
+                rules["or_expr"] =      Done(Concat(Node(FromLeftRef("and_expr")),Rep0(Concat(Node(FromLeftRef("or_op")),Node(FromLeftRef("and_expr"))))));
+                rules["and_expr"] =     Done(Concat(Node(FromLeftRef("bit_or_expr")),Rep0(Concat(Node(FromLeftRef("and_op")),Node(FromLeftRef("bit_or_expr"))))));
+                rules["bit_or_expr"] =  Done(Concat(Node(FromLeftRef("bit_xor_expr")),Rep0(Concat(Node(FromLeftRef("bit_or_op")),Node(FromLeftRef("bit_xor_expr"))))));
+                rules["bit_xor_expr"] = Done(Concat(Node(FromLeftRef("bit_and_expr")),Rep0(Concat(Node(FromLeftRef("bit_xor_op")),Node(FromLeftRef("bit_and_expr"))))));
+                rules["bit_and_expr"] = Done(Concat(Node(FromLeftRef("eq_expr")),Rep0(Concat(Node(FromLeftRef("bit_and_op")),Node(FromLeftRef("bit_and_expr"))))));
+                rules["eq_expr"] =      Done(Concat(Node(FromLeftRef("rel_expr")),Rep0(Concat(Node(FromLeftRef("eq_op")),Node(FromLeftRef("rel_expr"))))));
+                rules["rel_expr"] =     Done(Concat(Node(FromLeftRef("shift_expr")),Rep0(Concat(Node(FromLeftRef("rel_op")),Node(FromLeftRef("shift_expr"))))));
+                rules["shift_expr"] =   Done(Concat(Node(FromLeftRef("add_expr")),Rep0(Concat(Node(FromLeftRef("shift_op")),Node(FromLeftRef("add_expr"))))));
+                rules["add_expr"] =     Done(Concat(Node(FromLeftRef("mul_expr")),Rep0(Concat(Node(FromLeftRef("add_op")),Node(FromLeftRef("mul_expr"))))));
+                rules["mul_expr"] =     Done(Concat(Node(FromLeftRef("prefix_expr")),Rep0(Concat(Node(FromLeftRef("mul_op")),Node(FromLeftRef("prefix_expr"))))));
+                rules["prefix_expr"] =  Done(Concat(Rep0(Node(FromLeftRef("prefix_op"))),Node(FromLeftRef("postfix_expr"))));
+                rules["postfix_expr"] = Done(Concat(Node(FromLeftRef("primary_expr")),Rep0(Concat(Concat(Concat(Node(FromLeftRef("idx_op")),Node(FromLeftRef("arg_op"))),Node(FromLeftRef("postfix_op"))),Concat(Node(FromLeftRef("postfix_op2")),Node(FromLeftRef("identifier")))))));
+                rules["primary_expr"] = Done(Alt(Node(FromLeftRef("identifier")),Concat(Concat(Node(FromLeftRef("arg_begin")),Node(FromLeftRef("expr"))),Node(FromLeftRef("arg_end")))));
+                rules["comma_op"] =     Done(Node(FromTokenMatcher(new MultiExactMatcher(Tokenize(",")))));
+                rules["assign_op"] =    Done(Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("= *= /= %= += -= <<= >>= &= ^= |=")))));
+                rules["cond_op"] =      Done(Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("?")))));
+                rules["cond_op2"] =     Done(Node(FromTokenMatcher(new MultiExactMatcher(Tokenize(":")))));
+                rules["or_op"] =        Done(Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("||")))));
+                rules["and_op"] =       Done(Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("&&")))));
+                rules["bit_or_op"] =    Done(Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("|")))));
+                rules["bit_xor_op"] =   Done(Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("^")))));
+                rules["bit_and_op"] =   Done(Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("&")))));
+                rules["eq_op"] =        Done(Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("== !=")))));
+                rules["rel_op"] =       Done(Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("< <= > >=")))));
+                rules["shift_op"] =     Done(Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("<< >>")))));
+                rules["add_op"] =       Done(Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("+ -")))));
+                rules["mul_op"] =       Done(Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("* / %")))));
+                rules["postfix_op"] =   Done(Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("++ --")))));
+                rules["postfix_op2"] =  Done(Node(FromTokenMatcher(new MultiExactMatcher(Tokenize(". ->")))));
+                rules["arg_begin"] =    Done(Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("(")))));
+                rules["arg_end"] =      Done(Node(FromTokenMatcher(new MultiExactMatcher(Tokenize(")")))));
+                rules["idx_begin"] =    Done(Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("[")))));
+                rules["idx_end"] =      Done(Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("]")))));
+                rules["prefix_op"] =    Done(Node(FromTokenMatcher(new MultiExactMatcher(Tokenize("& * + - ~ ! ++ -- sizeof")))));
+                rules["arg_op"] =       Done(Concat(Concat(Node(FromLeftRef("arg_begin")),Opt(Concat(Node(FromLeftRef("assign_expr")),Rep0(Concat(Node(FromLeftRef("comma_op")),Node(FromLeftRef("assign_expr"))))))),Node(FromLeftRef("arg_end"))));
+                rules["idx_op"] =       Done(Concat(Concat(Node(FromLeftRef("idx_begin")),Node(FromLeftRef("expr"))),Node(FromLeftRef("idx_end"))));
+                rules["identifier"] =   Done(Node(FromTokenMatcher(new IdMatcher())));
             }
             return rules.at(left);
         }
