@@ -736,9 +736,133 @@ void Test_ParserGen_Expr()
     }
 }
 
+void Test_ParserGen_Stmt()
+{
+    /*
+        stmt                    := labeled_stmt | compound_stmt | selection_stmt | iteration_stmt | jump_stmt
+        labeled_stmt            := ('default' | 'case' expr) ':' stmt
+        compound_stmt           := '{' stmt* '}'
+        selection_stmt          := 'if' '(' expr ')' stmt ('else' stmt)?
+                                || 'switch' '(' expr ')' stmt
+        iteration_stmt          := 'while' '(' expr ')' stmt
+                                || 'do' stmt 'while' '(' expr ')' ';'
+                                || 'for' '(' expr? ';' expr? ';' expr? ')' stmt
+        jump_stmt               := ('continue' | 'break' | 'return' expr?) ';'
+        expr                    := integer
+        integer                 := '\d+'
+    */
+    class StmtGrammer : public Grammer
+    {
+    public:
+        Right Expand(Left left) override
+        {
+            if (rules.empty())
+            {
+                rules["stmt"] = Done(
+                    Alt(Alt(Alt(Alt(
+                        Node(FromLeftRef("labeled_stmt")),
+                        Node(FromLeftRef("compound_stmt"))),
+                        Node(FromLeftRef("selection_stmt"))),
+                        Node(FromLeftRef("iteration_stmt"))),
+                        Node(FromLeftRef("jump_stmt"))));
+                rules["labeled_stmt"] = Done(
+                    Concat(
+                        Concat(
+                            Alt(
+                                Node(FromTokenMatcher(new ExactMatcher("default"))),
+                                Concat(
+                                    Node(FromTokenMatcher(new ExactMatcher("case"))),
+                                    Node(FromTokenMatcher(new NumberMatcher()))
+                                )
+                            ),
+                            Node(FromTokenMatcher(new ExactMatcher(":")))
+                        ),
+                        Node(FromLeftRef("stmt"))
+                    )
+                );
+                rules["compound_stmt"] = Done(
+                    Concat(Concat(
+                        Node(FromTokenMatcher(new ExactMatcher("{"))),
+                        Rep0(Node(FromLeftRef("stmt")))),
+                        Node(FromTokenMatcher(new ExactMatcher("}"))))
+                );
+
+                rules["selection_stmt"] = Done(
+                    Concat(Concat(Concat(Concat(Concat(
+                        Node(FromTokenMatcher(new ExactMatcher("if"))),
+                        Node(FromTokenMatcher(new ExactMatcher("(")))),
+                        Node(FromLeftRef("expr"))),
+                        Node(FromTokenMatcher(new ExactMatcher(")")))),
+                        Node(FromLeftRef("stmt"))),
+                        Opt(
+                        Concat(
+                            Node(FromTokenMatcher(new ExactMatcher("else"))),
+                            Node(FromLeftRef("stmt"))
+                        )
+                        )
+                    )
+                );
+                rules["iteration_stmt"] = Done(
+                    Alt(Alt(
+                        Concat(Concat(Concat(Concat(
+                            Node(FromTokenMatcher(new ExactMatcher("while"))),
+                            Node(FromTokenMatcher(new ExactMatcher("(")))),
+                            Node(FromLeftRef("expr"))),
+                            Node(FromTokenMatcher(new ExactMatcher(")")))),
+                            Node(FromLeftRef("stmt"))),
+                        Concat(Concat(Concat(Concat(Concat(Concat(
+                            Node(FromTokenMatcher(new ExactMatcher("do"))),
+                            Node(FromLeftRef("stmt"))),
+                            Node(FromTokenMatcher(new ExactMatcher("while")))),
+                            Node(FromTokenMatcher(new ExactMatcher("(")))),
+                            Node(FromLeftRef("expr"))),
+                            Node(FromTokenMatcher(new ExactMatcher(")")))),
+                            Node(FromTokenMatcher(new ExactMatcher(";"))))
+                    ),
+                        Concat(Concat(Concat(Concat(Concat(Concat(Concat(Concat(
+                            Node(FromTokenMatcher(new ExactMatcher("for"))),
+                            Node(FromTokenMatcher(new ExactMatcher("(")))),
+                            Opt(Node(FromLeftRef("expr")))),
+                            Node(FromTokenMatcher(new ExactMatcher(";")))),
+                            Opt(Node(FromLeftRef("expr")))),
+                            Node(FromTokenMatcher(new ExactMatcher(";")))),
+                            Opt(Node(FromLeftRef("expr")))),
+                            Node(FromTokenMatcher(new ExactMatcher(")")))),
+                            Node(FromLeftRef("stmt")))
+                    )
+                );
+                rules["jump_stmt"] = Done(
+                    Concat(
+                        Alt(Alt(
+                            Node(FromTokenMatcher(new ExactMatcher("continue"))),
+                            Node(FromTokenMatcher(new ExactMatcher("break")))),
+                            Concat(
+                                Node(FromTokenMatcher(new ExactMatcher("return"))),
+                                Opt(Node(FromLeftRef("expr")))
+                            )
+                        ),
+                        Node(FromTokenMatcher(new ExactMatcher(";")))
+                    )
+                );
+                rules["expr"] = Done(Node(FromTokenMatcher(new NumberMatcher())));
+            }
+            return rules.at(left);
+        }
+
+        std::map<Left, Right> rules;
+    } stmt;
+
+    {
+        Visitor vi;
+        TokenIterator ti(Tokenize("{ do { if ( 1 ) { break ; } else { for ( ; 0 ; ) { } continue ; } } while ( 0 ) ; return 1 ; }"));
+        Parse("stmt", stmt, vi, ti);
+    }
+}
+
 void Test_ParserGen()
 {
     Test_ParserGen_ABCD();
     Test_ParserGen_Decl();
     Test_ParserGen_Expr();
+    Test_ParserGen_Stmt();
 }
