@@ -14,8 +14,6 @@ Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "play-cpp", "play-cpp\playgr
 EndProject
 Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "play-x64-asm", "play-x64-asm\x64-asm-test.vcxproj", "{FE79E9B4-6DFD-4155-AA20-08D571B5FA1E}"
 EndProject
-Project("{8BC9CEB8-8B4A-11D0-8D11-00A0C91BC942}") = "cc-unit-test", "cc-unit-test\cc-unit-test.vcxproj", "{CF738DCF-56CF-4A46-9093-ACF110713206}"
-EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
 		Debug|x64 = Debug|x64
@@ -74,18 +72,6 @@ Global
 		{FE79E9B4-6DFD-4155-AA20-08D571B5FA1E}.UnitTest|x64.Build.0 = UnitTest|x64
 		{FE79E9B4-6DFD-4155-AA20-08D571B5FA1E}.UnitTest|x86.ActiveCfg = UnitTest|Win32
 		{FE79E9B4-6DFD-4155-AA20-08D571B5FA1E}.UnitTest|x86.Build.0 = UnitTest|Win32
-		{CF738DCF-56CF-4A46-9093-ACF110713206}.Debug|x64.ActiveCfg = Debug|x64
-		{CF738DCF-56CF-4A46-9093-ACF110713206}.Debug|x64.Build.0 = Debug|x64
-		{CF738DCF-56CF-4A46-9093-ACF110713206}.Debug|x86.ActiveCfg = Debug|Win32
-		{CF738DCF-56CF-4A46-9093-ACF110713206}.Debug|x86.Build.0 = Debug|Win32
-		{CF738DCF-56CF-4A46-9093-ACF110713206}.Release|x64.ActiveCfg = Release|x64
-		{CF738DCF-56CF-4A46-9093-ACF110713206}.Release|x64.Build.0 = Release|x64
-		{CF738DCF-56CF-4A46-9093-ACF110713206}.Release|x86.ActiveCfg = Release|Win32
-		{CF738DCF-56CF-4A46-9093-ACF110713206}.Release|x86.Build.0 = Release|Win32
-		{CF738DCF-56CF-4A46-9093-ACF110713206}.UnitTest|x64.ActiveCfg = UnitTest|x64
-		{CF738DCF-56CF-4A46-9093-ACF110713206}.UnitTest|x64.Build.0 = UnitTest|x64
-		{CF738DCF-56CF-4A46-9093-ACF110713206}.UnitTest|x86.ActiveCfg = UnitTest|Win32
-		{CF738DCF-56CF-4A46-9093-ACF110713206}.UnitTest|x86.Build.0 = UnitTest|Win32
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE

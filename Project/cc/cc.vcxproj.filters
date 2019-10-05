@@ -188,12 +188,6 @@
     </Filter>
   </ItemGroup>
   <ItemGroup>
-    <None Include="..\..\Test\SampleProgram\Program.c">
-      <Filter>TestProgram</Filter>
-    </None>
-    <None Include="..\..\Test\SampleProgram\Simple.c">
-      <Filter>TestProgram</Filter>
-    </None>
     <None Include="..\..\DevLog\MOD.md">
       <Filter>Doc</Filter>
     </None>
@@ -221,10 +215,19 @@
     <None Include="..\..\DevLog\MOD_vm.md">
       <Filter>Doc\old</Filter>
     </None>
+    <None Include="..\..\Test\Simple.c">
+      <Filter>TestProgram</Filter>
+    </None>
+    <None Include="..\..\Test\Program.c">
+      <Filter>TestProgram</Filter>
+    </None>
   </ItemGroup>
   <ItemGroup>
     <Text Include="..\..\DevLog\AstBNF.txt">
       <Filter>Parse</Filter>
+    </Text>
+    <Text Include="..\..\DevLog\ParserGen.txt">
+      <Filter>Doc</Filter>
     </Text>
     <Text Include="..\..\DevLog\Lex.txt">
       <Filter>Preprocess</Filter>

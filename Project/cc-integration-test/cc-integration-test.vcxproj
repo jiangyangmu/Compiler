@@ -96,6 +96,9 @@
     <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
   </ImportGroup>
   <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <OutDir>$(SolutionDir)$(Platform)\$(Configuration)\</OutDir>
+  </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <WarningLevel>Level3</WarningLevel>
@@ -173,12 +176,15 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup>
+    <CL_CSource>
+      <ObjFileName>%(FileName).obj</ObjFileName>
+    </CL_CSource>
     <CC_CSource>
-      <LogFileName>%(FileName).log</LogFileName>
+      <LogFileName>%(RelativeDir)%(FileName).log</LogFileName>
     </CC_CSource>
     <CC_AsmSource>
-      <ExecutableFileName>%(FileName).exe</ExecutableFileName>
-      <PDBFileName>%(FileName).pdb</PDBFileName>
+      <ExecutableFileName>%(RelativeDir)%(FileName).exe</ExecutableFileName>
+      <PDBFileName>%(RelativeDir)%(FileName).pdb</PDBFileName>
     </CC_AsmSource>
   </ItemDefinitionGroup>
   <ItemGroup>
@@ -186,73 +192,73 @@
   </ItemGroup>
   <ItemGroup>
     <Text Include="IncludedSource.txt" />
-    <None Include="..\..\DevLog\LIBC.md" />
-    <None Include="io.c">
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\Test\data_structure.c">
       <FileType>CppCode</FileType>
     </None>
-    <None Include="fibonacci.c">
+    <None Include="..\..\Test\debug.c">
       <FileType>CppCode</FileType>
     </None>
-    <None Include="debug.c">
+    <None Include="..\..\Test\fibonacci.c">
+      <FileType>CppCode</FileType>
+    </None>
+    <None Include="..\..\Test\greedy_snake.c">
+      <FileType>CppCode</FileType>
+    </None>
+    <None Include="..\..\Test\io.c">
+      <FileType>CppCode</FileType>
+    </None>
+    <None Include="..\..\Test\libc.c">
+      <FileType>CppCode</FileType>
+    </None>
+    <None Include="..\..\Test\Native\api.c">
+      <FileType>CppCode</FileType>
+    </None>
+    <None Include="..\..\Test\type.c">
       <FileType>CppCode</FileType>
     </None>
   </ItemGroup>
   <ItemGroup>
-    <None Include="type.c">
-      <FileType>CppCode</FileType>
-    </None>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="data_structure.c">
-      <FileType>CppCode</FileType>
-    </None>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="libc.c">
-      <FileType>CppCode</FileType>
-    </None>
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="api.c">
-      <FileType>CppCode</FileType>
-    </None>
-  </ItemGroup>
-  <ItemGroup>
-    <ClInclude Include="api.h" />
-  </ItemGroup>
-  <ItemGroup>
-    <None Include="greedy_snake.c">
-      <FileType>CppCode</FileType>
-    </None>
+    <ClInclude Include="..\..\Test\Native\api.h" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <Target Name="CC_ComputeInputOutputFiles">
+    <PropertyGroup>
+      <!-- Not work for msbuild.exe, SolutionDir is weird if run msbuild.exe in cmd -->
+      <BaseDir>$(SolutionDir)$(ProjectName)\..\..\Test</BaseDir>
+    </PropertyGroup>
     <ReadLinesFromFile File="@(CC_IncludedSourceFile)">
       <Output TaskParameter="Lines" ItemName="CC_IncludedSourceRegex" />
     </ReadLinesFromFile>
     <ItemGroup>
-      <CC_CSource Include="*.c" Condition="'@(CC_IncludedSourceRegex)' == '*.c'" />
-      <CC_CSource Include="@(CC_IncludedSourceRegex)" Condition="'@(CC_IncludedSourceRegex)' != '*.c'" />
+      <!-- Collect Files -->
+      <CL_CSource Include="$(BaseDir)\Native\*.c" />
+      <CC_CSource Include="$(BaseDir)\*.c" Condition="'@(CC_IncludedSourceRegex)' == '*.c'" />
+      <CC_CSource Include="@(CC_IncludedSourceRegex->'$(BaseDir)\%(Filename)%(Extension)')" Condition="'@(CC_IncludedSourceRegex)' != '*.c'" />
       <CC_AsmSource Include="@(CC_CSource-&gt;Replace('.c', '.asm'))" />
       <CC_Executable Include="@(CC_CSource-&gt;Replace('.c', '.exe'))" />
     </ItemGroup>
   </Target>
   <Target Name="CC_Compile" DependsOnTargets="PreBuildEvent;CC_ComputeInputOutputFiles">
-    <Exec Command="echo  Compiling: %(CC_CSource.Identity) &amp; ..\..\Build\cc.exe %(CC_CSource.Identity) &gt; %(CC_CSource.LogFileName)" />
-    <Exec Command="cl.exe /c /Zi /nologo /W3 /WX- /diagnostics:classic /sdl /Od /D _MBCS /RTC1 /MTd /GS /fp:precise /permissive- /Zc:wchar_t /Zc:forScope /Zc:inline /Fox64\Debug\ /Fdx64\Debug\vc141.pdb /Gd /TC /FC /errorReport:prompt api.c" />
+    <Exec Command="echo  Compiling(cc): %(CC_CSource.Identity) &amp; ..\..\Build\cc.exe %(CC_CSource.Identity) &gt; %(CC_CSource.LogFileName)" />
+    <Exec Command="echo  Compiling(cl): %(CL_CSource.Identity) &amp; cl.exe /c /Zi /nologo /W3 /WX- /diagnostics:classic /sdl /Od /D _MBCS /RTC1 /MTd /GS /fp:precise /permissive- /Zc:wchar_t /Zc:forScope /Zc:inline /Fo%(CL_CSource.RootDir)%(CL_CSource.Directory) /Fdx64\Debug\vc141.pdb /Gd /TC /FC /errorReport:prompt %(CL_CSource.Identity)" />
   </Target>
   <Target Name="CC_Link" DependsOnTargets="CC_Compile" BeforeTargets="PostBuildEvent">
-    <Exec Command="ml64.exe /nologo /Zi /W3 /errorReport:prompt %(CC_AsmSource.Identity) x64\Debug\api.obj /link /OUT:%(CC_AsmSource.ExecutableFileName) /NXCOMPAT /PDB:%(CC_AsmSource.PDBFileName) /DYNAMICBASE legacy_stdio_definitions.lib msvcrtd.lib vcruntimed.lib ucrtd.lib kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /DEBUG:FASTLINK /MACHINE:X64 /INCREMENTAL /ERRORREPORT:PROMPT /NOLOGO /TLBID:1" />
+    <Exec Command="ml64.exe /nologo /Zi /W3 /errorReport:prompt %(CC_AsmSource.Identity) @(CL_CSource->'%(RootDir)%(Directory)%(Filename).obj') /link /OUT:%(CC_AsmSource.ExecutableFileName) /NXCOMPAT /PDB:%(CC_AsmSource.PDBFileName) /DYNAMICBASE legacy_stdio_definitions.lib msvcrtd.lib vcruntimed.lib ucrtd.lib kernel32.lib user32.lib gdi32.lib winspool.lib comdlg32.lib advapi32.lib shell32.lib ole32.lib oleaut32.lib uuid.lib odbc32.lib odbccp32.lib /DEBUG:FASTLINK /MACHINE:X64 /INCREMENTAL /ERRORREPORT:PROMPT /NOLOGO /TLBID:1" />
   </Target>
   <Target Name="CC_Run" AfterTargets="CC_Link">
     <Exec Command="echo  Running %(CC_Executable.Identity)... &amp; cmd /V /C %(CC_Executable.Identity) ^&amp; echo  Exit code = !errorlevel!" IgnoreExitCode="true" EchoOff="true">
     </Exec>
   </Target>
-  <Target Name="PrintVar">
-    <Message Text="masm prop = $(VCTargetsPath)\BuildCustomizations\masm.props" />
-    <Message Text="masm target = $(VCTargetsPath)\BuildCustomizations\masm.targets" />
-    <Message Text="Int dir = $(IntDir)" />
-    <Message Text="echo  Compiling: %(CC_CSource.Identity) =&gt; %(CC_CSource.Identity), %(CC_CSource.LogFileName)" />
+  <Target Name="PrintVar" DependsOnTargets="CC_ComputeInputOutputFiles">
+    <!--<Message Text="masm prop = $(VCTargetsPath)\BuildCustomizations\masm.props" />-->
+    <!--<Message Text="masm target = $(VCTargetsPath)\BuildCustomizations\masm.targets" />-->
+    <!--<Message Text="Int dir = $(IntDir)" />-->
+    <Message Text="SolutionDir = $(SolutionDir)" />
+    <!--<Message Text="CC_IncludedSourceRegex = @(CC_IncludedSourceRegex->'$(BaseDir)\%(Filename)%(Extension)')" />-->
+    <Message Text="echo  Compiling(cl): %(CL_CSource.Identity)" />
+    <Message Text="echo  Compiling(cc): %(CC_CSource.Identity) =&gt; %(CC_CSource.Identity), %(CC_CSource.LogFileName)" />
     <Message Text="echo  Linking: %(CC_AsmSource.Identity) =&gt; %(CC_AsmSource.ExecutableFileName), %(CC_AsmSource.PDBFileName)" />
     <Message Text="echo  Running %(CC_Executable.Identity)" />
   </Target>

@@ -27,6 +27,12 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <None Include="..\..\Test\Program.c">
+      <FileType>CppCode</FileType>
+    </None>
+    <None Include="..\..\Test\Simple.c">
+      <FileType>CppCode</FileType>
+    </None>
     <ClInclude Include="..\..\Source\Base\Bit.h" />
     <ClInclude Include="..\..\Source\Base\Charset.h" />
     <ClInclude Include="..\..\Source\Base\common.h" />
@@ -88,16 +94,11 @@
     <None Include="..\..\DevLog\CODE.md" />
     <None Include="..\..\DevLog\TODO.md" />
     <None Include="..\..\DevLog\TODO_vm.md" />
-    <None Include="..\..\Test\SampleProgram\Program.c">
-      <FileType>CppCode</FileType>
-    </None>
-    <None Include="..\..\Test\SampleProgram\Simple.c">
-      <FileType>CppCode</FileType>
-    </None>
   </ItemGroup>
   <ItemGroup>
     <Text Include="..\..\DevLog\AstBNF.txt" />
     <Text Include="..\..\DevLog\Lex.txt" />
+    <Text Include="..\..\DevLog\ParserGen.txt" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <ProjectGuid>{DDAE5B18-7E5C-4827-9485-288273BE3AEB}</ProjectGuid>
