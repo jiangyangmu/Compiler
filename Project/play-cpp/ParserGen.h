@@ -8,7 +8,8 @@
 
 /*
 
-    Problem: generate LL(1) parser
+    Problem 1: generate LL(1) parser
+    Problem 2: generate LR(0) parser
 
     Input: rule files
         A -> BCD
@@ -108,7 +109,7 @@ struct NumberMatcher : public TokenMatcher
     }
 };
 
-// ==== Grammer ====
+// ==== RE ====
 
 typedef std::string Left;
 
@@ -229,13 +230,33 @@ bool IsDoneNode(RightNode * node)
     return node && node->isDone;
 }
 
-class Grammer
+// ==== NFA ====
+
+struct NfaState
+{
+    // NT|T
+    Right value;
+    NfaState * valueOut;
+    NfaState * epsilonOut;
+};
+struct Nfa
+{
+    NfaState * in;
+    NfaState ** valueOut;
+    NfaState ** epsilonOut;
+};
+
+// ==== DFA ====
+
+// ==== Grammar ====
+
+class Grammar
 {
 public:
     virtual Right Expand(Left left) = 0;
 };
 
-// ==== Parse ====
+// ==== LL Parse ====
 
 struct Visitor
 {
@@ -291,7 +312,7 @@ std::set<RightNode *> Closure(RightNode * right)
 }
 
 // Peek one token, find next node to match. Or done node. Or nullptr.
-RightNode * LL1Predict(RightNode * node, Grammer & g, const Token & token)
+RightNode * LL1Predict(RightNode * node, Grammar & g, const Token & token)
 {
     std::set<RightNode *> canMatchNodes;
     RightNode * doneNode = nullptr;
@@ -319,7 +340,7 @@ RightNode * LL1Predict(RightNode * node, Grammer & g, const Token & token)
     assert(canMatchNodes.size() <= 1);
     return canMatchNodes.empty() ? doneNode : *canMatchNodes.begin();
 }
-void LL1Match(RightNode * right, Grammer & g, Visitor & vi, TokenIterator & ti)
+void LL1Match(RightNode * right, Grammar & g, Visitor & vi, TokenIterator & ti)
 {
     assert(right);
 
@@ -354,9 +375,23 @@ void LL1Match(RightNode * right, Grammer & g, Visitor & vi, TokenIterator & ti)
     }
 }
 
+// ==== LR Parse ====
+
+// TODO
+// A. extensible RE module
+// B. RE to NFA converter
+// C. NFA to DFA converter
+// D. simulate DFA
+
+void LR0Parse(Left left, Grammar & g, Visitor & vi, TokenIterator & ti)
+{
+    // 1. List right segments
+    // 2. Shift, try find right segment (compare token right-to-left), repeat until find.
+}
+
 // ==== API ====
 
-void Parse(Left left, Grammer & g, Visitor & vi, TokenIterator & ti)
+void Parse(Left left, Grammar & g, Visitor & vi, TokenIterator & ti)
 {
     vi.Before(&left, nullptr);
     LL1Match(g.Expand(left).in, g, vi, ti);
@@ -364,6 +399,34 @@ void Parse(Left left, Grammer & g, Visitor & vi, TokenIterator & ti)
 }
 
 // ==== Test ====
+
+// Test helpers
+std::vector<Token> Tokenize(std::string str)
+{
+    std::vector<Token> tokens;
+    Token t;
+    for (char c : str)
+    {
+        if (isspace(c))
+        {
+            if (!t.empty())
+            {
+                tokens.emplace_back();
+                std::swap(tokens.back(), t);
+            }
+        }
+        else
+        {
+            t.push_back(c);
+        }
+    }
+    if (!t.empty())
+    {
+        tokens.emplace_back();
+        std::swap(tokens.back(), t);
+    }
+    return tokens;
+}
 
 void Test_ParserGen_ABCD()
 {
@@ -374,7 +437,7 @@ void Test_ParserGen_ABCD()
         D -> d
     */
     {
-        class ABCDGrammer : public Grammer
+        class ABCDGrammar : public Grammar
         {
         public:
             Right Expand(Left left) override
@@ -404,7 +467,7 @@ void Test_ParserGen_ABCD()
         D -> d
     */
     {
-        class ABCDGrammer : public Grammer
+        class ABCDGrammar : public Grammar
         {
         public:
             Right Expand(Left left) override
@@ -446,7 +509,7 @@ void Test_ParserGen_ABCD()
         D -> d
     */
     {
-        class ABCDGrammer : public Grammer
+        class ABCDGrammar : public Grammar
         {
         public:
             Right Expand(Left left) override
@@ -498,7 +561,7 @@ void Test_ParserGen_ABCD()
         B -> b
     */
     {
-        class ABCDGrammer : public Grammer
+        class ABCDGrammar : public Grammar
         {
         public:
             Right Expand(Left left) override
@@ -527,33 +590,6 @@ void Test_ParserGen_ABCD()
     }
 }
 
-std::vector<Token> Tokenize(std::string str)
-{
-    std::vector<Token> tokens;
-    Token t;
-    for (char c : str)
-    {
-        if (isspace(c))
-        {
-            if (!t.empty())
-            {
-                tokens.emplace_back();
-                std::swap(tokens.back(), t);
-            }
-        }
-        else
-        {
-            t.push_back(c);
-        }
-    }
-    if (!t.empty())
-    {
-        tokens.emplace_back();
-        std::swap(tokens.back(), t);
-    }
-    return tokens;
-}
-
 void Test_ParserGen_Decl()
 {
     /*
@@ -562,7 +598,7 @@ void Test_ParserGen_Decl()
         identifier  := '\w+'
         constant_expr := '\d+'
     */
-    class DeclGrammer : public Grammer
+    class DeclGrammar : public Grammar
     {
     public:
         Right Expand(Left left) override
@@ -664,7 +700,7 @@ void Test_ParserGen_Expr()
         prefix_op               := & * + - ~ ! ++ -- sizeof
         identifier              := '\w+'
     */
-    class ExprGrammer : public Grammer
+    class ExprGrammar : public Grammar
     {
     public:
         Right Expand(Left left) override
@@ -751,7 +787,7 @@ void Test_ParserGen_Stmt()
         expr                    := integer
         integer                 := '\d+'
     */
-    class StmtGrammer : public Grammer
+    class StmtGrammar : public Grammar
     {
     public:
         Right Expand(Left left) override

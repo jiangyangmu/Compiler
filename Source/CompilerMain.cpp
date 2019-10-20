@@ -11,7 +11,6 @@
 #include "Base/Common.h"
 #include "Base/String.h"
 #include "Base/File.h"
-#include "Preprocess/Preprocess.h"
 #include "Parse/AstParser.h"
 #include "CodeGeneration/AstCompiler.h"
 #include "CodeGeneration/Translation.h"
@@ -75,7 +74,7 @@ int main(int argc, char *argv[])
     }
     else
     {
-        const std::string fileName = "C:\\Users\\celsi\\Documents\\Github\\cc\\Test\\SampleProgram\\Simple.c";
+        const std::string fileName = "..\\..\\Test\\Simple.c";
         std::cout << "Input: " << fileName << std::endl;
         (void)Compile(fileName);
     }

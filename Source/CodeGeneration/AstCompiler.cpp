@@ -1188,7 +1188,7 @@ void CompileAst(AstCompileContext * context, Ast * ast)
                 enumConstName = child->token.text;
                 if (child->leftChild)
                 {
-                    ASSERT(child->leftChild->type == CONSTANT_EXPR);
+                    //ASSERT(child->leftChild->type == CONSTANT_EXPR);
                     nextEnumConstValue = child->leftChild->token.ival;
                 }
 

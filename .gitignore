@@ -42,3 +42,8 @@ Release/
 *.psess
 DevLog/
 *.tlog
+*.bin
+*.zip
+*.idb
+Test/*.asm
+Build/

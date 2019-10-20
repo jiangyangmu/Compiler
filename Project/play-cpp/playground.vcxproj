@@ -99,6 +99,7 @@
   <PropertyGroup Label="UserMacros" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <LinkIncremental>true</LinkIncremental>
+    <OutDir>$(SolutionDir)..\Build\</OutDir>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='UnitTest|x64'">
     <LinkIncremental>true</LinkIncremental>
@@ -209,11 +210,17 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp" />
+    <ClInclude Include="Automata.h" />
     <ClInclude Include="CxxException.h" />
+    <ClInclude Include="Graphviz.h" />
     <ClInclude Include="Lexer.h" />
     <ClInclude Include="ParserGen.h" />
     <ClInclude Include="PositionLinkedList.h" />
+    <ClInclude Include="WinCmd.h" />
     <ClInclude Include="WinMem.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="ClassDiagram.cd" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

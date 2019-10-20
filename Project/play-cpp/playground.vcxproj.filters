@@ -25,10 +25,22 @@
     <ClInclude Include="ParserGen.h">
       <Filter>Category</Filter>
     </ClInclude>
+    <ClInclude Include="Automata.h">
+      <Filter>Category</Filter>
+    </ClInclude>
+    <ClInclude Include="Graphviz.h">
+      <Filter>Category</Filter>
+    </ClInclude>
+    <ClInclude Include="WinCmd.h">
+      <Filter>Category</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Main.cpp">
       <Filter>Main</Filter>
     </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="ClassDiagram.cd" />
   </ItemGroup>
 </Project>

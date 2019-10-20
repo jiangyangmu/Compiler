@@ -62,8 +62,8 @@ static std::vector<std::string> LexPatterns = {
     "#else",
     "#elif",
     "#define",
-    "-?[0-9]+\\.[0-9]*|\\.[0-9]+", // float
-    "-?[0-9]+", // int
+    "[0-9]+\\.[0-9]*|\\.[0-9]+", // float
+    "[0-9]+", // int
     "'([^']|\\\\')+'", // char
     "\"([^\"]|\\\\\")*\"", // string or pp-local-path
     "<([^> ]|\\\\>)+>", // pp-env-path
@@ -301,25 +301,31 @@ float StringToFloat(const char * begin, const char * end)
 
     return static_cast<float>(digits / factor);
 }
-void EvalTokens(std::vector<Token> & in)
+void EvalToken(Token & token)
+{
+    switch (token.type)
+    {
+        case Token::CONST_INT:
+            token.ival = StringToInt(token.text.data(), token.text.data() + token.text.length());
+            break;
+        case Token::CONST_CHAR:
+            token.cval = StringToChar(token.text.data() + 1, token.text.data() + token.text.length() - 1);
+            break;
+        case Token::CONST_FLOAT:
+            token.fval = StringToFloat(token.text.data(), token.text.data() + token.text.length());
+            break;
+        default:
+            break;
+    }
+}
+
+std::vector<Token> & EvalTokens(std::vector<Token> & in)
 {
     for (Token & token : in)
     {
-        switch (token.type)
-        {
-            case Token::CONST_INT:
-                token.ival = StringToInt(token.text.data(), token.text.data() + token.text.length());
-                break;
-            case Token::CONST_CHAR:
-                token.cval = StringToChar(token.text.data() + 1, token.text.data() + token.text.length() - 1);
-                break;
-            case Token::CONST_FLOAT:
-                token.fval = StringToFloat(token.text.data(), token.text.data() + token.text.length());
-                break;
-            default:
-                break;
-        }
+        EvalToken(token);
     }
+    return in;
 }
 
 // ==== Token Reader ====
@@ -1093,8 +1099,9 @@ class FileIncludeTokenReplacer : public TokenReplacer
 {
     // Handle #include...
 public:
-    FileIncludeTokenReplacer(TokenReader<std::string> * a0)
+    FileIncludeTokenReplacer(TokenReader<std::string> * a0, std::string a1)
         : trFile(a0)
+        , baseDir(a1)
     {}
 
     TokenRange                      Accept(TokenRange range) override
@@ -1119,7 +1126,7 @@ public:
         auto it = range.Begin();
         ++it;
         std::string fileName = it->token.text.substr(1, it->token.text.size() - 2);
-        for (Token & token : trFile->Read(fileName))
+        for (Token & token : trFile->Read(baseDir + "\\" + fileName))
         {
             out.Insert(Annotate(token, {}));
         }
@@ -1127,6 +1134,7 @@ public:
 
 private:
     TokenReader<std::string> * trFile;
+    std::string baseDir;
 };
 class ChainedTokenReplacer : public TokenReplacer
 {
@@ -1326,7 +1334,7 @@ std::vector<Token> LexProcess(std::string sourceFile, std::string * sourceAfterP
     MacroContextTokenReplacer *         repMacroContext = new MacroContextTokenReplacer;
     MacroSubTokenReplacer *             repMacroSub = new MacroSubTokenReplacer(repMacroContext->GetMacroContext(), me);
     ConditionalIncludeTokenReplacer *   repCondIncl = new ConditionalIncludeTokenReplacer(repMacroContext->GetMacroContext());
-    FileIncludeTokenReplacer *          repFileIncl = new FileIncludeTokenReplacer(trFile);
+    FileIncludeTokenReplacer *          repFileIncl = new FileIncludeTokenReplacer(trFile, GetCanonicalFileDirectory(sourceFile));
 
     ChainedTokenReplacer                repPreproc({ repMacroContext, repMacroSub, repCondIncl, repFileIncl, repEmit });
 
@@ -1345,7 +1353,7 @@ std::vector<Token> LexProcess(std::string sourceFile, std::string * sourceAfterP
         in.listToken.insert(in.listToken.begin(), tmp.begin(), tmp.end());
     }
 
-    return DeAnnotateAll(output);
+    return EvalTokens(DeAnnotateAll(output));
 }
 
 TokenIterator::TokenIterator(std::vector<Token> & tokens)

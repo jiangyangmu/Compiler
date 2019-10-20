@@ -40,6 +40,8 @@ public:
 
     static size_t CharIdx(char ch)
     {
+        if (!Contains(ch))
+            std::cerr << "Unknown char: " << ch << std::endl;
         assert(Contains(ch));
         return ch;
     }

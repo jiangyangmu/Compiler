@@ -154,7 +154,7 @@ struct Token
 
     Token() : type(UNKNOWN), text() {}
     Token(Type type_, std::string text_) : type(type_), text(text_) {}
-    Token(const Token & t) : type(t.type), text(t.text) {}
+    Token(const Token & t) : type(t.type), text(t.text), ival(t.ival), fval(t.fval), cval(t.cval) {}
     Token & operator = (const Token & t)
     {
         this->~Token();

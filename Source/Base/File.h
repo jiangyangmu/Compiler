@@ -2,6 +2,10 @@
 
 #include <string>
 
+std::string GetCurrentWorkDirectory();
+
+std::string GetCanonicalFileDirectory(std::string fileName);
+
 std::string GetFileContent(const char * fileName);
 
 void SetFileContent(const char * fileName,

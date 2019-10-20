@@ -1197,12 +1197,11 @@ Ast * ParseArgumentList(TokenIterator & ti)
 
 Ast * ParseConstantExpr(TokenIterator & ti)
 {
-    // TODO
     Ast * constExpr;
 
     ASSERT(PEEK_T(Token::CONST_INT));
     constExpr = ParsePrimaryExpr(ti);
-    constExpr->type = CONSTANT_EXPR;
+    //constExpr->type = CONSTANT_EXPR;
 
     return constExpr;
 }
