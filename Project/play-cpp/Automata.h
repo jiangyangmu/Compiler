@@ -26,14 +26,6 @@ std::wstring ToWString(const std::string & s)
 #define FOR_EACH_REV(elementName, container) for (auto it = (container).rbegin(); it != (container).rend() && ((elementName) = *it, true); ++it)
 
 // ==== RE ====
-// tree
-// 1. data structure
-//    * parent points to children (better for human)
-//    * postfix nodes (better for computer)
-// 2. build
-//    * class/namespace + static methods
-// 3. visit
-//    * class member/memfunc access
 
 // > forward decl
 
@@ -48,7 +40,7 @@ class UnicodeCharacter;
 class ActionNode;
 class Reference;
 
-class RE_Ref;
+class RETree;
 
 #define ACCEPT_VISIT_BASE virtual void Accept(REVisitor & visitor) = 0;
 #define ACCEPT_VISIT(host) virtual void Accept(REVisitor & visitor) { visitor.Visit##host(*this); }
@@ -72,6 +64,8 @@ public:
     virtual void VisitActionNode(ActionNode &) {}
 };
 
+using REIndex = int;
+
 // > repr
 
 class Node
@@ -81,22 +75,6 @@ public:
     virtual bool IsLeaf() const = 0;
 
     ACCEPT_VISIT_BASE
-};
-class HeadNode : public Node
-{
-public:
-    HeadNode() : body(nullptr) {}
-
-    bool IsLeaf() const override { return false; }
-
-    Node * GetBody() { return body; }
-    void SetBody(Node * a0) { body = a0; }
-
-public:
-    NOT_ACCEPT_VISIT
-
-private:
-    Node * body;
 };
 class LeafNode : public Node
 {
@@ -118,40 +96,38 @@ protected:
 
 class Concatenation : public InternalNode
 {
-public:
-    Concatenation(Node * a0, Node * a1)
-    {
-        AddChild(a0);
-        AddChild(a1);
-    }
+    friend class RE;
 
 public:
     ACCEPT_VISIT(Concatenation)
 
 private:
-};
-class Alternation : public InternalNode
-{
-public:
-    Alternation(Node * a0, Node * a1)
+    Concatenation(Node * a0, Node * a1)
     {
         AddChild(a0);
         AddChild(a1);
     }
+};
+class Alternation : public InternalNode
+{
+    friend class RE;
 
 public:
     ACCEPT_VISIT(Alternation)
 
 private:
+    Alternation(Node * a0, Node * a1)
+    {
+        AddChild(a0);
+        AddChild(a1);
+    }
 };
 class Repeation : public InternalNode
 {
+    friend class RE;
+
 public:
     enum Type { ZERO_OR_MORE, ONE_OR_MORE, ZERO_OR_ONE };
-    Repeation(Node * a0, Type a1) : type(a1)
-    {
-        AddChild(a0);
-    }
 
     Type GetType() const { return type; }
 
@@ -159,189 +135,307 @@ public:
     ACCEPT_VISIT(Repeation)
 
 private:
+    Repeation(Node * a0, Type a1) : type(a1)
+    {
+        AddChild(a0);
+    }
+
     Type type;
 };
 
 class Character : public LeafNode {};
 class ASCIICharacter : public Character
 {
-public:
-    explicit ASCIICharacter(char c) : value(c) {}
+    friend class RE;
 
+public:
     char GetValue() const { return value; }
 
 public:
     ACCEPT_VISIT(ASCIICharacter)
 
 private:
+    explicit ASCIICharacter(char c) : value(c) {}
+
     char value;
 };
 class UnicodeCharacter : public Character
 {
-public:
-    explicit UnicodeCharacter(wchar_t c) : value(c) {}
+    friend class RE;
 
+public:
     wchar_t GetValue() const { return value; }
 
 public:
     ACCEPT_VISIT(UnicodeCharacter)
 
 private:
+    explicit UnicodeCharacter(wchar_t c) : value(c) {}
+
     wchar_t value;
+};
+class Reference : public LeafNode
+{
+    friend class RE;
+
+public:
+    Reference & SetTag(const char * a0) { tag = a0; return *this; }
+    const char * GetTag() const { return tag; }
+
+    REIndex Get() { return index; }
+
+public:
+    ACCEPT_VISIT(Reference)
+
+private:
+    explicit Reference(REIndex a0, const char * a1) : index(a0), tag(a1) {}
+
+    REIndex index;
+    const char * tag;
 };
 
 class ActionNode : public LeafNode
 {
-public:
-    explicit ActionNode(std::function<void()> a0) : action(std::move(a0)) {}
+    friend class RE;
 
+public:
     std::function<void()> & GetAction() { return action; }
 
 public:
     ACCEPT_VISIT(ActionNode)
 
 private:
+    explicit ActionNode(std::function<void()> a0) : action(std::move(a0)) {}
+
     std::function<void()> action;
-};
-
-class RE_Build;
-
-class RE_Ref
-{
-public:
-    RE_Ref() : reHead(new HeadNode()) {}
-
-    HeadNode * Dereference() { return reHead.get(); }
-
-    void operator= (RE_Build && build);
-
-    bool operator== (const RE_Ref & other) const { return reHead == other.reHead; }
-    bool operator!= (const RE_Ref & other) const { return reHead != other.reHead; }
-
-    bool operator< (const RE_Ref & other) const { return reHead.get() < other.reHead.get(); }
-
-private:
-    std::shared_ptr<HeadNode> reHead;
-};
-
-class Reference : public LeafNode
-{
-public:
-    explicit Reference(RE_Ref a0, const char * a1) : re(a0), tag(a1) {}
-    Reference & SetTag(const char * a0) { tag = a0; return *this; }
-    const char * GetTag() const { return tag; }
-
-    RE_Ref Get() { return re; }
-
-public:
-    ACCEPT_VISIT(Reference)
-
-private:
-    RE_Ref re;
-    const char * tag;
 };
 
 // > build
 
-class RE_Build
-{
-public:
-    RE_Build operator& (RE_Build);
-    RE_Build operator| (RE_Build);
-    RE_Build operator~ ();
-    RE_Build operator* ();
-    RE_Build operator+ ();
-    friend RE_Build Ref(RE_Ref origin, const char * tag);
-    friend RE_Build Ascii(char c);
-    friend RE_Build Unicode(wchar_t c);
-    friend RE_Build Action(std::function<void()> action);
+class REExpression;
 
-    friend void RE_Ref::operator= (RE_Build && build);;
-    friend void Visit(RE_Build & re, REVisitor & visitor);
+class REContext
+{
+    friend class RE;
+
+public:
+    REContext();
+    ~REContext();
+
+    Node * FindTree(REIndex index);
+    void AddNode(Node * node);
+    void AddTree(REIndex index, Node * tree);
 
 private:
-    Node * reBody;
+    // RE node allocator
+    std::vector<Node *> nodes;
+    // RE index allocator
+    REIndex indexGen;
+    // RE tree index -> RE tree
+    std::map<REIndex, Node *> trees;
 };
-// Operator nodes: operator based
-RE_Build RE_Build::operator& (RE_Build other)
+REContext::REContext()
+    : indexGen(0)
 {
-    RE_Build re;
-    re.reBody = new Concatenation(reBody, other.reBody);
-    return re;
 }
-RE_Build RE_Build::operator| (RE_Build other)
+REContext::~REContext()
 {
-    RE_Build re;
-    re.reBody = new Alternation(reBody, other.reBody);
-    return re;
+    for (Node * node : nodes)
+    {
+        delete node;
+    }
 }
-RE_Build RE_Build::operator~ ()
+Node * REContext::FindTree(REIndex index)
 {
-    RE_Build re;
-    re.reBody = new Repeation(reBody, Repeation::ZERO_OR_ONE);
-    return re;
+    return trees.at(index);
 }
-RE_Build RE_Build::operator* ()
+void REContext::AddNode(Node * node)
 {
-    RE_Build re;
-    re.reBody = new Repeation(reBody, Repeation::ZERO_OR_MORE);
-    return re;
+    nodes.push_back(node);
 }
-RE_Build RE_Build::operator+ ()
+void REContext::AddTree(REIndex index, Node * tree)
 {
-    RE_Build re;
-    re.reBody = new Repeation(reBody, Repeation::ONE_OR_MORE);
-    return re;
+    trees.emplace(index, tree);
 }
-// Element nodes: function based
-RE_Build Ref(RE_Ref origin, const char * tag = "")
+class REScopedContext
 {
-    RE_Build re;
-    re.reBody = new Reference(origin, tag);
-    return re;
+public:
+    REScopedContext();
+    ~REScopedContext();
+
+private:
+    REContext scopedContext;
+    REContext * oldContext;
+};
+class RE
+{
+    friend class REScopedContext;
+
+public:
+    static REIndex NewIndex();
+
+    static Node * Concat(Node * a0, Node * a1);
+    static Node * Alter(Node * a0, Node * a1);
+    static Node * Repeat(Node * a0, Repeation::Type a1);
+    static Node * Ascii(char c);
+    static Node * Unicode(wchar_t c);
+    static Node * Ref(REIndex a0, const char * a1);
+
+    static void Visit(RETree & tree, REVisitor & visitor);
+
+private:
+    static REContext * CurrentContext;
+};
+REContext * RE::CurrentContext = nullptr;
+REIndex RE::NewIndex()
+{
+    return CurrentContext->indexGen++;
 }
-#define REF(origin) Ref(origin,#origin)
-RE_Build Ascii(char c)
+Node * RE::Concat(Node * a0, Node * a1)
 {
-    RE_Build re;
-    re.reBody = new ASCIICharacter(c);
-    return re;
+    Node * n = new Concatenation(a0, a1);
+    CurrentContext->AddNode(n);
+    return n;
 }
-RE_Build Unicode(wchar_t c)
+Node * RE::Alter(Node * a0, Node * a1)
 {
-    RE_Build re;
-    re.reBody = new UnicodeCharacter(c);
-    return re;
+    Node * n = new Alternation(a0, a1);
+    CurrentContext->AddNode(n);
+    return n;
 }
-// Action node
-RE_Build Action(std::function<void()> action)
+Node * RE::Repeat(Node * a0, Repeation::Type a1)
 {
-    RE_Build re;
-    re.reBody = new ActionNode(std::move(action));
-    return re;
+    Node * n = new Repeation(a0, a1);
+    CurrentContext->AddNode(n);
+    return n;
+}
+Node * RE::Ascii(char c)
+{
+    Node * n = new ASCIICharacter(c);
+    CurrentContext->AddNode(n);
+    return n;
+}
+Node * RE::Unicode(wchar_t c)
+{
+    Node * n = new UnicodeCharacter(c);
+    CurrentContext->AddNode(n);
+    return n;
+}
+Node * RE::Ref(REIndex a0, const char * a1)
+{
+    Node * n = new Reference(a0, a1);
+    CurrentContext->AddNode(n);
+    return n;
+}
+REScopedContext::REScopedContext()
+{
+    oldContext = RE::CurrentContext;
+    RE::CurrentContext = &scopedContext;
+}
+REScopedContext::~REScopedContext()
+{
+    RE::CurrentContext = oldContext;
 }
 
-void RE_Ref::operator= (RE_Build && build)
+class RETree
 {
-    reHead->SetBody(build.reBody);
+public:
+    RETree() : index(RE::NewIndex()) {}
+
+    REIndex Index() const { return index; }
+    Node * Tree() { return tree; }
+    void SetTree(Node * a0) { tree = a0; }
+
+    RETree & operator= (REExpression && build);
+
+    // bool operator== (const RETree & other) const { return index == other.index; }
+    // bool operator!= (const RETree & other) const { return index != other.index; }
+
+private:
+    REIndex index;
+    Node * tree;
+};
+class REExpression
+{
+public:
+    REExpression() = default;
+
+    REExpression operator& (REExpression);
+    REExpression operator| (REExpression);
+    REExpression operator~ ();
+    REExpression operator* ();
+    REExpression operator+ ();
+    REExpression (RETree origin);
+    friend REExpression Ascii(char c);
+    friend REExpression Unicode(wchar_t c);
+    friend REExpression Action(std::function<void()> action);
+
+    friend RETree & RETree::operator= (REExpression && build);;
+
+private:
+    Node * tree;
+};
+REExpression REExpression::operator& (REExpression other)
+{
+    REExpression re;
+    re.tree = RE::Concat(tree, other.tree);
+    return re;
+}
+REExpression REExpression::operator| (REExpression other)
+{
+    REExpression re;
+    re.tree = RE::Alter(tree, other.tree);
+    return re;
+}
+REExpression REExpression::operator~ ()
+{
+    REExpression re;
+    re.tree = RE::Repeat(tree, Repeation::ZERO_OR_ONE);
+    return re;
+}
+REExpression REExpression::operator* ()
+{
+    REExpression re;
+    re.tree = RE::Repeat(tree, Repeation::ZERO_OR_MORE);
+    return re;
+}
+REExpression REExpression::operator+ ()
+{
+    REExpression re;
+    re.tree = RE::Repeat(tree, Repeation::ONE_OR_MORE);
+    return re;
+}
+REExpression::REExpression(RETree origin)
+{
+    tree = RE::Ref(origin.Index(), "");
+}
+#define REF(x) REExpression(x)
+REExpression Ascii(char c)
+{
+    REExpression re;
+    re.tree = RE::Ascii(c);
+    return re;
+}
+REExpression Unicode(wchar_t c)
+{
+    REExpression re;
+    re.tree = RE::Unicode(c);
+    return re;
+}
+RETree & RETree::operator= (REExpression && build)
+{
+    tree = build.tree;
+    return *this;
 }
 
 // > visit
 
-void Visit(Node * reBody, REVisitor & visitor);
+void RE::Visit(RETree & tree, REVisitor & visitor)
+{
+    Node * body = tree.Tree();
 
-void Visit(RE_Ref & re, REVisitor & visitor)
-{
-    Visit(re.Dereference()->GetBody(), visitor);
-}
-void Visit(RE_Build & re, REVisitor & visitor)
-{
-    Visit(re.reBody, visitor);
-}
-void Visit(Node * reBody, REVisitor & visitor)
-{
-    assert(reBody);
-    std::vector<Node *> nodeStack = { reBody };
+    assert(body);
+    std::vector<Node *> nodeStack = { body };
     std::vector<int> seenStack = { 0 };
     while (!nodeStack.empty())
     {
@@ -375,14 +469,6 @@ void Visit(Node * reBody, REVisitor & visitor)
 }
 
 // ==== NFA ====
-// graph
-// 1. data structure
-//    * node points to node
-// 2. build
-//    * function based
-// 3. simulate
-// 4. to DFA helper
-//    * see RegexMatcher.cpp
 
 // > repr
 
@@ -581,16 +667,13 @@ void Run()
 }
 
 // ==== DFA ====
-// graph
-// 1. repr in memory
-//    * table
 
 // ==== CF ====
-// A group of RE with ref.
 
 // > repr
 
-using CFRule = RE_Ref;
+using CFRule = RETree;
+using CFIndex = REIndex;
 class CFGrammar
 {
 public:
@@ -600,8 +683,11 @@ public:
 
     CFRule & StartRule() { return rules.front(); }
 
+    CFRule & FindRule(CFIndex index) { assert(false); return rules.front(); }
+
 private:
     std::vector<CFRule> rules;
+    REContext context;
 };
 
 // ==== CONVERT ====
@@ -660,7 +746,7 @@ private:
     }
 
 public:
-    RE2NFAConverter(std::map<RE_Ref, Nfa_Ref> * a0 = nullptr) : reRef2NfaRef(a0) {}
+    RE2NFAConverter(std::map<REIndex, Nfa_Ref> * a0 = nullptr) : reRef2NfaRef(a0) {}
     
     Nfa_Build Get()
     {
@@ -670,31 +756,31 @@ public:
 
 private:
     std::vector<Nfa_Build> stackNfa;
-    std::map<RE_Ref, Nfa_Ref> * reRef2NfaRef;
+    std::map<REIndex, Nfa_Ref> * reRef2NfaRef;
 };
 
 // > CF -> NFA with ref
 Nfa_Ref ConvertCF2NFA(CFGrammar & grammar)
 {
-    std::map<RE_Ref, Nfa_Ref> reRef2NfaRef;
+    std::map<REIndex, Nfa_Ref> reRef2NfaRef;
 
     for (const CFRule & rule : grammar.GetAllRules())
     {
-        reRef2NfaRef.emplace(rule, Nfa_Ref());
+        reRef2NfaRef.emplace(rule.Index(), Nfa_Ref());
     }
 
     for (auto & p : reRef2NfaRef)
     {
-        RE_Ref reRef = p.first;
+        REIndex reRef = p.first;
         Nfa_Ref & nfaRef = p.second;
 
         RE2NFAConverter conv(&reRef2NfaRef);
-        Visit(reRef, conv);
+        RE::Visit(grammar.FindRule(reRef), conv);
 
         nfaRef = conv.Get();
     }
 
-    return reRef2NfaRef.at(grammar.StartRule());
+    return reRef2NfaRef.at(grammar.StartRule().Index());
 }
 
 // > RE -> String
@@ -753,7 +839,7 @@ public:
     {
         std::wstring s;
         s.push_back(L'<');
-        s.append(ToWString(r.GetTag()));
+        s.append(std::to_wstring(r.Get()));
         s.push_back(L'>');
         stackStrRE.push_back(s);
     }
@@ -773,22 +859,17 @@ public:
 
 // ==== Debug ====
 
-void PrintRE(RE_Ref re)
+void PrintRE(RETree re)
 {
     REStringConverter converter;
-    std::wcout << (Visit(re, converter), converter.Get()) << std::endl;
+    std::wcout << (RE::Visit(re, converter), converter.Get()) << std::endl;
 }
-void PrintRE(RE_Build re)
-{
-    REStringConverter converter;
-    std::wcout << (Visit(re, converter), converter.Get()) << std::endl;
-}
-#define PrintNamedRE(re) (std::wcout << L#re L" = ", PrintRE(re))
+#define PrintNamedRE(re) (std::wcout << L#re L"<" << std::to_wstring(re.Index()) << "> = ", PrintRE(re))
 void PrintCF(CFGrammar & grammar)
 {
     for (CFRule rule : grammar.GetAllRules())
     {
-        std::wcout << rule.Dereference() << L" = ", PrintRE(rule);
+        std::wcout << rule.Index() << L" = ", PrintRE(rule);
     }
 }
 #include "Graphviz.h"
@@ -883,44 +964,24 @@ void ShowNFA(NfaState * nfa, std::string label)
 
 // ==== Test ====
 
-void Test_RE_Basic()
+void Test_REExpression()
 {
-    PrintRE(Ascii('a'));
-    PrintRE(Ascii('a') & Ascii('b') | Ascii('c') & Ascii('d'));
-    PrintRE(+Ascii('a') & *Ascii('b') & ~Ascii('c'));
+    REScopedContext context;
+
+#define TEST_CASE(expr) PrintRE(RETree() = (expr))
+
+    TEST_CASE( Ascii('a')                                           );
+    TEST_CASE( Ascii('a') & Ascii('b') | Ascii('c') & Ascii('d')    );
+    TEST_CASE( +Ascii('a') & *Ascii('b') & ~Ascii('c')              );
+
+#undef TEST_CASE
 }
 
-// Test_NFA_Basic
-
-void Test_Conv_RE_NFA()
+void Test_RETree()
 {
-#define REWithLabel(re) {re, #re}
+    REScopedContext context;
 
-    // RE -> NFA
-    std::pair<RE_Build, std::string> cases[] = {
-        REWithLabel(Ascii('a') & Ascii('b') & Ascii('c')),
-        REWithLabel(Ascii('a') | Ascii('b') | Ascii('c')),
-        REWithLabel(+Ascii('a')),
-        REWithLabel(*Ascii('a')),
-        REWithLabel(~Ascii('a')),
-    };
-    for (auto & p : cases)
-    {
-        RE_Build & re = p.first;
-        std::string & label = p.second;
-
-        RE2NFAConverter re2nfa;
-        Visit(re, re2nfa);
-
-        Nfa_Build nfa = re2nfa.Get();
-
-        ShowNFA(nfa, label);
-    }
-}
-
-void Test_RE_WithRef()
-{
-    RE_Ref S, A, B, C;
+    RETree S, A, B, C;
 
     S = REF(A) & REF(B) & REF(C);
     A = Ascii('a');
@@ -933,7 +994,34 @@ void Test_RE_WithRef()
     PrintNamedRE(C);
 }
 
-// Test_NFA_WithRef
+void Test_Conv_RE_NFA()
+{
+    std::pair<RETree, std::string> cases[] = {
+#define TEST_CASE(re) {RETree() = re, #re}
+
+    TEST_CASE( Ascii('a') & Ascii('b') & Ascii('c')                 ),
+    TEST_CASE( Ascii('a') | Ascii('b') | Ascii('c')                 ),
+    TEST_CASE( +Ascii('a')                                          ),
+    TEST_CASE( *Ascii('a')                                          ),
+    TEST_CASE( ~Ascii('a')                                          ),
+
+#undef TEST_CASE
+    };
+    for (auto & p : cases)
+    {
+        REScopedContext context;
+
+        RETree & re = p.first;
+        std::string & label = p.second;
+
+        RE2NFAConverter re2nfa;
+        RE::Visit(re, re2nfa);
+
+        Nfa_Build nfa = re2nfa.Get();
+
+        ShowNFA(nfa, label);
+    }
+}
 
 void Test_CF()
 {
@@ -1045,7 +1133,8 @@ void Test_Conv_CF_NFAWithRef()
 
 void Test_Automata()
 {
-    // Test_RE_Basic();
+    Test_REExpression();
+    Test_RETree();
     // Test_NFA_Basic
     // Test_Conv_RE_NFA();
 
@@ -1054,23 +1143,6 @@ void Test_Automata()
     // Test_CF();
     // Test_Conv_CF_NFAWithRef();
 
-    CFGrammar grammar;
-
-    CFRule S = grammar.DeclareRule();
-    CFRule A = grammar.DeclareRule();
-    CFRule B = grammar.DeclareRule();
-    CFRule C = grammar.DeclareRule();
-
-    S = +(REF(A) | REF(B) | REF(C));
-    A = Ascii('a');
-    B = Ascii('b');
-    C = Ascii('c');
-
-    PrintCF(grammar);
-
-    Nfa_Ref nfa = ConvertCF2NFA(grammar);
-
-    ShowNFA(nfa, "+(A|B|C)");
 
     // TODO: DFA
 }
