@@ -1,6 +1,6 @@
 #include "FreeListAllocator.h"
 
-#include "../Base/Bit.h"
+#include "../Base/Bits.h"
 #include "../Base/common.h"
 
 #include "SpanAllocator.h"

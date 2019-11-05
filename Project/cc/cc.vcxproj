@@ -33,12 +33,13 @@
     <None Include="..\..\Test\Simple.c">
       <FileType>CppCode</FileType>
     </None>
-    <ClInclude Include="..\..\Source\Base\Bit.h" />
+    <ClInclude Include="..\..\Source\Base\Bits.h" />
     <ClInclude Include="..\..\Source\Base\Charset.h" />
     <ClInclude Include="..\..\Source\Base\common.h" />
     <ClInclude Include="..\..\Source\Base\ErrorHandling.h" />
     <ClInclude Include="..\..\Source\Base\File.h" />
     <ClInclude Include="..\..\Source\Base\Integer.h" />
+    <ClInclude Include="..\..\Source\Base\Legacy.h" />
     <ClInclude Include="..\..\Source\Base\logging.h" />
     <ClInclude Include="..\..\Source\Base\String.h" />
     <ClInclude Include="..\..\Source\CodeGeneration\AstCompiler.h" />
@@ -206,6 +207,7 @@
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
+      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='UnitTest|x64'">

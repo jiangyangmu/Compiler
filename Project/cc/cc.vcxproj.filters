@@ -37,9 +37,6 @@
     <ClInclude Include="..\..\Source\CodeGeneration\Translation.h">
       <Filter>CodeGeneration</Filter>
     </ClInclude>
-    <ClInclude Include="..\..\Source\Base\Bit.h">
-      <Filter>Base</Filter>
-    </ClInclude>
     <ClInclude Include="..\..\Source\Base\Charset.h">
       <Filter>Base</Filter>
     </ClInclude>
@@ -84,6 +81,12 @@
     </ClInclude>
     <ClInclude Include="..\..\Source\Preprocess\RegexMatcher.h">
       <Filter>Preprocess</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\Base\Legacy.h">
+      <Filter>Base</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\Base\Bits.h">
+      <Filter>Base</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

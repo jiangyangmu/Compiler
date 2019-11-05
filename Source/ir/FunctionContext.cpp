@@ -3,7 +3,7 @@
 #include <iostream>
 
 #include "CallingConvention.h"
-#include "../Base/Bit.h"
+#include "../Base/Bits.h"
 
 namespace Language {
 
