@@ -36,6 +36,7 @@
     <ClInclude Include="..\..\Source\Base\Bits.h" />
     <ClInclude Include="..\..\Source\Base\Charset.h" />
     <ClInclude Include="..\..\Source\Base\common.h" />
+    <ClInclude Include="..\..\Source\Base\Containers.h" />
     <ClInclude Include="..\..\Source\Base\ErrorHandling.h" />
     <ClInclude Include="..\..\Source\Base\File.h" />
     <ClInclude Include="..\..\Source\Base\Integer.h" />
@@ -60,6 +61,7 @@
     <ClInclude Include="..\..\Source\Parse\AstParser.h" />
     <ClInclude Include="..\..\Source\Parse\ParseMacros.h" />
     <ClInclude Include="..\..\Source\Preprocess\RegexMatcher.h" />
+    <ClCompile Include="..\..\Source\Base\Containers.cpp" />
     <ClCompile Include="..\..\Source\Base\File.cpp" />
     <ClCompile Include="..\..\Source\Preprocess\Lexer.cpp" />
     <ClInclude Include="..\..\Source\Preprocess\Lexer.h" />

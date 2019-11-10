@@ -23,7 +23,7 @@
 
 #endif
 
-#define TEST_FILTER "Lex"
+#define TEST_FILTER "API"
 
 TestRunner & TestRunner::Get() {
     static TestRunner * runner = new TestRunner();

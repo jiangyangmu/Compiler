@@ -311,6 +311,8 @@ GenericFreeListAllocator::Alloc(size_t nBytes)
 void
 GenericFreeListAllocator::Free(void * pvMemBegin)
 {
+    ASSERT(pvMemBegin);
+
     size_t nBlkSize;
 
     nBlkSize = ((FreeListPage *)PageBegin(pvMemBegin))->nBlkSize;

@@ -247,17 +247,17 @@ SpanAllocator CreateSpanAllocator(void * pvMemBegin, size_t nPage)
 
 SpanAllocator * GetDefaultSpanAllocator()
 {
-    static SpanAllocator sa;
+    static SpanAllocator * psa = new SpanAllocator();
 
-    if (sa.pscb == nullptr)
+    if (psa->pscb == nullptr)
     {
-        new (&sa) SpanAllocator(
+        new (psa) SpanAllocator(
             CreateSpanAllocator(DEFAULT_NUM_PAGE_PER_SPAN)
         );
-        ASSERT(sa.pscb);
+        ASSERT(psa->pscb);
     }
 
-    return &sa;
+    return psa;
 }
 
 SpanAllocator::~SpanAllocator()

@@ -88,6 +88,9 @@
     <ClInclude Include="..\..\Source\Base\Bits.h">
       <Filter>Base</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\Source\Base\Containers.h">
+      <Filter>Base</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\Source\ir\CallingConvention.cpp">
@@ -152,6 +155,9 @@
       <Filter>Preprocess</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Source\Base\File.cpp">
+      <Filter>Base</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\Base\Containers.cpp">
       <Filter>Base</Filter>
     </ClCompile>
   </ItemGroup>

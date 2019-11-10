@@ -8,6 +8,9 @@ typedef uint32_t u32;
 typedef u64 uptr;
 typedef i64 iptr;
 
+using UINT32 = uint32_t;
+using UINT64 = uint64_t;
+
 template <typename T>
 T Max(T a, T b)
 {
