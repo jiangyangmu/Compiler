@@ -281,7 +281,11 @@ GenericFreeListAllocator::Alloc(size_t nBytes)
     void * pvBlkBegin;
     size_t ifla;
 
-    ifla        = IntLog2(nBytes / 8);
+    ifla        = 0;
+    for (size_t i = 8; i < nBytes; i <<= 1)
+    {
+        ++ifla;
+    }
     pvBlkBegin  = vpfla[ifla].Alloc();
 
     if (pvBlkBegin == nullptr)
