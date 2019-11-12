@@ -56,6 +56,7 @@ void TestRunner::RunAllTest() {
         {
             std::string testName =
                 std::string(test->GetTestClassName()) + "_" + test->GetTestCaseName();
+            if (testName[0] == '_') testName.erase(0, 1);
             if (!filter.empty() && testName.find(filter) == std::string::npos)
                 continue;
 

@@ -10,6 +10,7 @@ typedef i64 iptr;
 
 using UINT32 = uint32_t;
 using UINT64 = uint64_t;
+using UINT = UINT32;
 
 template <typename T>
 T Max(T a, T b)

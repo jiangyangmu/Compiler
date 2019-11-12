@@ -693,3 +693,272 @@ private:
         pNode->value.~T();
     }
 };
+
+template <typename TKey>
+UINT HashKey(TKey key);
+
+template <>
+UINT HashKey(int key)
+{
+    return UINT(key) * 2654435761;
+}
+
+template <typename TKey, typename TValue>
+class Map
+{
+public:
+    struct Position
+    {
+        void * pBucket;
+        void * pNode;
+    };
+
+// Constructors
+	Map(int bucket = 10)
+    {
+        _Init(bucket);
+    }
+	// Map(const Map & other);
+	// Map(Map && other);
+    ~Map()
+    {
+        _Deinit();
+    }
+	
+// Attributes
+    int Count()
+    {
+        return nCount;
+    }
+    bool Empty()
+    {
+        return nCount == 0;
+    }
+
+    TValue At(TKey key)
+    {
+        Bucket * pBucket = _GetBucket(key);
+        TValue value;
+        ASSERT(_BucketFind(pBucket, key, value));
+        return value;
+    }
+
+// Operations
+    bool Insert(TKey key, TValue value)
+    {
+        return _BucketInsert(_GetBucket(key), key, value);
+    }
+    bool Remove(TKey key)
+    {
+        return _BucketRemove(_GetBucket(key), key);
+    }
+    bool Lookup(TKey key, TValue & value)
+    {
+        return _BucketFind(_GetBucket(key), key, value);
+    }
+
+    Position GetStartPos()
+    {
+        Bucket * pCur = pBucketArray;
+        Bucket * pEnd = pBucketArray + nBucketCount;
+        for (; pCur < pEnd; ++pCur)
+        {
+            if (pCur->pNodeList)
+                break;
+        }
+
+        Position start = {
+            (void *)pCur,
+            (void *)pCur->pNodeList
+        };
+        return start;
+    }
+    bool GetNextAssoc(Position & pos, TKey & key, TValue & value)
+    {
+        Bucket * pCur = (Bucket *)pos.pBucket;
+        Bucket * pEnd = pBucketArray + nBucketCount;
+        if (pCur != pEnd)
+        {
+            Node * pNode = (Node *)pos.pNode;
+
+            key = pNode->key;
+            value = pNode->value;
+            
+            if (pNode->next)
+            {
+                pos.pNode = pNode->next;
+            }
+            else
+            {
+                pos.pBucket = pEnd;
+                pos.pNode = nullptr;
+                
+                for (Bucket * pNxt = pCur + 1;
+                     pNxt != pEnd;
+                     ++pNxt)
+                {
+                    if (pNxt->pNodeList)
+                    {
+                        pos.pBucket = pNxt;
+                        pos.pNode = pNxt->pNodeList;
+                        break;
+                    }
+                }
+            }
+
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
+
+// Implementation
+private:
+    struct Node
+    {
+        Node * next;
+        TKey key;
+        TValue value;
+    };
+    struct Bucket
+    {
+        Node * pNodeList;
+    };
+
+    int nCount;
+    int nBucketCount;
+    Bucket * pBucketArray;
+
+    void _Init(int bucket)
+    {
+        pBucketArray = new Bucket[bucket];
+        Bucket * pCur = pBucketArray;
+        Bucket * pEnd = pBucketArray + bucket;
+        while (pCur < pEnd)
+        {
+            pCur->pNodeList = nullptr;
+            ++pCur;
+        }
+
+        nBucketCount = bucket;
+    }
+    void _Deinit()
+    {
+        Bucket * pCur = pBucketArray;
+        Bucket * pEnd = pBucketArray + nBucketCount;
+        for (;
+             pCur < pEnd;
+             ++pCur)
+        {
+            Node * pNode = pCur->pNodeList;
+            Node * pDel;
+            while (pNode)
+            {
+                pDel = pNode;
+                pNode = pNode->next;
+                _Destruct(pDel);
+                _Free(pDel);
+            }
+        }
+        delete[] pBucketArray;
+    }
+    static inline Node * _Alloc()
+    {
+        Node * pNode = (Node *)LowLevel::Alloc(sizeof(Node));
+        pNode->next = nullptr;
+        return pNode;
+    }
+    static inline void _Free(Node * pNode)
+    {
+        LowLevel::Free(pNode);
+    }
+    static inline void _Construct(Node * pNode, TKey key, TValue value)
+    {
+        new (&pNode->key) TKey(key);
+        new (&pNode->value) TValue(value);
+    }
+    static inline void _Destruct(Node * pNode)
+    {
+        pNode->key.~TKey();
+        pNode->value.~TValue();
+    }
+    static inline void _Unlink(Node * pLeft, Node * pRight)
+    {
+        ASSERT(pLeft && pRight);
+        ASSERT(pLeft->next == pRight);
+        pLeft->next = nullptr;
+    }
+    static inline void _Link(Node * pLeft, Node * pRight)
+    {
+        ASSERT(pLeft && pRight);
+        ASSERT(!pLeft->next);
+        pLeft->next = pRight;
+    }
+    Bucket * _GetBucket(TKey key)
+    {
+        ASSERT(0 < nBucketCount);
+        return pBucketArray + (HashKey(key) % nBucketCount);
+    }
+    bool _BucketFind(Bucket * pBucket, TKey key, TValue & value)
+    {
+        Node * pNode;
+        for (pNode = pBucket->pNodeList;
+             pNode;
+             pNode = pNode->next)
+        {
+            if (pNode->key == key)
+            {
+                value = pNode->value;
+                return true;
+            }
+        }
+        return false;
+    }
+    bool _BucketInsert(Bucket * pBucket, TKey key, TValue value)
+    {
+        Node * pNew = _Alloc();
+        _Construct(pNew, key, value);
+
+        Node * pNode = pBucket->pNodeList;
+        if (!pNode)
+        {
+            pBucket->pNodeList = pNew;
+        }
+        else
+        {
+            for (;;)
+            {
+                if (pNode->key == key)
+                    return false;
+                else if (pNode->next)
+                    pNode = pNode->next;
+                else
+                    break;
+            }
+            _Link(pNode, pNew);
+        }
+        ++nCount;
+        return true;
+    }
+    bool _BucketRemove(Bucket * pBucket, TKey key)
+    {
+        Node ** ppNode = &pBucket->pNodeList;
+        Node * pNode = pBucket->pNodeList;
+        for (;
+             pNode;
+             ppNode = &pNode->next, pNode = pNode->next)
+        {
+            if (pNode->key == key)
+            {
+                *ppNode = pNode->next;
+                _Destruct(pNode);
+                _Free(pNode);
+                --nCount;
+                return true;
+            }
+        }
+        return false;
+    }
+};
