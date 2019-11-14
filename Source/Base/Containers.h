@@ -280,11 +280,11 @@ private:
     static T * _Alloc(int count)
     {
         ASSERT(count == CeilPowOf2(count));
-        return (T *)LowLevel::Alloc(count * sizeof(T));
+        return (T *)memory::Alloc(count * sizeof(T));
     }
     static void _Free(T * data)
     {
-        LowLevel::Free(data);
+        memory::Free(data);
     }
     static void _CopyConstruct(T * to, T value, int count)
     {
@@ -658,7 +658,7 @@ private:
 
     static inline Node* _Alloc()
     {
-        Node * pNode = (Node *)LowLevel::Alloc(sizeof(Node));
+        Node * pNode = (Node *)memory::Alloc(sizeof(Node));
         pNode->pPrev = nullptr;
         pNode->pNext = nullptr;
         return pNode;
@@ -666,7 +666,7 @@ private:
     static inline void  _Free(Node * pNode)
     {
         ASSERT(pNode);
-        LowLevel::Free(pNode);
+        memory::Free(pNode);
     }
     static inline void  _Link(Node * pLeft, Node * pRight)
     {
@@ -866,13 +866,13 @@ private:
     }
     static inline Node * _Alloc()
     {
-        Node * pNode = (Node *)LowLevel::Alloc(sizeof(Node));
+        Node * pNode = (Node *)memory::Alloc(sizeof(Node));
         pNode->next = nullptr;
         return pNode;
     }
     static inline void _Free(Node * pNode)
     {
-        LowLevel::Free(pNode);
+        memory::Free(pNode);
     }
     static inline void _Construct(Node * pNode, TKey key, TValue value)
     {

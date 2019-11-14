@@ -161,5 +161,3 @@ public:
 private:
     const char *begin_, *end_;
 };
-
-using String = std::string;

@@ -2,7 +2,7 @@
 
 #include "Win/WinAllocate.h"
 
-namespace LowLevel {
+namespace memory {
 
 #define PAGE_BEGIN(base, index) \
     (void *)((char *)(base) + (index) * PAGE_SIZE)
@@ -412,7 +412,7 @@ SpanAllocator::End() const
 #ifdef UNIT_TEST
 #include "../UnitTest/UnitTest.h"
 
-using namespace LowLevel;
+using namespace memory;
 
 /*
 Span Allocator Test Cases

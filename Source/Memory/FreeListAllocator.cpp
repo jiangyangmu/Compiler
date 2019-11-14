@@ -5,7 +5,7 @@
 
 #include "SpanAllocator.h"
 
-namespace LowLevel {
+namespace memory {
 
 struct FreeListPage
 {
@@ -331,7 +331,7 @@ GenericFreeListAllocator::Free(void * pvMemBegin)
 #ifdef UNIT_TEST
 #include "../UnitTest/UnitTest.h"
 
-using namespace LowLevel;
+using namespace memory;
 
 /*
 Free List Allocator Test Cases

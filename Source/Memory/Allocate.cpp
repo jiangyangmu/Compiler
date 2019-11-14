@@ -2,17 +2,23 @@
 
 #include "FreeListAllocator.h"
 
-namespace LowLevel {
+#include <iostream>
+
+namespace memory {
 
 static GenericFreeListAllocator gfa;
 
 void * Alloc(size_t nBytes)
 {
-    return gfa.Alloc(nBytes);
+    void * addr = gfa.Alloc(nBytes);
+    std::cout << "Alloc: " << nBytes << " " << addr << std::endl;
+    return addr;
+    //return gfa.Alloc(nBytes);
 }
 
 void Free(void * addr)
 {
+    std::cout << "Free: " << addr << std::endl;
     gfa.Free(addr);
 }
 

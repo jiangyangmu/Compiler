@@ -2,7 +2,7 @@
 
 #include "Win/WinAllocate.h"
 
-namespace LowLevel {
+namespace memory {
 
 // ===========================================================================
 // SpanFreeList: init, push, pop, empty
@@ -209,7 +209,7 @@ SpanFreeList::Position::operator++(int)
 #ifdef UNIT_TEST
 #include "../UnitTest/UnitTest.h"
 
-using namespace LowLevel;
+using namespace memory;
 
 std::ostream & operator << (std::ostream & o, const SpanFreeList::ForwardIterator &) { return o; }
 std::ostream & operator << (std::ostream & o, const SpanFreeList::Position & p)

@@ -2,7 +2,7 @@
 
 #include <utility>
 
-namespace LowLevel {
+namespace memory {
 
 struct FreeListPage;
 

@@ -3,7 +3,7 @@
 #include "../Base/Integer.h"
 #include "Address.h"
 
-namespace LowLevel {
+namespace memory {
 
 struct Span {
     Span * psNext;

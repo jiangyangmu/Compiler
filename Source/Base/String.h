@@ -4,8 +4,10 @@
 #include <string>
 #include <iterator>
 
-#include "ErrorHandling.h"
-#include "Legacy.h"
+#include "../Base/Integer.h"
+#include "../Base/ErrorHandling.h"
+#include "../Base/Containers.h"
+#include "../Base/Legacy.h" // StringRef
 
 void SetBytes(char * bytes, char value, size_t count);
 void CopyBytes(const char * from, char * to, size_t count);
@@ -160,4 +162,39 @@ private:
 // StringView RemoveSuffix(StringView);
 // ImmutableStringTable
 
+class String
+{
+public:
+    // Create
+    String();
+    String(char * data);
+    String(char * data, int length);
+    String(char ch, int count);
+    ~String();
 
+    // Query
+    bool        Empty() const;
+    size_t      Length() const;
+    char        First() const;
+    char        Last() const;
+    char        At(UINT32 index) const;
+
+    // Modify
+    String &    Add(char c);
+    String &    Append(const String & s);
+    void        Clear();
+
+    String &    operator += (const String & s);
+
+    // Compare
+    bool operator < (const String & other) const;
+    bool operator == (const String & other) const;
+    bool operator != (const String & other) const;
+
+    // Interop with STL.
+    operator std::string() const;
+    friend std::ostream &operator<<(std::ostream &o, const String & s);
+
+private:
+    Array<char> aData;
+};

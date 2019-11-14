@@ -2,7 +2,7 @@
 
 #include "Span.h"
 
-namespace LowLevel {
+namespace memory {
 
 class SpanCtrlBlock;
 

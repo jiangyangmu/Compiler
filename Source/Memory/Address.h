@@ -3,7 +3,7 @@
 #include "../Base/Common.h"
 #include "../Base/Integer.h"
 
-namespace LowLevel {
+namespace memory {
 
 // ===========================================================================
 // page constants: size, bits

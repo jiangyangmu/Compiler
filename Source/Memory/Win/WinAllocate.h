@@ -1,6 +1,6 @@
 #pragma once
 
-namespace LowLevel {
+namespace memory {
 
 // ===========================================================================
 // AddressSpace: reserve, release

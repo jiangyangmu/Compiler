@@ -2,7 +2,7 @@
 
 #include "../Base/Common.h"
 
-namespace LowLevel {
+namespace memory {
 
 Span *
 SplitSpan(Span * ps)

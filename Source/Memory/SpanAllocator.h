@@ -2,7 +2,7 @@
 
 #include "SpanFreeList.h"
 
-namespace LowLevel {
+namespace memory {
 
 class SpanCtrlBlock;
 

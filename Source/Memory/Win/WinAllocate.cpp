@@ -7,7 +7,7 @@
 
 #include "../Address.h"
 
-namespace LowLevel {
+namespace memory {
 
 VOID
 ErrorExit(const char * lpMsg)
