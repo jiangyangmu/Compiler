@@ -27,6 +27,7 @@
     </ProjectConfiguration>
   </ItemGroup>
   <ItemGroup>
+    <None Include="..\..\Source\TODO.md" />
     <None Include="..\..\Test\Program.c">
       <FileType>CppCode</FileType>
     </None>
@@ -54,6 +55,7 @@
     <ClInclude Include="..\..\Source\Memory\Allocate.h" />
     <ClInclude Include="..\..\Source\Memory\FreeListAllocator.h" />
     <ClInclude Include="..\..\Source\Memory\Address.h" />
+    <ClInclude Include="..\..\Source\Memory\MemoryTrace.h" />
     <ClInclude Include="..\..\Source\Memory\Span.h" />
     <ClInclude Include="..\..\Source\Memory\SpanAllocator.h" />
     <ClInclude Include="..\..\Source\Memory\SpanFreeList.h" />
@@ -63,8 +65,10 @@
     <ClInclude Include="..\..\Source\Preprocess\RegexMatcher.h" />
     <ClCompile Include="..\..\Source\Base\Containers.cpp" />
     <ClCompile Include="..\..\Source\Base\File.cpp" />
+    <ClCompile Include="..\..\Source\Memory\MemoryTrace.cpp" />
     <ClCompile Include="..\..\Source\Preprocess\Lexer.cpp" />
     <ClInclude Include="..\..\Source\Preprocess\Lexer.h" />
+    <ClInclude Include="..\..\Source\Preprocess\RegexImpl.h" />
     <ClInclude Include="..\..\Source\UnitTest\UnitTest.h" />
   </ItemGroup>
   <ItemGroup>
@@ -87,6 +91,7 @@
     <ClCompile Include="..\..\Source\Memory\Win\WinAllocate.cpp" />
     <ClCompile Include="..\..\Source\Parse\AstParser.cpp" />
     <ClCompile Include="..\..\Source\Preprocess\RegexMatcher.cpp" />
+    <ClCompile Include="..\..\Source\Preprocess\RegexImpl.cpp" />
     <ClCompile Include="..\..\Source\UnitTest\UnitTestMain.cpp" />
     <None Include="..\..\DevLog\DEBUG.md" />
     <None Include="..\..\DevLog\MOD_ir.md" />
@@ -95,7 +100,7 @@
     <None Include="..\..\DevLog\MOD_mem.md" />
     <None Include="..\..\DevLog\MOD_vm.md" />
     <None Include="..\..\DevLog\CODE.md" />
-    <None Include="..\..\DevLog\TODO.md" />
+    <None Include="..\..\DevLog\TODO_detail.md" />
     <None Include="..\..\DevLog\TODO_vm.md" />
   </ItemGroup>
   <ItemGroup>
@@ -209,7 +214,7 @@
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
-      <AdditionalDependencies>%(AdditionalDependencies)</AdditionalDependencies>
+      <AdditionalDependencies>DbgHelp.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='UnitTest|x64'">
@@ -226,6 +231,7 @@
     </ClCompile>
     <Link>
       <SubSystem>Console</SubSystem>
+      <AdditionalDependencies>DbgHelp.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">

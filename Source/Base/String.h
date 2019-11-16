@@ -167,10 +167,13 @@ class String
 public:
     // Create
     String();
+    String(const String & other);
+    String(String && other);
+    ~String();
+
     String(char * data);
     String(char * data, int length);
     String(char ch, int count);
-    ~String();
 
     // Query
     bool        Empty() const;
@@ -193,8 +196,8 @@ public:
 
     // Interop with STL.
     operator std::string() const;
-    friend std::ostream &operator<<(std::ostream &o, const String & s);
+    friend std::ostream & operator << (std::ostream & o, const String & s);
 
 private:
-    Array<char> aData;
+    containers::Array<char> aData;
 };

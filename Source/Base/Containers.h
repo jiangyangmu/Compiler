@@ -3,6 +3,9 @@
 #include "../Base/Integer.h"
 #include "../Base/ErrorHandling.h"
 #include "../Memory/Allocate.h"
+#include "../Memory/MemoryTrace.h"
+
+namespace containers {
 
 // Utils
 
@@ -151,10 +154,10 @@ public:
 
     ~Array()
     {
+        if (nCount)
+            _Destruct(pData, nCount);
         if (pData)
-        {
             _Free(pData);
-        }
     }
     
 // Attributes
@@ -179,6 +182,15 @@ public:
         return nCount;
     }
 
+    T *         RawData()
+    {
+        return pData;
+    }
+    const T *   RawData() const
+    {
+        return pData;
+    }
+
 // Operations
     bool        Contains(T element) const
     {
@@ -192,17 +204,16 @@ public:
         return false;
     }
 
-
     void        Add(T element)
     {
-        Expand(nCount + 1);
+        Recap(nCount + 1);
 
         _CopyConstruct(pData + nCount, element, 1);
         ++nCount;
     }
     void        Append(const Array & other)
     {
-        Expand(nCount + other.nCount);
+        Recap(nCount + other.nCount);
 
         _CopyConstruct(pData + nCount, other.pData, other.nCount);
         nCount += other.nCount;
@@ -212,10 +223,20 @@ public:
     {
         ASSERT(0 <= index && index <= nCount);
         ASSERT(0 < count);
-        Expand(nCount + count);
+        Recap(nCount + count);
 
         _ShiftRight(pData + index, pData + nCount, count);
         _CopyConstruct(pData + index, element, count);
+        nCount += count;
+    }
+    void        InsertAt(int index, const T * elementPtr, int count)
+    {
+        ASSERT(0 <= index && index <= nCount);
+        ASSERT(0 < count);
+        Recap(nCount + count);
+
+        _ShiftRight(pData + index, pData + nCount, count);
+        _CopyConstruct(pData + index, elementPtr, count);
         nCount += count;
     }
     void        RemoveAt(int index, int count = 1)
@@ -223,6 +244,7 @@ public:
         ASSERT(0 <= index && index < nCount);
         ASSERT(0 < count && count <= (nCount - index));
 
+        _Destruct(pData + index, count);
         _ShiftLeft(pData + index + count, pData + nCount, count);
         nCount -= count;
     }
@@ -234,6 +256,11 @@ public:
             _Destruct(pData, nCount);
             nCount = 0;
         }
+    }
+
+    void        ReduceMemoryUsage()
+    {
+        Recap(nCount);
     }
 
     T &         operator[] (int index)
@@ -280,10 +307,12 @@ private:
     static T * _Alloc(int count)
     {
         ASSERT(count == CeilPowOf2(count));
+        TRACE_MEMORY_ALLOC(Array, count * sizeof(T));
         return (T *)memory::Alloc(count * sizeof(T));
     }
     static void _Free(T * data)
     {
+        TRACE_MEMORY_FREE(Array, data);
         memory::Free(data);
     }
     static void _CopyConstruct(T * to, T value, int count)
@@ -339,17 +368,16 @@ private:
         }
         // [end - count, end) is invalid
     }
-    void Expand(int nNewMaxCount)
+    void Recap(int nNewMaxCount)
     {
         nNewMaxCount = CeilPowOf2(nNewMaxCount);
         if (nCap != nNewMaxCount)
         {
             T * pNewData = _Alloc(nNewMaxCount);
             if (0 < nCount)
-            {
                 _MoveConstruct(pNewData, pData, nCount);
+            if (pData)
                 _Free(pData);
-            }
             pData = pNewData;
             nCap = nNewMaxCount;
         }
@@ -698,10 +726,7 @@ template <typename TKey>
 UINT HashKey(TKey key);
 
 template <>
-UINT HashKey(int key)
-{
-    return UINT(key) * 2654435761;
-}
+UINT HashKey(int key);
 
 template <typename TKey, typename TValue>
 class Map
@@ -962,3 +987,29 @@ private:
         return false;
     }
 };
+
+// Container operations
+template <typename TContainer>
+bool IsEqual(const TContainer & left, const TContainer & right);
+template <typename T>
+bool IsEqual(const Array<T> & left, const Array<T> & right)
+{
+    if (&left == &right)
+        return true;
+
+    int count = left.Count();
+    if (count != right.Count())
+        return false;
+
+    for (int i = 0; i < count; ++i)
+    {
+        if (left[i] != right[i])
+            return false;
+    }
+    return true;
+}
+
+template <>
+bool IsEqual(const Array<int> & left, const Array<int> & right);
+
+}

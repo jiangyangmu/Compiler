@@ -91,6 +91,12 @@
     <ClInclude Include="..\..\Source\Base\Containers.h">
       <Filter>Base</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\Source\Preprocess\RegexImpl.h">
+      <Filter>Preprocess</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\Memory\MemoryTrace.h">
+      <Filter>Memory</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\Source\ir\CallingConvention.cpp">
@@ -160,6 +166,12 @@
     <ClCompile Include="..\..\Source\Base\Containers.cpp">
       <Filter>Base</Filter>
     </ClCompile>
+    <ClCompile Include="..\..\Source\Preprocess\RegexImpl.cpp">
+      <Filter>Preprocess</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\Memory\MemoryTrace.cpp">
+      <Filter>Memory</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <Filter Include="IR">
@@ -200,9 +212,6 @@
     <None Include="..\..\DevLog\MOD.md">
       <Filter>Doc</Filter>
     </None>
-    <None Include="..\..\DevLog\TODO.md">
-      <Filter>Doc</Filter>
-    </None>
     <None Include="..\..\DevLog\MOD_ir.md">
       <Filter>Doc</Filter>
     </None>
@@ -229,6 +238,12 @@
     </None>
     <None Include="..\..\Test\Program.c">
       <Filter>TestProgram</Filter>
+    </None>
+    <None Include="..\..\Source\TODO.md">
+      <Filter>Doc</Filter>
+    </None>
+    <None Include="..\..\DevLog\TODO_detail.md">
+      <Filter>Doc</Filter>
     </None>
   </ItemGroup>
   <ItemGroup>

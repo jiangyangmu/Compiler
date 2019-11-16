@@ -8,13 +8,48 @@ namespace v2 {
 
 namespace re {
 
+using containers::Array;
 
-class ConcatOperator;
-class AlterOperator;
-class KleeneStarOperator;
-class ASCIICharacter;
+class Visitor;
 
-// Regex structure visitor
+#define ACCEPT_VISIT_INTERFACE  virtual void Accept(Visitor & visitor) = 0;
+#define ACCEPT_VISIT_DECL       virtual void Accept(Visitor & visitor) override;
+#define ACCEPT_VISIT_IMPL(type) void type::Accept(Visitor & visitor) { visitor.Visit(*this); }
+
+// Regex elements
+
+class Element
+{
+public:
+    virtual ~Element() = default;
+
+    ACCEPT_VISIT_INTERFACE
+};
+
+class ConcatOperator : public Element
+{
+public:
+    ACCEPT_VISIT_DECL
+};
+class AlterOperator : public Element
+{
+public:
+    ACCEPT_VISIT_DECL
+};
+class KleeneStarOperator : public Element
+{
+public:
+    ACCEPT_VISIT_DECL
+};
+class ASCIICharacter : public Element
+{
+public:
+    ACCEPT_VISIT_DECL
+    int index;
+};
+
+// Regex visitor
+
 class Visitor
 {
 public:
@@ -25,100 +60,73 @@ public:
     virtual void Visit(AlterOperator &) {}
     virtual void Visit(KleeneStarOperator &) {}
 
-    // Elements
+    // Chars
     virtual void Visit(ASCIICharacter &) {}
-};
-
-#define ACCEPT_VISIT_INTERFACE virtual void Accept(Visitor & visitor) = 0;
-#define ACCEPT_VISIT virtual void Accept(Visitor & visitor) { visitor.Visit(*this); }
-
-class Host
-{
-public:
-    virtual ~Host() = default;
-
-    ACCEPT_VISIT_INTERFACE
 };
 
 // Regex structure
 
-class TreeNode : public Host {};
-using TreeNodeList = Array<TreeNode *>;
+// Memory management of TreeNode and Element:
+// 1. Allocate by CompositorContext::allocator
+// 2. Free by Tree::~Tree()
 
-class Character : public TreeNode {};
-class UnaryOperation : public TreeNode
+struct TreeNode
 {
-private:
-    TreeNode * pTree;
-};
-class BinaryOperation : public TreeNode
-{
-private:
     TreeNode * pLeftTree;
     TreeNode * pRightTree;
-};
-
-class ConcatOperator : public BinaryOperation
-{
-public:
-    ACCEPT_VISIT
-};
-class AlterOperator : public BinaryOperation
-{
-public:
-    ACCEPT_VISIT
-};
-class KleeneStarOperator : public UnaryOperation
-{
-public:
-    ACCEPT_VISIT
-};
-class ASCIICharacter : public Character
-{
-public:
-    using CharIndex = int;
-
-    CharIndex Index();
-
-    ACCEPT_VISIT
+    Element * pElement;
 };
 
 class Tree
 {
 public:
-    ~Tree(); // free all nodes
+    ~Tree();
 
     void Accept(Visitor & visitor);
 
 private:
+    Tree(TreeNode * root, memory::GenericFreeListAllocator & allocator);
+
     TreeNode * pRoot;
-    memory::FreeListAllocator & allocator;
+    memory::GenericFreeListAllocator & allocator;
+
+    friend class Compositor;
 };
 
 // Regex structure compositor
+
 class Compositor
 {
 public:
     Tree Get();
+
 private:
-    TreeNode * pRoot;
-    // Use CompositorContext::Get().allocator.
+    TreeNode * pTree;
+    // Use CompositorContext allocator.
+
+    friend Compositor Ascii(int index);
+    friend Compositor Concat(Compositor left, Compositor right);
+    friend Compositor Alter(Compositor left, Compositor right);
+    friend Compositor KleeneStar(Compositor inner);
 };
-Compositor Ascii(ASCIICharacter::CharIndex index);
+Compositor Ascii(int index);
 Compositor Concat(Compositor left, Compositor right);
 Compositor Alter(Compositor left, Compositor right);
-Compositor KleeneStar(Compositor left);
+Compositor KleeneStar(Compositor inner);
 
 class CompositorContext
 {
 public:
     static CompositorContext & Get();
-    static void Set(CompositorContext &);
 
     CompositorContext();
+    ~CompositorContext();
+
+    memory::GenericFreeListAllocator & Allocator() { return allocator; }
 
 private:
-    memory::FreeListAllocator allocator;
+    CompositorContext * pOldContext;
+    memory::GenericFreeListAllocator allocator;
 };
 
 }

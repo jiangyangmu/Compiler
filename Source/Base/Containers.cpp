@@ -1,9 +1,20 @@
 #include "Containers.h"
 
+namespace containers {
+
+template <>
+UINT HashKey(int key)
+{
+    return UINT(key) * 2654435761;
+}
+
+}
 #ifdef UNIT_TEST
 #include "../UnitTest/UnitTest.h"
 
 #include <map>
+
+using namespace containers;
 
 bool EQ(Array<int> & actual, std::vector<int> expect)
 {

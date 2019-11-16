@@ -131,3 +131,164 @@ ByteArray & ByteArray::operator=(const ByteArray & other)
     new (this) ByteArray(other);
     return *this;
 }
+
+static inline void MakeNullTerminated(containers::Array<char> & aStr)
+{
+    if (aStr.IsEmpty() || aStr[aStr.Count() - 1] != 0)
+        aStr.Add(0);
+}
+
+String::String()
+{
+    MakeNullTerminated(aData);
+}
+
+String::String(const String & other)
+    : aData(other.aData)
+{
+}
+
+String::String(String && other)
+    : aData(std::move(other.aData))
+{
+}
+
+String::~String()
+{
+}
+
+String::String(char * data)
+    : aData((int)strlen(data), data)
+{
+    MakeNullTerminated(aData);
+}
+
+String::String(char * data, int length)
+    : aData(length, data)
+{
+    MakeNullTerminated(aData);
+}
+
+String::String(char ch, int count)
+    : aData(count, ch)
+{
+    MakeNullTerminated(aData);
+}
+
+bool String::Empty() const
+{
+    return aData.Count() == 1;
+}
+
+size_t String::Length() const
+{
+    return (size_t)aData.Count() - 1;
+}
+
+char String::First() const
+{
+    ASSERT(!Empty());
+    return aData[0];
+}
+
+char String::Last() const
+{
+    ASSERT(!Empty());
+    return aData[(int)Length() - 1];
+}
+
+char String::At(UINT32 index) const
+{
+    ASSERT(index < Length());
+    return aData[index];
+}
+
+String & String::Add(char c)
+{
+    aData.InsertAt((int)Length(), c);
+    return *this;
+}
+
+String & String::Append(const String & s)
+{
+    aData.InsertAt((int)Length(), s.aData.RawData(), (int)s.Length());
+    return *this;
+}
+
+void String::Clear()
+{
+    aData.RemoveAll();
+    MakeNullTerminated(aData);
+    aData.ReduceMemoryUsage();
+}
+
+bool String::operator!=(const String & other) const
+{
+    return !(*this == other);
+}
+
+bool String::operator==(const String & other) const
+{
+    return containers::IsEqual<char>(aData, other.aData);
+}
+
+bool String::operator<(const String & other) const
+{
+    const char * pLeft = aData.RawData();
+    const char * pRight = other.aData.RawData();
+
+    ASSERT(pLeft && pRight);
+    while (*pLeft && *pRight && *pLeft == *pRight)
+        ++pLeft, ++pRight;
+
+    return *pLeft < *pRight;
+}
+
+String & String::operator+=(const String & s)
+{
+    Append(s);
+    return *this;
+}
+
+String::operator std::string() const
+{
+    return std::string(aData.RawData(), aData.Count());
+}
+
+std::ostream & operator << (std::ostream & o, const String & s)
+{
+    return o.write(s.aData.RawData(), s.Length());
+}
+
+#ifdef UNIT_TEST
+#include "../UnitTest/UnitTest.h"
+
+TEST(String_API)
+{
+    String s0;
+    String s1("hello");
+    String s2("world", 5);
+    String s3('!', 3);
+
+    EXPECT_TRUE(s0.Empty());
+    EXPECT_EQ(s0.Length(), 0);
+
+    EXPECT_FALSE(s1.Empty());
+    EXPECT_EQ(s1.Length(), 5);
+
+    EXPECT_FALSE(s2.Empty());
+    EXPECT_EQ(s2.Length(), 5);
+
+    EXPECT_FALSE(s3.Empty());
+    EXPECT_EQ(s3.Length(), 3);
+
+    String s1_copy;
+    s1_copy.Append(s1);
+    EXPECT_EQ(s1_copy, s1);
+
+    String hw;
+    hw.Append(s1).Add(',').Append(s2).Append(s3);
+    EXPECT_EQ(hw, String("hello,world!!!"));
+}
+
+#endif

@@ -2,8 +2,8 @@
 
 #include "../Base/Bits.h"
 #include "../Base/common.h"
-
-#include "SpanAllocator.h"
+#include "../Memory/SpanAllocator.h"
+#include "../Memory/MemoryTrace.h"
 
 namespace memory {
 
@@ -195,6 +195,8 @@ FreeListAllocator::Alloc()
         );
     }
 
+    TRACE_MEMORY_ALLOC_LOG(FreeList, pvBlkBegin);
+
     return pvBlkBegin;
 }
 
@@ -202,6 +204,8 @@ void
 FreeListAllocator::Free(void * pvMemBegin)
 {
     FreeListPage * pflp;
+
+    TRACE_MEMORY_FREE_LOG(FreeList, pvMemBegin);
 
     pflp = (FreeListPage *)PageBegin(pvMemBegin);
 
@@ -278,6 +282,8 @@ GenericFreeListAllocator::Alloc(size_t nBytes)
 {
     ASSERT(nBytes <= 128);
 
+    TRACE_MEMORY_ALLOC(Generic, nBytes);
+
     void * pvBlkBegin;
     size_t ifla;
 
@@ -316,6 +322,8 @@ void
 GenericFreeListAllocator::Free(void * pvMemBegin)
 {
     ASSERT(pvMemBegin);
+
+    TRACE_MEMORY_FREE(Generic, pvMemBegin);
 
     size_t nBlkSize;
 

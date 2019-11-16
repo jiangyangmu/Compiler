@@ -86,6 +86,29 @@ private:
         TestRunner::Get().SetError(true); \
     } while (false)
 
+#define EXPECT_TRUE(expr) \
+    do                                                                        \
+    {                                                                         \
+        if (!(expr))                                                          \
+        {                                                                     \
+            std::cerr << "Expr:  " #expr << std::endl                         \
+                      << "  at " << __FILE__ << ":" << __LINE__ << std::endl  \
+                      << "Is false, should be true." << std::endl;            \
+            TestRunner::Get().SetError(true);                                 \
+        }                                                                     \
+    } while (false)
+#define EXPECT_FALSE(expr) \
+    do                                                                        \
+    {                                                                         \
+        if ((expr))                                                           \
+        {                                                                     \
+            std::cerr << "Expr:  " #expr << std::endl                         \
+                      << "  at " << __FILE__ << ":" << __LINE__ << std::endl  \
+                      << "Is false, should be true." << std::endl;            \
+            TestRunner::Get().SetError(true);                                 \
+        }                                                                     \
+    } while (false)
+
 #define EXPECT_EQ(left, right)                                                \
     do                                                                        \
     {                                                                         \
