@@ -118,7 +118,10 @@ SpanCtrlBlock::Alloc(size_t nPage)
 
     psfl = FindFreeList(nPage);
     if (psfl == nullptr)
-        return nullptr;
+    {
+        throw std::runtime_error("out of memory span!");
+        // return nullptr;
+    }
 
     ps = psfl->Pop();
     // psfl: N-Page Span Free List

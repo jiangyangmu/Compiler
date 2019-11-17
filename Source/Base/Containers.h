@@ -161,6 +161,27 @@ public:
     }
     
 // Attributes
+    const T &   First() const
+    {
+        ASSERT(!IsEmpty());
+        return pData[0];
+    }
+    T &         First()
+    {
+        ASSERT(!IsEmpty());
+        return pData[0];
+    }
+    const T &   Last() const
+    {
+        ASSERT(!IsEmpty());
+        return pData[Count() - 1];
+    }
+    T &         Last()
+    {
+        ASSERT(!IsEmpty());
+        return pData[Count() - 1];
+    }
+
     const T &   At(int index) const
     {
         ASSERT(0 <= index && index < nCount);
@@ -182,11 +203,11 @@ public:
         return nCount;
     }
 
-    T *         RawData()
+    const T *   RawData() const
     {
         return pData;
     }
-    const T *   RawData() const
+    T *         RawData()
     {
         return pData;
     }
@@ -988,7 +1009,11 @@ private:
     }
 };
 
+// TODO: Set
+// TODO: Queue
+
 // Container operations
+
 template <typename TContainer>
 bool IsEqual(const TContainer & left, const TContainer & right);
 template <typename T>

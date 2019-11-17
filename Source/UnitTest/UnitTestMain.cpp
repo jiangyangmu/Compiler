@@ -86,7 +86,14 @@ void TestRunner::RunAllTest() {
 }
 
 int main(void) {
-    TestRunner::Get().RunAllTest();
+    try
+    {
+        TestRunner::Get().RunAllTest();
+    }
+    catch (const std::exception& e)
+    {
+        std::cerr << "Caught exception: " << e.what() << std::endl;
+    }
     return 0;
 }
 

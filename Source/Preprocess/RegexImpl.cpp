@@ -1,7 +1,13 @@
 #include "RegexImpl.h"
 
+#include <set>
+#include <deque>
+#include <map>
+
 namespace v2 {
 namespace re {
+
+using ::containers::Array;
 
 ACCEPT_VISIT_IMPL(ConcatOperator)
 ACCEPT_VISIT_IMPL(AlterOperator)
@@ -9,7 +15,7 @@ ACCEPT_VISIT_IMPL(KleeneStarOperator)
 ACCEPT_VISIT_IMPL(ASCIICharacter)
 
 static void FreeTree(TreeNode * pTree,
-                     memory::GenericFreeListAllocator & allocator)
+                     Allocator & allocator)
 {
     if (pTree->pLeftTree)
         FreeTree(pTree->pLeftTree, allocator);
@@ -31,7 +37,7 @@ static void VisitTree(TreeNode * pTree,
 }
 
 Tree::Tree(TreeNode * root,
-           memory::GenericFreeListAllocator & allocator)
+           Allocator & allocator)
     : pRoot(root)
     , allocator(allocator)
 {
@@ -47,8 +53,8 @@ void Tree::Accept(Visitor & visitor)
     VisitTree(pRoot, visitor);
 }
 
-#define CONTEXT_ALLOC(argType) new ((argType *)CompositorContext::Get().Allocator().Alloc(sizeof(argType))) argType()
-#define CONTEXT_FREE(argAddr) (CompositorContext::Get().Allocator().Free(argAddr))
+#define CONTEXT_ALLOC(argType) new ((argType *)CompositorContext::Get().GetAllocator().Alloc(sizeof(argType))) argType()
+#define CONTEXT_FREE(argAddr) (CompositorContext::Get().GetAllocator().Free(argAddr))
 
 Compositor Ascii(int index)
 {
@@ -105,10 +111,10 @@ Compositor KleeneStar(Compositor inner)
 }
 Tree Compositor::Get()
 {
-    return Tree(pTree, CompositorContext::Get().Allocator());
+    return Tree(pTree, CompositorContext::Get().GetAllocator());
 }
 
-static CompositorContext * pCurrentContext = nullptr;
+CompositorContext * CompositorContext::pCurrentContext = nullptr;
 CompositorContext & CompositorContext::Get()
 {
     ASSERT(pCurrentContext);
@@ -126,6 +132,393 @@ CompositorContext::~CompositorContext()
     pCurrentContext = pOldContext;
 }
 
+// Nfa structure
+
+struct NfaNode
+{
+    CharIndex ch1;
+    CharIndex ch2;
+    NfaNode * out1;
+    NfaNode * out2;
+};
+
+struct Nfa
+{
+    NfaNode * in;
+    NfaNode * out;
+};
+
+class NfaContext
+{
+public:
+    static NfaContext & Get()
+    {
+        ASSERT(pCurrentContext);
+        return *pCurrentContext;
+    }
+
+    NfaContext()
+        : pOldContext(pCurrentContext)
+    {
+        pCurrentContext = this;
+    }
+    ~NfaContext()
+    {
+        pCurrentContext = pOldContext;
+    }
+
+    Allocator & GetAllocator() { return allocator; }
+
+private:
+    NfaContext * pOldContext;
+    Allocator allocator;
+
+    static NfaContext * pCurrentContext;
+};
+NfaContext * NfaContext::pCurrentContext = nullptr;
+
+#define NFA_CONTEXT_ALLOC(argType) (argType *)NfaContext::Get().GetAllocator().Alloc(sizeof(argType))
+#define NFA_CONTEXT_FREE(argAddr) (NfaContext::Get().GetAllocator().Free(argAddr))
+
+// Nfa structure builder
+
+class NfaConverter : public re::Visitor
+{
+public:
+    static Nfa Convert(re::Tree & tree)
+    {
+        NfaConverter cvt;
+        tree.Accept(cvt);
+        ASSERT(cvt.arrNfa.Count() == 1);
+        return cvt.arrNfa[0];
+    }
+
+protected:
+    virtual void Visit(re::ConcatOperator &) override
+    {
+        Nfa inner1 = arrNfa[arrNfa.Count() - 2];
+        Nfa inner2 = arrNfa[arrNfa.Count() - 1];
+
+        ASSERT(!inner1.out->out1);
+        inner1.out->out1 = inner2.in;
+
+        Nfa nfa = { inner1.in, inner2.out };
+
+        arrNfa.RemoveAt(arrNfa.Count() - 2, 2);
+        arrNfa.Add(nfa);
+    }
+    virtual void Visit(re::AlterOperator &) override
+    {
+        NfaNode * in = NewNode();
+        NfaNode * out = NewNode();
+
+        Nfa inner1 = arrNfa[arrNfa.Count() - 2];
+        Nfa inner2 = arrNfa[arrNfa.Count() - 1];
+
+        in->out1 = inner1.in;
+        in->out2 = inner2.in;
+
+        ASSERT(!inner1.out->out1 && !inner2.out->out1);
+        inner1.out->out1 = out;
+        inner2.out->out1 = out;
+
+        Nfa nfa = { in, out };
+
+        arrNfa.RemoveAt(arrNfa.Count() - 2, 2);
+        arrNfa.Add(nfa);
+    }
+    virtual void Visit(re::KleeneStarOperator &) override
+    {
+        NfaNode * in = NewNode();
+        NfaNode * out = NewNode();
+
+        Nfa inner = arrNfa.Last();
+
+        in->out1 = inner.in;
+        in->out2 = out;
+
+        ASSERT(!inner.out->out1 && !inner.out->out2);
+        inner.out->out1 = inner.in;
+        inner.out->out2 = in;
+
+        arrNfa.Last() = { in, out };
+    }
+    virtual void Visit(re::ASCIICharacter & ch) override
+    {
+        NfaNode * in = NewNode();
+        NfaNode * out = NewNode();
+
+        in->ch1 = ch.index;
+        in->out1 = out;
+
+        Nfa nfa = { in, out };
+
+        arrNfa.Add(nfa);
+    }
+    NfaNode * NewNode()
+    {
+        NfaNode * n = NFA_CONTEXT_ALLOC(NfaNode);
+        n->ch1 = n->ch2 = CHAR_EPSILON;
+        n->out1 = n->out2 = nullptr;
+        return n;
+    }
+
+private:
+    Array<Nfa> arrNfa;
+};
+
+// Nfa visitor
+
+struct NfaNodeSet
+{
+    bool operator < (const NfaNodeSet & other) const
+    {
+        auto i1 = nodes.begin();
+        auto i2 = other.nodes.begin();
+        for (;;)
+        {
+            if (i1 == nodes.end() && i2 == other.nodes.end())
+                return false;
+            else if (i1 == nodes.end())
+                return true;
+            else if (i2 == other.nodes.end())
+                return false;
+            else if (*i1 != *i2)
+                return *i1 > *i2; // not a mistake!
+            else
+                ++i1, ++i2;
+        }
+    }
+    std::set<NfaNode *> nodes;
+};
+NfaNodeSet Start(Nfa nfa)
+{
+    std::set<NfaNode *> output;
+
+    std::deque<NfaNode *> q = { nfa.in };
+    std::set<NfaNode *> dup;
+    while (!q.empty())
+    {
+        NfaNode * pNode = q.back();
+        q.pop_back();
+        if (dup.find(pNode) != dup.end())
+            continue;
+        dup.insert(pNode);
+
+        if (pNode->ch1 != CHAR_EPSILON || pNode->ch2 != CHAR_EPSILON)
+            output.insert(pNode);
+        if (pNode->ch1 == CHAR_EPSILON && pNode->out1)
+            q.push_front(pNode->out1);
+        if (pNode->ch2 == CHAR_EPSILON && pNode->out2)
+            q.push_front(pNode->out2);
+    }
+
+    NfaNodeSet ns;
+    ns.nodes = ::std::move(output);
+    return ns;
+}
+NfaNodeSet Jump(NfaNodeSet ns, CharIndex ch)
+{
+    std::set<NfaNode *> output;
+
+    std::deque<NfaNode *> q;
+    for (NfaNode * pNode : ns.nodes)
+    {
+        if (pNode->ch1 == ch || pNode->ch2 == ch)
+            q.push_front(pNode);
+    }
+
+    std::set<NfaNode *> dup;
+    while (!q.empty())
+    {
+        NfaNode * pNode = q.back();
+        q.pop_back();
+        if (dup.find(pNode) != dup.end())
+            continue;
+        dup.insert(pNode);
+
+        if (pNode->ch1 != CHAR_EPSILON || pNode->ch2 != CHAR_EPSILON)
+            output.insert(pNode);
+        if (pNode->ch1 == CHAR_EPSILON && pNode->out1)
+            q.push_front(pNode->out1);
+        if (pNode->ch2 == CHAR_EPSILON && pNode->out2)
+            q.push_front(pNode->out2);
+    }
+
+    NfaNodeSet ns2;
+    ns2.nodes = ::std::move(output);
+    return ns2;
+}
+bool IsAccept(NfaNodeSet ns)
+{
+    if (ns.nodes.size() != 1)
+        return false;
+
+    NfaNode * pNode = *ns.nodes.begin();
+
+    return pNode->out1 == nullptr && pNode->out2 == nullptr;
+}
+
+// Dfa structure
+
+struct DfaJumpTable
+{
+    struct ConstRow
+    {
+        const int & operator[] (int col) const
+        {
+            ASSERT(0 <= col && col < table.nCol);
+            return table.pData[row * table.nCol + col];
+        }
+
+        const DfaJumpTable & table;
+        int row;
+    };
+    struct Row
+    {
+        int & operator[] (int col)
+        {
+            ASSERT(0 <= col && col < table.nCol);
+            return table.pData[row * table.nCol + col];
+        }
+
+        DfaJumpTable & table;
+        int row;
+    };
+    const ConstRow operator[] (int row) const
+    {
+        ASSERT(0 <= row && row < nRow);
+        return { *this, row };
+    }
+    Row operator[] (int row)
+    {
+        ASSERT(0 <= row && row < nRow);
+        return { *this, row };
+    }
+
+    int nRow;
+    int nCol;
+    int * pData;
+};
+struct DfaPropTable
+{
+    const bool & operator[] (int state) const
+    {
+        ASSERT(0 <= state && state < nRow);
+        return pData[state];
+    }
+    bool & operator[] (int state)
+    {
+        ASSERT(0 <= state && state < nRow);
+        return pData[state];
+    }
+
+    int nRow;
+    bool * pData;
+};
+
+struct Dfa
+{
+    static Dfa Create(int row, int col)
+    {
+        Dfa dfa;
+        DfaJumpTable & jump = dfa.jumpTable;
+        DfaPropTable & prop = dfa.propTable;
+
+        jump.nRow = prop.nRow = row;
+        jump.nCol = col;
+        jump.pData = new int[row * col];
+        prop.pData = new bool[row];
+
+        return dfa;
+    }
+
+    DfaJumpTable jumpTable;
+    DfaPropTable propTable;
+};
+
+class DfaConverter
+{
+public:
+    static Dfa Convert(Nfa nfa);
+};
+
+Dfa DfaConverter::Convert(Nfa nfa)
+{
+    // Subset construction.
+
+    std::map<NfaNodeSet, int> mNfa2Dfa;
+    std::map<int, NfaNodeSet> mDfa2Nfa;
+    int maxDfaState = 0;
+
+    std::deque<NfaNodeSet> qNodeSet = { Start(nfa) };
+    while (!qNodeSet.empty())
+    {
+        NfaNodeSet ns = qNodeSet.back();
+        qNodeSet.pop_back();
+
+        if (mNfa2Dfa.find(ns) != mNfa2Dfa.end())
+            continue;
+        ++maxDfaState;
+        mNfa2Dfa.emplace(ns, maxDfaState);
+        mDfa2Nfa.emplace(maxDfaState, ns);
+
+        for (CharIndex ch = CHAR_FIRST; ch != CHAR_LAST; ++ch)
+        {
+            qNodeSet.push_front(Jump(ns, ch));
+        }
+    }
+
+    int row = maxDfaState + 1;
+    int col = CHAR_COUNT;
+
+    Dfa dfa = Dfa::Create(row, col);
+
+    DfaJumpTable & jumpTable = dfa.jumpTable;
+    DfaPropTable & propTable = dfa.propTable;
+
+    propTable[0] = false;
+    for (int ch = 0; ch != col; ++ch)
+    {
+        jumpTable[0][ch] = 0;
+    }
+    for (int state = 1; state < row; ++state)
+    {
+        NfaNodeSet & ns = mDfa2Nfa[state];
+        propTable[state] = IsAccept(ns);
+        for (int ch = 0; ch != col; ++ch)
+        {
+            jumpTable[state][ch] = mNfa2Dfa[Jump(ns, ch)];
+        }
+    }
+
+    return dfa;
+}
+
+// Dfa match
+struct DfaResult
+{
+    int maxScanLen;
+    int maxAcceptLen;
+};
+DfaResult Run(const Dfa & dfa,
+              const char * str)
+{
+    int state = 1;
+    int maxAcptLen = 0;
+
+    int maxScanLen = 0;
+    while (state && *str)
+    {
+        if (dfa.propTable[state])
+            maxAcptLen = maxScanLen;
+        state = dfa.jumpTable[state][*str++];
+        ++maxScanLen;
+    }
+
+    return { maxScanLen, maxAcptLen };
+}
+
 }
 }
 
@@ -138,6 +531,14 @@ using namespace v2;
 class REToStringConverter : public re::Visitor
 {
 public:
+    static String Convert(re::Tree & tree)
+    {
+        REToStringConverter cvt;
+        tree.Accept(cvt);
+        return cvt.arrStr[0];
+    }
+
+protected:
     virtual void Visit(re::ConcatOperator &) override
     {
         ASSERT(arrStr.Count() >= 2);
@@ -171,18 +572,6 @@ public:
         arrStr.Add(String((char)ch.index, 1));
     }
 
-    virtual ~REToStringConverter() override
-    {
-        std::cout << arrStr.RawData() << std::endl;
-    }
-
-    static String Convert(re::Tree & tree)
-    {
-        REToStringConverter cvt;
-        tree.Accept(cvt);
-        return cvt.arrStr[0];
-    }
-
 private:
     containers::Array<String> arrStr;
 };
@@ -205,6 +594,31 @@ TEST(Regex_API_Build)
     EXPECT_EQ(
         REToStringConverter::Convert(re),
         String("(((ab)(c)*)|d)"));
+}
+
+TEST(Regex_API_Compile)
+{
+    TRACE_MEMORY(RegexCompile);
+
+    re::CompositorContext reCtx;
+    re::NfaContext nfaCtx;
+
+    // abc*|d
+    re::Compositor cp =
+        re::Alter(
+            re::Concat(re::Concat(
+                re::Ascii('a'),
+                re::Ascii('b')),
+                re::KleeneStar(re::Ascii('c'))),
+            re::Ascii('d'));
+    re::Tree re = cp.Get();
+
+    re::Nfa nfa = re::NfaConverter::Convert(re);
+    re::Dfa dfa = re::DfaConverter::Convert(nfa);
+
+    re::DfaResult r1 = re::Run(dfa, "a");
+    EXPECT_EQ(r1.maxScanLen, 1);
+    EXPECT_EQ(r1.maxAcceptLen, 1);
 }
 
 #endif

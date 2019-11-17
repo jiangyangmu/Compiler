@@ -8,13 +8,22 @@ namespace v2 {
 
 namespace re {
 
-using containers::Array;
+using Allocator = ::memory::GenericFreeListAllocator;
 
 class Visitor;
 
 #define ACCEPT_VISIT_INTERFACE  virtual void Accept(Visitor & visitor) = 0;
 #define ACCEPT_VISIT_DECL       virtual void Accept(Visitor & visitor) override;
 #define ACCEPT_VISIT_IMPL(type) void type::Accept(Visitor & visitor) { visitor.Visit(*this); }
+
+// Charset
+
+using CharIndex = int;
+#define CHAR_FIRST (0)
+#define CHAR_EPSILON (256 + 1)
+#define CHAR_EOS (256 + 2)
+#define CHAR_LAST CHAR_EOS
+#define CHAR_COUNT (CHAR_LAST + 1)
 
 // Regex elements
 
@@ -45,7 +54,7 @@ class ASCIICharacter : public Element
 {
 public:
     ACCEPT_VISIT_DECL
-    int index;
+    CharIndex index;
 };
 
 // Regex visitor
@@ -85,10 +94,10 @@ public:
     void Accept(Visitor & visitor);
 
 private:
-    Tree(TreeNode * root, memory::GenericFreeListAllocator & allocator);
+    Tree(TreeNode * root, Allocator & allocator);
 
     TreeNode * pRoot;
-    memory::GenericFreeListAllocator & allocator;
+    Allocator & allocator;
 
     friend class Compositor;
 };
@@ -122,11 +131,13 @@ public:
     CompositorContext();
     ~CompositorContext();
 
-    memory::GenericFreeListAllocator & Allocator() { return allocator; }
+    Allocator & GetAllocator() { return allocator; }
 
 private:
     CompositorContext * pOldContext;
-    memory::GenericFreeListAllocator allocator;
+    Allocator allocator;
+
+    static CompositorContext * pCurrentContext;
 };
 
 }
