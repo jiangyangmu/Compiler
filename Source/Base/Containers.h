@@ -448,11 +448,11 @@ public:
     }
 	
 // Attributes
-    int Count()
+    int Count() const
     {
         return nCount;
     }
-    bool Empty()
+    bool Empty() const
     {
         return nCount == 0;
     }
@@ -691,7 +691,6 @@ public:
         nCount = 0;
     }
 
-
 // Implementation
 private:
     struct Node
@@ -749,6 +748,14 @@ UINT HashKey(TKey key);
 template <>
 UINT HashKey(int key);
 
+template <typename T>
+UINT HashKey(T * key)
+{
+    UINT64 i = reinterpret_cast<UINT64>(key);
+    return static_cast<UINT>(i ^ (i >> 16));
+}
+
+
 template <typename TKey, typename TValue>
 class Map
 {
@@ -764,8 +771,25 @@ public:
     {
         _Init(bucket);
     }
-	// Map(const Map & other);
-	// Map(Map && other);
+	Map(const Map & other)
+    {
+        _Init(other.nBucketCount);
+        TKey key;
+        TValue value;
+        Position pos = const_cast<Map &>(other).GetStartPos();
+        while (const_cast<Map &>(other).GetNextAssoc(pos, key, value))
+        {
+            Insert(key, value);
+        }
+    }
+	Map(Map && other)
+        : nCount(other.nCount)
+        , nBucketCount(other.nBucketCount)
+        , pBucketArray(other.pBucketArray)
+    {
+        other.nCount = other.nBucketCount = 0;
+        other.pBucketArray = nullptr;
+    }
     ~Map()
     {
         _Deinit();
@@ -829,7 +853,7 @@ public:
 
             key = pNode->key;
             value = pNode->value;
-            
+
             if (pNode->next)
             {
                 pos.pNode = pNode->next;
@@ -838,7 +862,7 @@ public:
             {
                 pos.pBucket = pEnd;
                 pos.pNode = nullptr;
-                
+
                 for (Bucket * pNxt = pCur + 1;
                      pNxt != pEnd;
                      ++pNxt)
@@ -1009,8 +1033,329 @@ private:
     }
 };
 
-// TODO: Set
-// TODO: Queue
+template <typename T>
+class Set
+{
+public:
+    struct Position
+    {
+        void * pBucket;
+        void * pNode;
+    };
+
+// Constructors
+    Set(int bucket = 10)
+    {
+        _Init(bucket);
+    }
+	Set(const Set & other)
+    {
+        _Init(other.nBucketCount);
+        T element;
+        Position pos = const_cast<Set &>(other).GetStartPos();
+        while (const_cast<Set &>(other).GetNextElem(pos, element))
+        {
+            Insert(element);
+        }
+    }
+	Set(Set && other)
+        : nCount(other.nCount)
+        , nBucketCount(other.nBucketCount)
+        , pBucketArray(other.pBucketArray)
+    {
+        other.nCount = other.nBucketCount = 0;
+        other.pBucketArray = nullptr;
+    }
+    ~Set()
+    {
+        _Deinit();
+    }
+	
+// Attributes
+    int Count() const
+    {
+        return nCount;
+    }
+    bool Empty() const
+    {
+        return nCount == 0;
+    }
+
+// Operations
+    bool Contains(T element)
+    {
+        return _BucketFind(_GetBucket(element), element);
+    }
+    bool Insert(T element)
+    {
+        return _BucketInsert(_GetBucket(element), element);
+    }
+    bool Remove(T element)
+    {
+        return _BucketRemove(_GetBucket(element), element);
+    }
+
+    Position GetStartPos()
+    {
+        Bucket * pCur = pBucketArray;
+        Bucket * pEnd = pBucketArray + nBucketCount;
+        for (; pCur < pEnd; ++pCur)
+        {
+            if (pCur->pNodeList)
+                break;
+        }
+
+        Position start = {
+            (void *)pCur,
+            (void *)pCur->pNodeList
+        };
+        return start;
+    }
+    bool GetNextElem(Position & pos, T & element)
+    {
+        Bucket * pCur = (Bucket *)pos.pBucket;
+        Bucket * pEnd = pBucketArray + nBucketCount;
+        if (pCur != pEnd)
+        {
+            Node * pNode = (Node *)pos.pNode;
+
+            element = pNode->element;
+
+            if (pNode->next)
+            {
+                pos.pNode = pNode->next;
+            }
+            else
+            {
+                pos.pBucket = pEnd;
+                pos.pNode = nullptr;
+
+                for (Bucket * pNxt = pCur + 1;
+                     pNxt != pEnd;
+                     ++pNxt)
+                {
+                    if (pNxt->pNodeList)
+                    {
+                        pos.pBucket = pNxt;
+                        pos.pNode = pNxt->pNodeList;
+                        break;
+                    }
+                }
+            }
+
+            return true;
+        }
+        else
+        {
+            return false;
+        }
+    }
+
+    Set & operator= (const Set & other)
+    {
+        ~Set();
+        new (this) (other);
+        return *this;
+    }
+    Set & operator= (Set && other)
+    {
+        ~Set();
+        new (this) (std::move(other));
+        return *this;
+    }
+
+// Implementation
+private:
+    struct Node
+    {
+        Node * next;
+        T element;
+    };
+    struct Bucket
+    {
+        Node * pNodeList;
+    };
+
+    int nCount;
+    int nBucketCount;
+    Bucket * pBucketArray;
+
+    void _Init(int bucket)
+    {
+        pBucketArray = new Bucket[bucket];
+        Bucket * pCur = pBucketArray;
+        Bucket * pEnd = pBucketArray + bucket;
+        while (pCur < pEnd)
+        {
+            pCur->pNodeList = nullptr;
+            ++pCur;
+        }
+
+        nBucketCount = bucket;
+    }
+    void _Deinit()
+    {
+        Bucket * pCur = pBucketArray;
+        Bucket * pEnd = pBucketArray + nBucketCount;
+        for (;
+             pCur < pEnd;
+             ++pCur)
+        {
+            Node * pNode = pCur->pNodeList;
+            Node * pDel;
+            while (pNode)
+            {
+                pDel = pNode;
+                pNode = pNode->next;
+                _Destruct(pDel);
+                _Free(pDel);
+            }
+        }
+        delete[] pBucketArray;
+    }
+    static inline Node * _Alloc()
+    {
+        Node * pNode = (Node *)memory::Alloc(sizeof(Node));
+        pNode->next = nullptr;
+        return pNode;
+    }
+    static inline void _Free(Node * pNode)
+    {
+        memory::Free(pNode);
+    }
+    static inline void _Construct(Node * pNode, T element)
+    {
+        new (&pNode->element) T(element);
+    }
+    static inline void _Destruct(Node * pNode)
+    {
+        pNode->element.~T();
+    }
+    static inline void _Unlink(Node * pLeft, Node * pRight)
+    {
+        ASSERT(pLeft && pRight);
+        ASSERT(pLeft->next == pRight);
+        pLeft->next = nullptr;
+    }
+    static inline void _Link(Node * pLeft, Node * pRight)
+    {
+        ASSERT(pLeft && pRight);
+        ASSERT(!pLeft->next);
+        pLeft->next = pRight;
+    }
+    Bucket * _GetBucket(T element)
+    {
+        ASSERT(0 < nBucketCount);
+        return pBucketArray + (HashKey(element) % nBucketCount);
+    }
+    bool _BucketFind(Bucket * pBucket, T element)
+    {
+        Node * pNode;
+        for (pNode = pBucket->pNodeList;
+             pNode;
+             pNode = pNode->next)
+        {
+            if (pNode->element == element)
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+    bool _BucketInsert(Bucket * pBucket, T element)
+    {
+        Node * pNew = _Alloc();
+        _Construct(pNew, element);
+
+        Node * pNode = pBucket->pNodeList;
+        if (!pNode)
+        {
+            pBucket->pNodeList = pNew;
+        }
+        else
+        {
+            for (;;)
+            {
+                if (pNode->element == element)
+                    return false;
+                else if (pNode->next)
+                    pNode = pNode->next;
+                else
+                    break;
+            }
+            _Link(pNode, pNew);
+        }
+        ++nCount;
+        return true;
+    }
+    bool _BucketRemove(Bucket * pBucket, T element)
+    {
+        Node ** ppNode = &pBucket->pNodeList;
+        Node * pNode = pBucket->pNodeList;
+        for (;
+             pNode;
+             ppNode = &pNode->next, pNode = pNode->next)
+        {
+            if (pNode->element == element)
+            {
+                *ppNode = pNode->next;
+                _Destruct(pNode);
+                _Free(pNode);
+                --nCount;
+                return true;
+            }
+        }
+        return false;
+    }
+};
+
+template <typename T>
+class Queue
+{
+public:
+// Constructors
+	Queue()
+    {
+    }
+	Queue(const Queue & other)
+        : data(other.data)
+    {
+    }
+	Queue(Queue && other)
+        : data(std::move(other.data))
+    {
+    }
+	~Queue()
+    {
+    }
+
+// Attributes
+    int Length() const
+    {
+        return data.Count();
+    }
+    bool Empty() const
+    {
+        return data.Empty();
+    }
+
+// Operations
+    void Enqueue(T element)
+    {
+        data.AddHead(element);
+    }
+    T Dequeue()
+    {
+        ASSERT(!Empty());
+        T element = data.Tail();
+        data.RemoveTail();
+        return element;
+    }
+
+// Implementation
+private:
+    List<T> data;
+};
 
 // Container operations
 

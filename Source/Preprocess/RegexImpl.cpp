@@ -8,6 +8,8 @@ namespace v2 {
 namespace re {
 
 using ::containers::Array;
+using ::containers::Set;
+using ::containers::Queue;
 
 ACCEPT_VISIT_IMPL(ConcatOperator)
 ACCEPT_VISIT_IMPL(AlterOperator)
@@ -311,62 +313,78 @@ struct NfaNodeSet
 };
 NfaNodeSet Start(Nfa nfa)
 {
-    std::set<NfaNode *> output;
+    Set<NfaNode *> output;
 
-    std::deque<NfaNode *> q = { nfa.in };
-    std::set<NfaNode *> dup;
-    while (!q.empty())
+    Queue<NfaNode *> q;
+    Set<NfaNode *> dup;
+
+    q.Enqueue(nfa.in);
+    while (!q.Empty())
     {
-        NfaNode * pNode = q.back();
-        q.pop_back();
-        if (dup.find(pNode) != dup.end())
+        NfaNode * pNode = q.Dequeue();
+        if (dup.Contains(pNode))
             continue;
-        dup.insert(pNode);
+        dup.Insert(pNode);
 
         if (pNode->ch1 != CHAR_EPSILON || pNode->ch2 != CHAR_EPSILON)
-            output.insert(pNode);
+            output.Insert(pNode);
         if (pNode->ch1 == CHAR_EPSILON && pNode->out1)
-            q.push_front(pNode->out1);
+            q.Enqueue(pNode->out1);
         if (pNode->ch2 == CHAR_EPSILON && pNode->out2)
-            q.push_front(pNode->out2);
+            q.Enqueue(pNode->out2);
     }
 
     NfaNodeSet ns;
-    ns.nodes = ::std::move(output);
+    
+    NfaNode * pNode = nullptr;
+    auto pos = output.GetStartPos();
+    while (output.GetNextElem(pos, pNode))
+    {
+        ASSERT(pNode);
+        ns.nodes.insert(pNode);
+    }
+
     return ns;
 }
 NfaNodeSet Jump(NfaNodeSet ns, CharIndex ch)
 {
-    std::set<NfaNode *> output;
+    Set<NfaNode *> output;
 
-    std::deque<NfaNode *> q;
+    Queue<NfaNode *> q;
     for (NfaNode * pNode : ns.nodes)
     {
         if (pNode->ch1 == ch && pNode->out1)
-            q.push_front(pNode->out1);
+            q.Enqueue(pNode->out1);
         if (pNode->ch2 == ch && pNode->out2)
-            q.push_front(pNode->out2);
+            q.Enqueue(pNode->out2);
     }
 
-    std::set<NfaNode *> dup;
-    while (!q.empty())
+    Set<NfaNode *> dup;
+    while (!q.Empty())
     {
-        NfaNode * pNode = q.back();
-        q.pop_back();
-        if (dup.find(pNode) != dup.end())
+        NfaNode * pNode = q.Dequeue();
+        if (dup.Contains(pNode))
             continue;
-        dup.insert(pNode);
+        dup.Insert(pNode);
 
         if (pNode->ch1 != CHAR_EPSILON || pNode->ch2 != CHAR_EPSILON)
-            output.insert(pNode);
+            output.Insert(pNode);
         if (pNode->ch1 == CHAR_EPSILON && pNode->out1)
-            q.push_front(pNode->out1);
+            q.Enqueue(pNode->out1);
         if (pNode->ch2 == CHAR_EPSILON && pNode->out2)
-            q.push_front(pNode->out2);
+            q.Enqueue(pNode->out2);
     }
 
     NfaNodeSet ns2;
-    ns2.nodes = ::std::move(output);
+    
+    NfaNode * pNode = nullptr;
+    auto pos = output.GetStartPos();
+    while (output.GetNextElem(pos, pNode))
+    {
+        ASSERT(pNode);
+        ns2.nodes.insert(pNode);
+    }
+
     return ns2;
 }
 bool IsAccept(NfaNodeSet ns)
@@ -470,18 +488,11 @@ Dfa DfaConverter::Convert(Nfa nfa)
     std::map<int, NfaNodeSet> mDfa2Nfa;
     int maxDfaState = 0;
 
-    NfaNodeSet n1 = Start(nfa);
-    NfaNodeSet n2 = Jump(n1, 'a');
-    NfaNodeSet n3 = Jump(n2, 'b');
-    NfaNodeSet n4 = Jump(n3, CHAR_EOS);
-    NfaNodeSet n5 = Jump(n4, CHAR_EOS);
-    NfaNodeSet n6 = Jump(n5, CHAR_EOS);
-
-    std::deque<NfaNodeSet> qNodeSet = { Start(nfa) };
-    while (!qNodeSet.empty())
+    Queue<NfaNodeSet> qNodeSet;
+    qNodeSet.Enqueue(Start(nfa));
+    while (!qNodeSet.Empty())
     {
-        NfaNodeSet ns = qNodeSet.back();
-        qNodeSet.pop_back();
+        NfaNodeSet ns = qNodeSet.Dequeue();
 
         ++maxDfaState;
         mNfa2Dfa.emplace(ns, maxDfaState);
@@ -493,7 +504,7 @@ Dfa DfaConverter::Convert(Nfa nfa)
             if (!ns2.IsEmpty() &&
                 mNfa2Dfa.find(ns2) == mNfa2Dfa.end())
             {
-                qNodeSet.push_front(ns2);
+                qNodeSet.Enqueue(ns2);
             }
         }
     }
@@ -725,6 +736,33 @@ TEST(Regex_API_Build)
     EXPECT_EQ(
         REToStringConverter::Convert(re),
         String("(((ab)(c)*)|d)"));
+}
+
+TEST(Regex_API_Nfa)
+{
+    // re::Start, re::Jump
+
+    re::CompositorContext reCtx;
+    re::NfaContext nfaCtx;
+
+    re::Compositor cp = re::Concat(re::Ascii('a'), re::Ascii('b'));
+    re::Tree re = cp.Get();
+    re::Nfa nfa = re::NfaConverter::Convert(re);
+
+    re::NfaNode * a = nfa.in;
+    re::NfaNode * b = a->out1->out1;
+    re::NfaNode * end = b->out1->out1;
+    re::NfaNode * term = end->out1;
+
+    int input[] = { 'a', 'b', CHAR_EOS, CHAR_EOS };
+    re::NfaNode * expectNode[] = { a, b, end, term, };
+    re::NfaNodeSet ns = re::Start(nfa);
+    for (int i = 0, idx = 0; i < 10; ++i, idx += (idx < 3 ? 1 : 0))
+    {
+        EXPECT_EQ(ns.nodes.size(), 1);
+        EXPECT_EQ(*ns.nodes.begin(), expectNode[idx]);
+        ns = re::Jump(ns, input[idx]);
+    }
 }
 
 TEST(Regex_API_Compile)

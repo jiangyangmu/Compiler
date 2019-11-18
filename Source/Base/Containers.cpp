@@ -13,6 +13,7 @@ UINT HashKey(int key)
 #include "../UnitTest/UnitTest.h"
 
 #include <map>
+#include <set>
 
 using namespace containers;
 
@@ -37,6 +38,22 @@ bool EQ(List<int> & actual, std::vector<int> expect)
         if (actual.At(it) != expect[i])
             return false;
         it = actual.FindNextPos(it);
+    }
+    return true;
+}
+bool EQ(Set<int> & actual, std::set<int> expect)
+{
+    if (actual.Count() != (int)expect.size())
+        return false;
+    if (!actual.Empty())
+    {
+        int element;
+        auto it = actual.GetStartPos();
+        while (actual.GetNextElem(it, element))
+        {
+            if (expect.find(element) == expect.end())
+                return false;
+        }
     }
     return true;
 }
@@ -185,6 +202,56 @@ TEST(List_API)
     }
 }
 
+TEST(Set_API)
+{
+    // Create an empty Set.
+    Set<int> s0;
+
+    EXPECT(EQ(s0, {}));
+
+    // Insert elements.
+    s0.Insert(2);
+    s0.Insert(3);
+    s0.Insert(5);
+    s0.Insert(7);
+
+    EXPECT(EQ(s0, { 2,3,5,7 }));
+
+    // Query elements.
+    s0.Contains(3); // true
+    s0.Contains(10); // false
+
+    // Remove elements.
+    s0.Remove(2);
+    s0.Remove(7);
+
+    EXPECT(EQ(s0, { 3,5 }));
+
+    // Enumerate elements.
+    int elem;
+    for (auto it = s0.GetStartPos();
+         s0.GetNextElem(it, elem);
+         )
+    {
+        elem;
+    }
+
+    // Create by copy.
+    Set<int> s1(s0);
+
+    EXPECT(EQ(s1, { 3,5 }));
+
+    EXPECT_TRUE(s1.Remove(3));
+    EXPECT(EQ(s0, { 3,5 }));
+    EXPECT(EQ(s1, { 5 }));
+
+    // Create by move.
+    Set<int> s2(std::move(s0));
+
+    EXPECT(EQ(s2, { 3,5 }));
+    EXPECT(EQ(s0, {}));
+}
+
 TEST(Map_API)
 {
     // Create an empty map.
@@ -220,6 +287,21 @@ TEST(Map_API)
     {
         key, val;
     }
+
+    // Create by copy.
+    Map<int, int> m1(m0);
+
+    EXPECT(EQ(  m1,     {{2,3},{3,5}} ));
+    
+    EXPECT_TRUE(m1.Remove(2));
+    EXPECT(EQ(  m0,     {{2,3},{3,5}} ));
+    EXPECT(EQ(  m1,     {      {3,5}} ));
+
+    // Create by move.
+    Map<int, int> m2(std::move(m0));
+
+    EXPECT(EQ(  m2,     {{2,3},{3,5}} ));
+    EXPECT(EQ(  m0,     {} ));
 }
 
 #endif
