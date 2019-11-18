@@ -145,7 +145,14 @@ FreeListPageList_Contains(const FreeListPage * pflpList, FreeListPage * pflp)
 
 FreeListAllocator::~FreeListAllocator()
 {
+#ifdef _DEBUG
+    if (pflpFullList || pflpHalfList)
+    {
+        DumpAddrStats();
+    }
+#else
     ASSERT(pflpFullList == nullptr && pflpHalfList == nullptr);
+#endif
     ReleaseAllUnusedPages();
 }
 
@@ -237,13 +244,13 @@ FreeListAllocator::ReleaseAllUnusedPages()
     bool bReleased;
 
     bReleased = (pflpEmptyList != nullptr);
-    
+
     pflp = pflpEmptyList;
     while (pflp)
     {
-        pflpNext    = pflp->pflpNext;
+        pflpNext = pflp->pflpNext;
         GetDefaultSpanAllocator()->Free(pflp, 1);
-        pflp        = pflpNext;
+        pflp = pflpNext;
     }
 
     pflpEmptyList = nullptr;

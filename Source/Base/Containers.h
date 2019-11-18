@@ -808,9 +808,9 @@ public:
     TValue At(TKey key)
     {
         Bucket * pBucket = _GetBucket(key);
-        TValue value;
-        ASSERT(_BucketFind(pBucket, key, value));
-        return value;
+        Node * pNode = _BucketFind(pBucket, key);
+        ASSERT(pNode);
+        return pNode->value;
     }
 
 // Operations
@@ -822,9 +822,19 @@ public:
     {
         return _BucketRemove(_GetBucket(key), key);
     }
+    bool Contains(TKey key)
+    {
+        Bucket * pBucket = _GetBucket(key);
+        Node * pNode = _BucketFind(pBucket, key);
+        return pNode != nullptr;
+    }
     bool Lookup(TKey key, TValue & value)
     {
-        return _BucketFind(_GetBucket(key), key, value);
+        Bucket * pBucket = _GetBucket(key);
+        Node * pNode = _BucketFind(pBucket, key);
+        if (pNode)
+            value = pNode->value;
+        return pNode != nullptr;
     }
 
     Position GetStartPos()
@@ -971,7 +981,7 @@ private:
         ASSERT(0 < nBucketCount);
         return pBucketArray + (HashKey(key) % nBucketCount);
     }
-    bool _BucketFind(Bucket * pBucket, TKey key, TValue & value)
+    Node * _BucketFind(Bucket * pBucket, TKey key)
     {
         Node * pNode;
         for (pNode = pBucket->pNodeList;
@@ -979,12 +989,9 @@ private:
              pNode = pNode->next)
         {
             if (pNode->key == key)
-            {
-                value = pNode->value;
-                return true;
-            }
+                break;
         }
-        return false;
+        return pNode;
     }
     bool _BucketInsert(Bucket * pBucket, TKey key, TValue value)
     {

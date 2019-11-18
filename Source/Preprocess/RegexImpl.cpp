@@ -9,6 +9,7 @@ namespace re {
 
 using ::containers::Array;
 using ::containers::Set;
+using ::containers::Map;
 using ::containers::Queue;
 
 ACCEPT_VISIT_IMPL(ConcatOperator)
@@ -196,7 +197,7 @@ public:
         // Add end-of-input node.
         NfaNode * eos = cvt.NewNode();
         NfaNode * eosMore = cvt.NewNode();
-        
+
         eos->ch1 = CHAR_EOS;
         eos->out1 = eosMore;
         eosMore->ch1 = CHAR_EOS;
@@ -291,6 +292,11 @@ struct NfaNodeSet
     {
         return nodes.empty();
     }
+    bool operator == (const NfaNodeSet & other) const
+    {
+        return nodes.size() == other.nodes.size() &&
+            std::equal(nodes.begin(), nodes.end(), other.nodes.begin());
+    }
     bool operator < (const NfaNodeSet & other) const
     {
         auto i1 = nodes.begin();
@@ -311,6 +317,25 @@ struct NfaNodeSet
     }
     std::set<NfaNode *> nodes;
 };
+
+}
+} namespace containers {
+
+template <>
+UINT HashKey(v2::re::NfaNodeSet ns)
+{
+    UINT64 h = 0;
+    for (auto n : ns.nodes)
+    {
+        UINT64 p = reinterpret_cast<UINT64>(n);
+        h ^= p ^ (p >> 16);
+    }
+    return static_cast<UINT>(h);
+}
+
+} namespace v2 {
+namespace re {
+
 NfaNodeSet Start(Nfa nfa)
 {
     Set<NfaNode *> output;
@@ -335,7 +360,7 @@ NfaNodeSet Start(Nfa nfa)
     }
 
     NfaNodeSet ns;
-    
+
     NfaNode * pNode = nullptr;
     auto pos = output.GetStartPos();
     while (output.GetNextElem(pos, pNode))
@@ -376,7 +401,7 @@ NfaNodeSet Jump(NfaNodeSet ns, CharIndex ch)
     }
 
     NfaNodeSet ns2;
-    
+
     NfaNode * pNode = nullptr;
     auto pos = output.GetStartPos();
     while (output.GetNextElem(pos, pNode))
@@ -484,7 +509,7 @@ Dfa DfaConverter::Convert(Nfa nfa)
 {
     // Subset construction.
 
-    std::map<NfaNodeSet, int> mNfa2Dfa;
+    Map<NfaNodeSet, int> mNfa2Dfa;
     std::map<int, NfaNodeSet> mDfa2Nfa;
     int maxDfaState = 0;
 
@@ -495,14 +520,13 @@ Dfa DfaConverter::Convert(Nfa nfa)
         NfaNodeSet ns = qNodeSet.Dequeue();
 
         ++maxDfaState;
-        mNfa2Dfa.emplace(ns, maxDfaState);
+        mNfa2Dfa.Insert(ns, maxDfaState);
         mDfa2Nfa.emplace(maxDfaState, ns);
 
         for (CharIndex ch = CHAR_FIRST; ch <= CHAR_LAST; ++ch)
         {
             NfaNodeSet ns2 = Jump(ns, ch);
-            if (!ns2.IsEmpty() &&
-                mNfa2Dfa.find(ns2) == mNfa2Dfa.end())
+            if (!ns2.IsEmpty() && !mNfa2Dfa.Contains(ns2))
             {
                 qNodeSet.Enqueue(ns2);
             }
@@ -528,7 +552,13 @@ Dfa DfaConverter::Convert(Nfa nfa)
         propTable[state] = IsAccept(ns);
         for (int ch = 0; ch != col; ++ch)
         {
-            jumpTable[state][ch] = mNfa2Dfa[Jump(ns, ch)];
+            NfaNodeSet ns2 = Jump(ns, ch);
+            int nextState = 0;
+
+            jumpTable[state][ch] =
+                mNfa2Dfa.Lookup(ns2, nextState)
+                ? nextState
+                : 0;
         }
     }
 
@@ -539,7 +569,7 @@ Dfa DfaConverter::Convert(Nfa nfa)
         std::cout << "  Nfa" << std::endl;
         std::cout << std::endl;
         // assign nfa state ids
-        std::map<NfaNode *, int> mNfaId= { {nullptr, -1} };
+        std::map<NfaNode *, int> mNfaId = { {nullptr, -1} };
         int nfaId = 0;
         for (auto p : mDfa2Nfa)
         {
@@ -741,6 +771,8 @@ TEST(Regex_API_Build)
 TEST(Regex_API_Nfa)
 {
     // re::Start, re::Jump
+
+    TRACE_MEMORY(RegexNfa);
 
     re::CompositorContext reCtx;
     re::NfaContext nfaCtx;

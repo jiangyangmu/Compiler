@@ -269,9 +269,15 @@ TEST(Map_API)
 
     // Query elements.
     int value;
-    m0.At(3); // 5
-    m0.Lookup(2, value); // true, 3
-    m0.Lookup(10, value); // false
+
+    EXPECT_EQ(  m0.At(3),               5    );
+    EXPECT_EQ(  m0.Contains(4),         true );
+    EXPECT_EQ(  m0.Contains(9),         false);
+
+    EXPECT_EQ(  m0.Lookup(2, value),    true );
+    EXPECT_EQ(  value,                  3    );
+    EXPECT_EQ(  m0.Lookup(10, value),   false);
+    EXPECT_EQ(  value,                  3    );
 
     // Remove elements.
     m0.Remove(1);
