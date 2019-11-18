@@ -1089,7 +1089,7 @@ public:
     }
 
 // Operations
-    bool Contains(T element)
+    bool Contains(T element) const
     {
         return _BucketFind(_GetBucket(element), element);
     }
@@ -1102,7 +1102,7 @@ public:
         return _BucketRemove(_GetBucket(element), element);
     }
 
-    Position GetStartPos()
+    Position GetStartPos() const
     {
         Bucket * pCur = pBucketArray;
         Bucket * pEnd = pBucketArray + nBucketCount;
@@ -1118,7 +1118,7 @@ public:
         };
         return start;
     }
-    bool GetNextElem(Position & pos, T & element)
+    bool GetNextElem(Position & pos, T & element) const
     {
         Bucket * pCur = (Bucket *)pos.pBucket;
         Bucket * pEnd = pBucketArray + nBucketCount;
@@ -1157,17 +1157,31 @@ public:
             return false;
         }
     }
+    T GetFirst() const
+    {
+        ASSERT(!Empty());
+        T element;
+        auto pos = GetStartPos();
+        GetNextElem(pos, element);
+        return element;
+    }
 
+    void CopyTo(Set & other) const
+    {
+        T element;
+        for (auto pos = GetStartPos();
+             GetNextElem(pos, element);
+             )
+        {
+            other.Insert(element);
+        }
+    }
     Set & operator= (const Set & other)
     {
-        ~Set();
-        new (this) (other);
-        return *this;
-    }
-    Set & operator= (Set && other)
-    {
-        ~Set();
-        new (this) (std::move(other));
+        int bucket = nBucketCount;
+        _Deinit();
+        _Init(bucket);
+        other.CopyTo(*this);
         return *this;
     }
 
@@ -1199,6 +1213,7 @@ private:
         }
 
         nBucketCount = bucket;
+        nCount = 0;
     }
     void _Deinit()
     {
@@ -1250,12 +1265,12 @@ private:
         ASSERT(!pLeft->next);
         pLeft->next = pRight;
     }
-    Bucket * _GetBucket(T element)
+    Bucket * _GetBucket(T element) const
     {
         ASSERT(0 < nBucketCount);
         return pBucketArray + (HashKey(element) % nBucketCount);
     }
-    bool _BucketFind(Bucket * pBucket, T element)
+    bool _BucketFind(Bucket * pBucket, T element) const
     {
         Node * pNode;
         for (pNode = pBucket->pNodeList;

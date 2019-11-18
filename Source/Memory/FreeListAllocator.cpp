@@ -150,9 +150,8 @@ FreeListAllocator::~FreeListAllocator()
     {
         DumpAddrStats();
     }
-#else
-    ASSERT(pflpFullList == nullptr && pflpHalfList == nullptr);
 #endif
+    ASSERT(pflpFullList == nullptr && pflpHalfList == nullptr);
     ReleaseAllUnusedPages();
 }
 

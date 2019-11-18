@@ -290,32 +290,26 @@ struct NfaNodeSet
 {
     bool IsEmpty() const
     {
-        return nodes.empty();
+        return nodes.Empty();
     }
     bool operator == (const NfaNodeSet & other) const
     {
-        return nodes.size() == other.nodes.size() &&
-            std::equal(nodes.begin(), nodes.end(), other.nodes.begin());
-    }
-    bool operator < (const NfaNodeSet & other) const
-    {
-        auto i1 = nodes.begin();
-        auto i2 = other.nodes.begin();
-        for (;;)
+        if (nodes.Count() != other.nodes.Count())
+            return false;
+        else
         {
-            if (i1 == nodes.end() && i2 == other.nodes.end())
-                return false;
-            else if (i1 == nodes.end())
-                return true;
-            else if (i2 == other.nodes.end())
-                return false;
-            else if (*i1 != *i2)
-                return *i1 < *i2;
-            else
-                ++i1, ++i2;
+            NfaNode * pNode;
+            for (auto pos = nodes.GetStartPos();
+                 nodes.GetNextElem(pos, pNode);
+                 )
+            {
+                if (!other.nodes.Contains(pNode))
+                    return false;
+            }
+            return true;
         }
     }
-    std::set<NfaNode *> nodes;
+    Set<NfaNode *> nodes;
 };
 
 }
@@ -325,7 +319,10 @@ template <>
 UINT HashKey(v2::re::NfaNodeSet ns)
 {
     UINT64 h = 0;
-    for (auto n : ns.nodes)
+    v2::re::NfaNode * n;
+    for (auto pos = ns.nodes.GetStartPos();
+         ns.nodes.GetNextElem(pos, n);
+         )
     {
         UINT64 p = reinterpret_cast<UINT64>(n);
         h ^= p ^ (p >> 16);
@@ -366,7 +363,7 @@ NfaNodeSet Start(Nfa nfa)
     while (output.GetNextElem(pos, pNode))
     {
         ASSERT(pNode);
-        ns.nodes.insert(pNode);
+        ns.nodes.Insert(pNode);
     }
 
     return ns;
@@ -376,7 +373,10 @@ NfaNodeSet Jump(NfaNodeSet ns, CharIndex ch)
     Set<NfaNode *> output;
 
     Queue<NfaNode *> q;
-    for (NfaNode * pNode : ns.nodes)
+    NfaNode * pNode = nullptr;
+    for (auto pos = ns.nodes.GetStartPos();
+         ns.nodes.GetNextElem(pos, pNode);
+         )
     {
         if (pNode->ch1 == ch && pNode->out1)
             q.Enqueue(pNode->out1);
@@ -402,22 +402,23 @@ NfaNodeSet Jump(NfaNodeSet ns, CharIndex ch)
 
     NfaNodeSet ns2;
 
-    NfaNode * pNode = nullptr;
-    auto pos = output.GetStartPos();
-    while (output.GetNextElem(pos, pNode))
+    NfaNode * pNode2 = nullptr;
+    for (auto pos = output.GetStartPos();
+         output.GetNextElem(pos, pNode2);
+         )
     {
-        ASSERT(pNode);
-        ns2.nodes.insert(pNode);
+        ASSERT(pNode2);
+        ns2.nodes.Insert(pNode2);
     }
 
     return ns2;
 }
 bool IsAccept(NfaNodeSet ns)
 {
-    if (ns.nodes.size() != 1)
+    if (ns.nodes.Count() != 1)
         return false;
 
-    NfaNode * pNode = *ns.nodes.begin();
+    NfaNode * pNode = ns.nodes.GetFirst();
     return pNode->ch1 == CHAR_EOS && pNode->out1 != pNode;
 }
 
@@ -578,13 +579,16 @@ Dfa DfaConverter::Convert(Nfa nfa)
              mDfa2Nfa.GetNextAssoc(pos, dfaId, ns);
              )
         {
-            for (auto s : ns.nodes)
+            NfaNode * pNode;
+            for (auto pos = ns.nodes.GetStartPos();
+                 ns.nodes.GetNextElem(pos, pNode);
+                 )
             {
-                if (mNfaId.emplace(s, nfaId).second)
+                if (mNfaId.emplace(pNode, nfaId).second)
                     ++nfaId;
-                if (mNfaId.emplace(s->out1, nfaId).second)
+                if (mNfaId.emplace(pNode->out1, nfaId).second)
                     ++nfaId;
-                if (mNfaId.emplace(s->out2, nfaId).second)
+                if (mNfaId.emplace(pNode->out2, nfaId).second)
                     ++nfaId;
             }
         }
@@ -617,7 +621,10 @@ Dfa DfaConverter::Convert(Nfa nfa)
              )
         {
             std::cout << "[" << dfaId << "]\t";
-            for (auto s : ns.nodes)
+            NfaNode * s;
+            for (auto pos = ns.nodes.GetStartPos();
+                 ns.nodes.GetNextElem(pos, s);
+                 )
             {
                 std::cout << mNfaId[s] << ", ";
             }
@@ -796,8 +803,8 @@ TEST(Regex_API_Nfa)
     re::NfaNodeSet ns = re::Start(nfa);
     for (int i = 0, idx = 0; i < 10; ++i, idx += (idx < 3 ? 1 : 0))
     {
-        EXPECT_EQ(ns.nodes.size(), 1);
-        EXPECT_EQ(*ns.nodes.begin(), expectNode[idx]);
+        EXPECT_EQ(ns.nodes.Count(), 1);
+        EXPECT_EQ(ns.nodes.GetFirst(), expectNode[idx]);
         ns = re::Jump(ns, input[idx]);
     }
 }
