@@ -190,7 +190,21 @@ public:
         NfaConverter cvt;
         tree.Accept(cvt);
         ASSERT(cvt.arrNfa.Count() == 1);
-        return cvt.arrNfa[0];
+
+        // Add end-of-input node.
+        NfaNode * eos = cvt.NewNode();
+        NfaNode * eosMore = cvt.NewNode();
+        
+        eos->ch1 = CHAR_EOS;
+        eos->out1 = eosMore;
+        eosMore->ch1 = CHAR_EOS;
+        eosMore->out1 = eosMore;
+
+        Nfa nfa = cvt.arrNfa.First();
+
+        nfa.out->out1 = eos;
+
+        return { nfa.in, eosMore };
     }
 
 protected:
@@ -271,6 +285,10 @@ private:
 
 struct NfaNodeSet
 {
+    bool IsEmpty() const
+    {
+        return nodes.empty();
+    }
     bool operator < (const NfaNodeSet & other) const
     {
         auto i1 = nodes.begin();
@@ -284,7 +302,7 @@ struct NfaNodeSet
             else if (i2 == other.nodes.end())
                 return false;
             else if (*i1 != *i2)
-                return *i1 > *i2; // not a mistake!
+                return *i1 < *i2;
             else
                 ++i1, ++i2;
         }
@@ -324,8 +342,10 @@ NfaNodeSet Jump(NfaNodeSet ns, CharIndex ch)
     std::deque<NfaNode *> q;
     for (NfaNode * pNode : ns.nodes)
     {
-        if (pNode->ch1 == ch || pNode->ch2 == ch)
-            q.push_front(pNode);
+        if (pNode->ch1 == ch && pNode->out1)
+            q.push_front(pNode->out1);
+        if (pNode->ch2 == ch && pNode->out2)
+            q.push_front(pNode->out2);
     }
 
     std::set<NfaNode *> dup;
@@ -355,8 +375,7 @@ bool IsAccept(NfaNodeSet ns)
         return false;
 
     NfaNode * pNode = *ns.nodes.begin();
-
-    return pNode->out1 == nullptr && pNode->out2 == nullptr;
+    return pNode->ch1 == CHAR_EOS && pNode->out1 != pNode;
 }
 
 // Dfa structure
@@ -451,21 +470,31 @@ Dfa DfaConverter::Convert(Nfa nfa)
     std::map<int, NfaNodeSet> mDfa2Nfa;
     int maxDfaState = 0;
 
+    NfaNodeSet n1 = Start(nfa);
+    NfaNodeSet n2 = Jump(n1, 'a');
+    NfaNodeSet n3 = Jump(n2, 'b');
+    NfaNodeSet n4 = Jump(n3, CHAR_EOS);
+    NfaNodeSet n5 = Jump(n4, CHAR_EOS);
+    NfaNodeSet n6 = Jump(n5, CHAR_EOS);
+
     std::deque<NfaNodeSet> qNodeSet = { Start(nfa) };
     while (!qNodeSet.empty())
     {
         NfaNodeSet ns = qNodeSet.back();
         qNodeSet.pop_back();
 
-        if (mNfa2Dfa.find(ns) != mNfa2Dfa.end())
-            continue;
         ++maxDfaState;
         mNfa2Dfa.emplace(ns, maxDfaState);
         mDfa2Nfa.emplace(maxDfaState, ns);
 
-        for (CharIndex ch = CHAR_FIRST; ch != CHAR_LAST; ++ch)
+        for (CharIndex ch = CHAR_FIRST; ch <= CHAR_LAST; ++ch)
         {
-            qNodeSet.push_front(Jump(ns, ch));
+            NfaNodeSet ns2 = Jump(ns, ch);
+            if (!ns2.IsEmpty() &&
+                mNfa2Dfa.find(ns2) == mNfa2Dfa.end())
+            {
+                qNodeSet.push_front(ns2);
+            }
         }
     }
 
@@ -492,6 +521,81 @@ Dfa DfaConverter::Convert(Nfa nfa)
         }
     }
 
+    // Dump Dfa
+    {
+        std::cout << "-----------------------------" << std::endl;
+        std::cout << std::endl;
+        std::cout << "  Nfa" << std::endl;
+        std::cout << std::endl;
+        // assign nfa state ids
+        std::map<NfaNode *, int> mNfaId= { {nullptr, -1} };
+        int nfaId = 0;
+        for (auto p : mDfa2Nfa)
+        {
+            for (auto s : p.second.nodes)
+            {
+                if (mNfaId.emplace(s, nfaId).second)
+                    ++nfaId;
+                if (mNfaId.emplace(s->out1, nfaId).second)
+                    ++nfaId;
+                if (mNfaId.emplace(s->out2, nfaId).second)
+                    ++nfaId;
+            }
+        }
+        for (auto p : mNfaId)
+        {
+            if (!p.first) continue;
+            std::cout << p.second << "\t";
+            if (p.first->out1)
+            {
+                if (p.first->ch1 == CHAR_EPSILON) std::cout << "--->" << mNfaId[p.first->out1];
+                else if (p.first->ch1 == CHAR_EOS) std::cout << "-$->" << mNfaId[p.first->out1];
+                else std::cout << "-" << (char)p.first->ch1 << "->" << mNfaId[p.first->out1];
+                std::cout << "\t";
+            }
+            if (p.first->out2)
+            {
+                if (p.first->ch2 == CHAR_EPSILON) std::cout << "--->" << mNfaId[p.first->out2];
+                else if (p.first->ch2 == CHAR_EOS) std::cout << "-$->" << mNfaId[p.first->out2];
+                else std::cout << "-" << (char)p.first->ch2 << "->" << mNfaId[p.first->out2];
+            }
+            std::cout << std::endl;
+        }
+        std::cout << std::endl;
+        std::cout << "  Dfa -> Nfa Set" << std::endl;
+        std::cout << std::endl;
+        // dfa -> nfa set
+        for (auto p : mDfa2Nfa)
+        {
+            int dfa = p.first;
+            NfaNodeSet & nfa = p.second;
+
+            std::cout << "[" << dfa << "]\t";
+            for (auto s : nfa.nodes)
+            {
+                std::cout << mNfaId[s] << ", ";
+            }
+            std::cout << std::endl;
+        }
+        // dfa
+        std::cout << std::endl;
+        std::cout << "  Dfa" << std::endl;
+        std::cout << std::endl;
+        for (int r = 0; r < row; ++r)
+        {
+            std::cout << "[" << r << "]\t";
+            for (int c = 0; c < col; ++c)
+            {
+                if (jumpTable[r][c] && (c == CHAR_EOS || (c <= 127 && isalnum(c))))
+                    std::cout << (c != CHAR_EOS ? (char)c : '$') << " -> " << jumpTable[r][c] << ", ";
+                // std::cout << c << "('" << (char)c << "') -> " << jumpTable[r][c] << ", ";
+            }
+            std::cout << (propTable[r] ? "Accept" : "") << std::endl;
+        }
+        std::cout << std::endl;
+        std::cout << "-----------------------------" << std::endl;
+    }
+
     return dfa;
 }
 
@@ -501,18 +605,45 @@ struct DfaResult
     int maxScanLen;
     int maxAcceptLen;
 };
+class InputReader
+{
+public:
+    InputReader(const char * str)
+        : pNext(str)
+        , bEndOfInput(false)
+    {
+        ASSERT(pNext);
+    }
+    bool More()
+    {
+        return !bEndOfInput;
+    }
+    int Get()
+    {
+        if (*pNext)
+            return *pNext++;
+        else
+        {
+            bEndOfInput = true;
+            return CHAR_EOS;
+        }
+    }
+private:
+    const char * pNext;
+    bool bEndOfInput;
+};
 DfaResult Run(const Dfa & dfa,
-              const char * str)
+              InputReader input)
 {
     int state = 1;
     int maxAcptLen = 0;
 
     int maxScanLen = 0;
-    while (state && *str)
+    while (state && input.More())
     {
         if (dfa.propTable[state])
             maxAcptLen = maxScanLen;
-        state = dfa.jumpTable[state][*str++];
+        state = dfa.jumpTable[state][input.Get()];
         ++maxScanLen;
     }
 
@@ -603,22 +734,19 @@ TEST(Regex_API_Compile)
     re::CompositorContext reCtx;
     re::NfaContext nfaCtx;
 
-    // abc*|d
+    // ab
     re::Compositor cp =
-        re::Alter(
-            re::Concat(re::Concat(
-                re::Ascii('a'),
-                re::Ascii('b')),
-                re::KleeneStar(re::Ascii('c'))),
-            re::Ascii('d'));
+        re::Concat(
+            re::Ascii('a'),
+            re::Ascii('b'));
     re::Tree re = cp.Get();
 
     re::Nfa nfa = re::NfaConverter::Convert(re);
     re::Dfa dfa = re::DfaConverter::Convert(nfa);
 
-    re::DfaResult r1 = re::Run(dfa, "a");
-    EXPECT_EQ(r1.maxScanLen, 1);
-    EXPECT_EQ(r1.maxAcceptLen, 1);
+    re::DfaResult r1 = re::Run(dfa, "ab");
+    EXPECT_EQ(r1.maxScanLen, 3);
+    EXPECT_EQ(r1.maxAcceptLen, 2);
 }
 
 #endif
