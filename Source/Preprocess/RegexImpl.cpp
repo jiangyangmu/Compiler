@@ -510,7 +510,7 @@ Dfa DfaConverter::Convert(Nfa nfa)
     // Subset construction.
 
     Map<NfaNodeSet, int> mNfa2Dfa;
-    std::map<int, NfaNodeSet> mDfa2Nfa;
+    Map<int, NfaNodeSet> mDfa2Nfa;
     int maxDfaState = 0;
 
     Queue<NfaNodeSet> qNodeSet;
@@ -521,7 +521,7 @@ Dfa DfaConverter::Convert(Nfa nfa)
 
         ++maxDfaState;
         mNfa2Dfa.Insert(ns, maxDfaState);
-        mDfa2Nfa.emplace(maxDfaState, ns);
+        mDfa2Nfa.Insert(maxDfaState, ns);
 
         for (CharIndex ch = CHAR_FIRST; ch <= CHAR_LAST; ++ch)
         {
@@ -548,7 +548,7 @@ Dfa DfaConverter::Convert(Nfa nfa)
     }
     for (int state = 1; state < row; ++state)
     {
-        NfaNodeSet & ns = mDfa2Nfa[state];
+        NfaNodeSet & ns = mDfa2Nfa.At(state);
         propTable[state] = IsAccept(ns);
         for (int ch = 0; ch != col; ++ch)
         {
@@ -571,9 +571,14 @@ Dfa DfaConverter::Convert(Nfa nfa)
         // assign nfa state ids
         std::map<NfaNode *, int> mNfaId = { {nullptr, -1} };
         int nfaId = 0;
-        for (auto p : mDfa2Nfa)
+
+        int dfaId;
+        NfaNodeSet ns;
+        for (auto pos = mDfa2Nfa.GetStartPos();
+             mDfa2Nfa.GetNextAssoc(pos, dfaId, ns);
+             )
         {
-            for (auto s : p.second.nodes)
+            for (auto s : ns.nodes)
             {
                 if (mNfaId.emplace(s, nfaId).second)
                     ++nfaId;
@@ -583,6 +588,7 @@ Dfa DfaConverter::Convert(Nfa nfa)
                     ++nfaId;
             }
         }
+
         for (auto p : mNfaId)
         {
             if (!p.first) continue;
@@ -606,13 +612,12 @@ Dfa DfaConverter::Convert(Nfa nfa)
         std::cout << "  Dfa -> Nfa Set" << std::endl;
         std::cout << std::endl;
         // dfa -> nfa set
-        for (auto p : mDfa2Nfa)
+        for (auto pos = mDfa2Nfa.GetStartPos();
+             mDfa2Nfa.GetNextAssoc(pos, dfaId, ns);
+             )
         {
-            int dfa = p.first;
-            NfaNodeSet & nfa = p.second;
-
-            std::cout << "[" << dfa << "]\t";
-            for (auto s : nfa.nodes)
+            std::cout << "[" << dfaId << "]\t";
+            for (auto s : ns.nodes)
             {
                 std::cout << mNfaId[s] << ", ";
             }
