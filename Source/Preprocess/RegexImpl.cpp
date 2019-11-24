@@ -39,19 +39,19 @@ static void VisitTree(TreeNode * pTree,
     pTree->pElement->Accept(visitor);
 }
 
-Tree::Tree(TreeNode * root,
+RegexTree::RegexTree(TreeNode * root,
            Allocator & allocator)
     : pRoot(root)
     , allocator(allocator)
 {
 }
 
-Tree::~Tree()
+RegexTree::~RegexTree()
 {
     FreeTree(pRoot, allocator);
 }
 
-void Tree::Accept(Visitor & visitor)
+void RegexTree::Accept(Visitor & visitor)
 {
     VisitTree(pRoot, visitor);
 }
@@ -112,9 +112,9 @@ Compositor KleeneStar(Compositor inner)
     cp.pTree = pNode;
     return cp;
 }
-Tree Compositor::Get()
+RegexTree Compositor::Get()
 {
-    return Tree(pTree, CompositorContext::Get().GetAllocator());
+    return RegexTree(pTree, CompositorContext::Get().GetAllocator());
 }
 
 CompositorContext * CompositorContext::pCurrentContext = nullptr;
@@ -188,7 +188,7 @@ NfaContext * NfaContext::pCurrentContext = nullptr;
 class NfaConverter : public re::Visitor
 {
 public:
-    static Nfa Convert(re::Tree & tree)
+    static Nfa Convert(re::RegexTree & tree)
     {
         NfaConverter cvt;
         tree.Accept(cvt);
@@ -312,8 +312,7 @@ struct NfaNodeSet
     Set<NfaNode *> nodes;
 };
 
-}
-} namespace containers {
+} } namespace containers {
 
 template <>
 UINT HashKey(v2::re::NfaNodeSet ns)
@@ -330,8 +329,7 @@ UINT HashKey(v2::re::NfaNodeSet ns)
     return static_cast<UINT>(h);
 }
 
-} namespace v2 {
-namespace re {
+} namespace v2 { namespace re {
 
 NfaNodeSet Start(Nfa nfa)
 {
@@ -496,6 +494,19 @@ struct Dfa
         return dfa;
     }
 
+    int Start() const
+    {
+        return 1;
+    }
+    int Jump(int state, int ch) const
+    {
+        return jumpTable[state][ch];
+    }
+    bool Accept(int state) const
+    {
+        return propTable[state];
+    }
+
     DfaJumpTable jumpTable;
     DfaPropTable propTable;
 };
@@ -653,54 +664,175 @@ Dfa DfaConverter::Convert(Nfa nfa)
 }
 
 // Dfa match
-struct DfaResult
-{
-    int maxScanLen;
-    int maxAcceptLen;
-};
+
 class InputReader
 {
 public:
-    InputReader(const char * str)
+    InputReader(const char * str, const char * end = nullptr)
         : pNext(str)
-        , bEndOfInput(false)
+        , pEnd(end)
     {
         ASSERT(pNext);
     }
     bool More()
     {
-        return !bEndOfInput;
+        return (!pEnd && *pNext) || (pEnd && pNext < pEnd);
+    }
+    int Peek()
+    {
+        if (More())
+            return *pNext;
+        else
+        {
+            return CHAR_EOS;
+        }
     }
     int Get()
     {
-        if (*pNext)
+        if (More())
             return *pNext++;
         else
         {
-            bEndOfInput = true;
             return CHAR_EOS;
         }
     }
 private:
     const char * pNext;
-    bool bEndOfInput;
+    const char * pEnd;
 };
-DfaResult Run(const Dfa & dfa,
-              InputReader input)
-{
-    int state = 1;
-    int maxAcptLen = 0;
 
+MatchResult DfaMatch(const Dfa & dfa,
+                     InputReader & input)
+{
     int maxScanLen = 0;
-    while (state && input.More())
+    int maxAcptLen = -1;
+    String content;
+
+    int state = dfa.Start();
+    for (;;)
     {
-        if (dfa.propTable[state])
+        if (dfa.Accept(state))
             maxAcptLen = maxScanLen;
-        state = dfa.jumpTable[state][input.Get()];
+
+        if (!input.More())
+            break;
+
+        state = dfa.Jump(state, input.Peek());
+        if (state == 0)
+            break;
+        
+        content.Add(input.Get());
         ++maxScanLen;
     }
+    content.ShrinkTo(maxAcptLen);
 
-    return { maxScanLen, maxAcptLen };
+    return MatchResult(content, maxScanLen, maxAcptLen);
+}
+
+// Client interface
+
+MatchResult::MatchResult(String content,
+                         int maxScanLen,
+                         int maxAcceptLen)
+    : content(std::move(content))
+    , maxScanLen(maxScanLen)
+    , maxAcceptLen(maxAcceptLen)
+{
+}
+
+StringView MatchResult::Content() const
+{
+    return StringView(content.RawData(), content.Length());
+}
+
+int MatchResult::MaxScanLen() const
+{
+    return maxScanLen;
+}
+
+int MatchResult::MaxAcceptLen() const
+{
+    return maxAcceptLen;
+}
+
+class Regex::Impl
+{
+public:
+    Dfa dfa;
+};
+
+class MatchResultIterator::Impl
+{
+public:
+    Impl(const Dfa & dfa, InputReader inputReader)
+        : dfa(dfa)
+        , inputReader(inputReader)
+    {}
+
+    const Dfa & dfa;
+    InputReader inputReader;
+};
+
+class PImplAccessor
+{
+public:
+    template <typename T>
+    static std::unique_ptr<typename T::Impl> & Get(T & obj)
+    {
+        return obj.pImpl;
+    }
+    template <typename T>
+    static std::unique_ptr<typename T::Impl> const & Get(const T & obj)
+    {
+        return obj.pImpl;
+    }
+};
+
+Regex Compile()
+{
+    CompositorContext reCtx;
+    NfaContext nfaCtx;
+
+    // ab
+    Compositor cp =
+        Concat(
+            KleeneStar(Ascii('a')),
+            Ascii('b'));
+    RegexTree re = cp.Get();
+
+    Nfa nfa = NfaConverter::Convert(re);
+    Dfa dfa = DfaConverter::Convert(nfa);
+
+    Regex::Impl * impl = new Regex::Impl();
+    impl->dfa = dfa;
+
+    Regex regex;
+    PImplAccessor::Get(regex).reset(impl);
+    return regex;
+}
+
+bool MatchResultIterator::More()
+{
+    return pImpl->inputReader.More();
+}
+
+MatchResult MatchResultIterator::Next()
+{
+    return DfaMatch(pImpl->dfa, pImpl->inputReader);
+}
+
+MatchResultIterator IterateMatches(const Regex & regex,
+                                   StringView input)
+{
+    MatchResultIterator::Impl * impl =
+        new MatchResultIterator::Impl(
+            PImplAccessor::Get(regex)->dfa,
+            InputReader(input.Begin(), input.End())
+        );
+
+    MatchResultIterator mri;
+    PImplAccessor::Get(mri).reset(impl);
+    return mri;
 }
 
 }
@@ -715,7 +847,7 @@ using namespace v2;
 class REToStringConverter : public re::Visitor
 {
 public:
-    static String Convert(re::Tree & tree)
+    static String Convert(re::RegexTree & tree)
     {
         REToStringConverter cvt;
         tree.Accept(cvt);
@@ -773,7 +905,7 @@ TEST(Regex_API_Build)
                 re::KleeneStar(re::Ascii('c'))),
             re::Ascii('d'));
 
-    re::Tree re = cp.Get();
+    re::RegexTree re = cp.Get();
 
     EXPECT_EQ(
         REToStringConverter::Convert(re),
@@ -784,13 +916,11 @@ TEST(Regex_API_Nfa)
 {
     // re::Start, re::Jump
 
-    TRACE_MEMORY(RegexNfa);
-
     re::CompositorContext reCtx;
     re::NfaContext nfaCtx;
 
     re::Compositor cp = re::Concat(re::Ascii('a'), re::Ascii('b'));
-    re::Tree re = cp.Get();
+    re::RegexTree re = cp.Get();
     re::Nfa nfa = re::NfaConverter::Convert(re);
 
     re::NfaNode * a = nfa.in;
@@ -809,10 +939,8 @@ TEST(Regex_API_Nfa)
     }
 }
 
-TEST(Regex_API_Compile)
+TEST(Regex_API_Run)
 {
-    TRACE_MEMORY(RegexCompile);
-
     re::CompositorContext reCtx;
     re::NfaContext nfaCtx;
 
@@ -821,14 +949,32 @@ TEST(Regex_API_Compile)
         re::Concat(
             re::Ascii('a'),
             re::Ascii('b'));
-    re::Tree re = cp.Get();
+    re::RegexTree re = cp.Get();
 
     re::Nfa nfa = re::NfaConverter::Convert(re);
     re::Dfa dfa = re::DfaConverter::Convert(nfa);
 
-    re::DfaResult r1 = re::Run(dfa, "ab");
-    EXPECT_EQ(r1.maxScanLen, 3);
-    EXPECT_EQ(r1.maxAcceptLen, 2);
+    re::InputReader ir("ab");
+    re::MatchResult mr = re::DfaMatch(dfa, ir);
+    EXPECT_EQ(mr.MaxScanLen(), 3);
+    EXPECT_EQ(mr.MaxAcceptLen(), 2);
+}
+
+TEST(Regex_API_Usage)
+{
+    // Build Regex
+    re::Regex regex = re::Compile();
+
+    // Match
+    re::MatchResultIterator mri = re::IterateMatches(regex, "abaabaaab");
+    while (mri.More())
+    {
+        re::MatchResult mr = mri.Next();
+        std::cout
+            << "scan: " << mr.MaxScanLen() << std::endl
+            << "acpt: " << mr.MaxAcceptLen() << std::endl
+            << "text: " << mr.Content() << std::endl;
+    }
 }
 
 #endif

@@ -4,6 +4,8 @@
 #include "../Base/String.h"
 #include "../Memory/FreeListAllocator.h"
 
+#include <memory>
+
 namespace v2 {
 
 namespace re {
@@ -86,15 +88,15 @@ struct TreeNode
     Element * pElement;
 };
 
-class Tree
+class RegexTree
 {
 public:
-    ~Tree();
+    ~RegexTree();
 
     void Accept(Visitor & visitor);
 
 private:
-    Tree(TreeNode * root, Allocator & allocator);
+    RegexTree(TreeNode * root, Allocator & allocator);
 
     TreeNode * pRoot;
     Allocator & allocator;
@@ -107,7 +109,7 @@ private:
 class Compositor
 {
 public:
-    Tree Get();
+    RegexTree Get();
 
 private:
     TreeNode * pTree;
@@ -139,6 +141,52 @@ private:
 
     static CompositorContext * pCurrentContext;
 };
+
+// Client interface
+
+class Regex
+{
+public:
+    // TODO: full type operation set impl.
+    // TODO: dfa destroy.
+
+    class Impl;
+private:
+    std::unique_ptr<Impl> pImpl;
+
+    friend class PImplAccessor;
+};
+
+class MatchResult
+{
+public:
+    MatchResult(String content, int maxScanLen, int maxAcceptLen);
+
+    StringView Content() const;
+    int MaxScanLen() const;
+    int MaxAcceptLen() const;
+
+private:
+    String content;
+    int maxScanLen;
+    int maxAcceptLen;
+};
+
+class MatchResultIterator
+{
+public:
+    bool More();
+    MatchResult Next();
+
+    class Impl;
+private:
+    std::unique_ptr<Impl> pImpl;
+
+    friend class PImplAccessor;
+};
+
+Regex Compile(StringView regex);
+MatchResultIterator IterateMatches(const Regex & regex, StringView input);
 
 }
 

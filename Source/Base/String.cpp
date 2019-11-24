@@ -197,10 +197,15 @@ char String::Last() const
     return aData[(int)Length() - 1];
 }
 
-char String::At(UINT32 index) const
+char String::At(int index) const
 {
-    ASSERT(index < Length());
+    ASSERT(0 <= index && index < Length());
     return aData[index];
+}
+
+const char * String::RawData() const
+{
+    return aData.RawData();
 }
 
 String & String::Add(char c)
@@ -215,11 +220,28 @@ String & String::Append(const String & s)
     return *this;
 }
 
+String & String::ShrinkTo(int length)
+{
+    int nRemove = static_cast<int>(Length()) - length;
+    if (0 < nRemove)
+    {
+        aData.RemoveAt(length, nRemove);
+    }
+    return *this;
+}
+
 void String::Clear()
 {
     aData.RemoveAll();
     MakeNullTerminated(aData);
     aData.ReduceMemoryUsage();
+}
+
+String & String::operator=(String && s)
+{
+    this->~String();
+    new (this) String(static_cast<String &&>(s));
+    return *this;
 }
 
 bool String::operator!=(const String & other) const

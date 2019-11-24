@@ -1,8 +1,6 @@
 #include "MemoryTrace.h"
 
 #include <iostream>
-// #include <Windows.h>
-// #include <Dbghelp.h>
 
 #include "../Base/ErrorHandling.h"
 
@@ -45,6 +43,9 @@ static inline AddrStats & FindAddrStat(void * addr)
 }
 void DumpAddrStats()
 {
+    if (!bEnableMemoryTrace)
+        return;
+
     AddrStats * pBegin = vAddrStats;
     AddrStats * pEnd = vAddrStats + 1024;
     std::cout << "----------- Memory Stats Dump -----------" << std::endl;

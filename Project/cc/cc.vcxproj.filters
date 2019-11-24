@@ -95,7 +95,7 @@
       <Filter>Preprocess</Filter>
     </ClInclude>
     <ClInclude Include="..\..\Source\Memory\MemoryTrace.h">
-      <Filter>Memory</Filter>
+      <Filter>Debug</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>
@@ -170,7 +170,7 @@
       <Filter>Preprocess</Filter>
     </ClCompile>
     <ClCompile Include="..\..\Source\Memory\MemoryTrace.cpp">
-      <Filter>Memory</Filter>
+      <Filter>Debug</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
@@ -206,6 +206,9 @@
     </Filter>
     <Filter Include="UnitTest">
       <UniqueIdentifier>{7d1cab9d-fda5-4195-b910-96eb972395d8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Debug">
+      <UniqueIdentifier>{0c327164-d4e5-4931-9a9d-9d99407d4656}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>

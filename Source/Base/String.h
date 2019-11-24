@@ -180,13 +180,16 @@ public:
     size_t      Length() const;
     char        First() const;
     char        Last() const;
-    char        At(UINT32 index) const;
+    char        At(int index) const;
+    const char * RawData() const;
 
     // Modify
     String &    Add(char c);
     String &    Append(const String & s);
+    String &    ShrinkTo(int length);
     void        Clear();
 
+    String &    operator = (String && s);
     String &    operator += (const String & s);
 
     // Compare
