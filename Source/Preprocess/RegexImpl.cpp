@@ -1,5 +1,7 @@
 #include "RegexImpl.h"
 
+#include "../Memory/Allocate.h"
+
 #include <set>
 #include <deque>
 #include <map>
@@ -11,128 +13,205 @@ using ::containers::Array;
 using ::containers::Set;
 using ::containers::Map;
 using ::containers::Queue;
+using Allocator = ::memory::GenericFreeListAllocator;
+
+// Memory management
+
+static ::memory::GenericFreeListAllocator gRegexAllocator;
+
+#define REGEX_ALLOC(T) new ((T *)gRegexAllocator.Alloc(sizeof(T))) T
+#define REGEX_FREE(T, ptr) ((ptr)->~T(), gRegexAllocator.Free(ptr))
+
+// Charset
+
+using CharIndex = int;
+#define CHAR_FIRST (0)
+#define CHAR_EPSILON (256 + 1)
+#define CHAR_EOS (256 + 2)
+#define CHAR_LAST CHAR_EOS
+#define CHAR_COUNT (CHAR_LAST + 1)
+
+// Regex
+
+#define ACCEPT_VISIT_INTERFACE  virtual void Accept(RegexStruct::Visitor & visitor) = 0;
+#define ACCEPT_VISIT_DECL       virtual void Accept(RegexStruct::Visitor & visitor) override;
+#define ACCEPT_VISIT_IMPL(type) void type::Accept(RegexStruct::Visitor & visitor) { visitor.Visit(*this); }
+
+class RegexStruct::Element
+{
+public:
+    virtual ~Element() = default;
+
+    ACCEPT_VISIT_INTERFACE
+};
+class ConcatOperator : public RegexStruct::Element
+{
+public:
+    ACCEPT_VISIT_DECL
+};
+class AlterOperator : public RegexStruct::Element
+{
+public:
+    ACCEPT_VISIT_DECL
+};
+class KleeneStarOperator : public RegexStruct::Element
+{
+public:
+    ACCEPT_VISIT_DECL
+};
+class ASCIICharacter : public RegexStruct::Element
+{
+public:
+    ACCEPT_VISIT_DECL
+        CharIndex index;
+};
+
+class RegexStruct::Visitor
+{
+public:
+    virtual ~Visitor() = default;
+
+    virtual void Visit(ConcatOperator &) {}
+    virtual void Visit(AlterOperator &) {}
+    virtual void Visit(KleeneStarOperator &) {}
+    virtual void Visit(ASCIICharacter &) {}
+};
 
 ACCEPT_VISIT_IMPL(ConcatOperator)
 ACCEPT_VISIT_IMPL(AlterOperator)
 ACCEPT_VISIT_IMPL(KleeneStarOperator)
 ACCEPT_VISIT_IMPL(ASCIICharacter)
 
-static void FreeTree(TreeNode * pTree,
-                     Allocator & allocator)
+RegexStructFactory::PostfixBuilder RegexStructFactory::CreateBuilder()
 {
-    if (pTree->pLeftTree)
-        FreeTree(pTree->pLeftTree, allocator);
-    if (pTree->pRightTree)
-        FreeTree(pTree->pRightTree, allocator);
-    pTree->pElement->~Element();
-    allocator.Free(pTree->pElement);
-    allocator.Free(pTree);
+    return {};
 }
 
-static void VisitTree(TreeNode * pTree,
-                      Visitor & visitor)
+// group -> or -> and -> star -> group/char
+// RegexStruct RegexStructFactory::CreateFromString(StringView svRegex);
+
+RegexStruct::Node * RegexStructFactory::NewAsciiNode(int ch)
 {
-    if (pTree->pLeftTree)
-        VisitTree(pTree->pLeftTree, visitor);
-    if (pTree->pRightTree)
-        VisitTree(pTree->pRightTree, visitor);
-    pTree->pElement->Accept(visitor);
-}
+    ASCIICharacter * pElement = REGEX_ALLOC(ASCIICharacter);
+    pElement->index = ch;
 
-RegexTree::RegexTree(TreeNode * root,
-           Allocator & allocator)
-    : pRoot(root)
-    , allocator(allocator)
-{
-}
-
-RegexTree::~RegexTree()
-{
-    FreeTree(pRoot, allocator);
-}
-
-void RegexTree::Accept(Visitor & visitor)
-{
-    VisitTree(pRoot, visitor);
-}
-
-#define CONTEXT_ALLOC(argType) new ((argType *)CompositorContext::Get().GetAllocator().Alloc(sizeof(argType))) argType()
-#define CONTEXT_FREE(argAddr) (CompositorContext::Get().GetAllocator().Free(argAddr))
-
-Compositor Ascii(int index)
-{
-    ASCIICharacter * pElement = CONTEXT_ALLOC(ASCIICharacter);
-    pElement->index = index;
-
-    TreeNode * pNode = CONTEXT_ALLOC(TreeNode);
-    pNode->pLeftTree = nullptr;
-    pNode->pRightTree = nullptr;
+    RegexStruct::Node * pNode = REGEX_ALLOC(RegexStruct::Node);
+    pNode->pLeft = nullptr;
+    pNode->pRight = nullptr;
     pNode->pElement = pElement;
 
-    Compositor cp;
-    cp.pTree = pNode;
-    return cp;
-}
-Compositor Concat(Compositor left, Compositor right)
-{
-    ConcatOperator * pElement = CONTEXT_ALLOC(ConcatOperator);
-
-    TreeNode * pNode = CONTEXT_ALLOC(TreeNode);
-    pNode->pLeftTree = left.pTree;
-    pNode->pRightTree = right.pTree;
-    pNode->pElement = pElement;
-
-    Compositor cp;
-    cp.pTree = pNode;
-    return cp;
-}
-Compositor Alter(Compositor left, Compositor right)
-{
-    AlterOperator * pElement = CONTEXT_ALLOC(AlterOperator);
-
-    TreeNode * pNode = CONTEXT_ALLOC(TreeNode);
-    pNode->pLeftTree = left.pTree;
-    pNode->pRightTree = right.pTree;
-    pNode->pElement = pElement;
-
-    Compositor cp;
-    cp.pTree = pNode;
-    return cp;
-}
-Compositor KleeneStar(Compositor inner)
-{
-    KleeneStarOperator * pElement = CONTEXT_ALLOC(KleeneStarOperator);
-
-    TreeNode * pNode = CONTEXT_ALLOC(TreeNode);
-    pNode->pLeftTree = inner.pTree;
-    pNode->pRightTree = nullptr;
-    pNode->pElement = pElement;
-
-    Compositor cp;
-    cp.pTree = pNode;
-    return cp;
-}
-RegexTree Compositor::Get()
-{
-    return RegexTree(pTree, CompositorContext::Get().GetAllocator());
+    return pNode;
 }
 
-CompositorContext * CompositorContext::pCurrentContext = nullptr;
-CompositorContext & CompositorContext::Get()
+RegexStruct::Node * RegexStructFactory::NewConcatNode(RegexStruct::Node * pLeft, RegexStruct::Node * pRight)
 {
-    ASSERT(pCurrentContext);
-    return *pCurrentContext;
+    RegexStruct::Node * pNode = REGEX_ALLOC(RegexStruct::Node);
+    pNode->pLeft = pLeft;
+    pNode->pRight = pRight;
+    pNode->pElement = REGEX_ALLOC(ConcatOperator);
+
+    return pNode;
 }
 
-CompositorContext::CompositorContext()
+RegexStruct::Node * RegexStructFactory::NewAlterNode(RegexStruct::Node * pLeft, RegexStruct::Node * pRight)
 {
-    pOldContext = pCurrentContext;
-    pCurrentContext = this;
+    RegexStruct::Node * pNode = REGEX_ALLOC(RegexStruct::Node);
+    pNode->pLeft = pLeft;
+    pNode->pRight = pRight;
+    pNode->pElement = REGEX_ALLOC(AlterOperator);
+
+    return pNode;
 }
 
-CompositorContext::~CompositorContext()
+RegexStruct::Node * RegexStructFactory::NewKleeneStarNode(RegexStruct::Node * pInner)
 {
-    pCurrentContext = pOldContext;
+    RegexStruct::Node * pNode = REGEX_ALLOC(RegexStruct::Node);
+    pNode->pLeft = pInner;
+    pNode->pRight = nullptr;
+    pNode->pElement = REGEX_ALLOC(KleeneStarOperator);
+
+    return pNode;
+}
+
+void RegexStruct::FreeRegexStruct(Node * pNode)
+{
+    if (pNode)
+    {
+        FreeRegexStruct(pNode->pLeft);
+        FreeRegexStruct(pNode->pRight);
+        REGEX_FREE(Element, pNode->pElement);
+    }
+}
+
+void RegexStruct::VisitRegexStruct(const Node * pNode,
+                                   Visitor & visitor)
+{
+    if (pNode)
+    {
+        VisitRegexStruct(pNode->pLeft, visitor);
+        VisitRegexStruct(pNode->pRight, visitor);
+        pNode->pElement->Accept(visitor);
+    }
+}
+
+RegexStruct::RegexStruct(RegexStruct && other)
+    : pRoot(other.pRoot)
+{
+    other.pRoot = nullptr;
+}
+
+RegexStruct::~RegexStruct()
+{
+    if (pRoot)
+    {
+        FreeRegexStruct(pRoot);
+    }
+}
+
+void RegexStruct::Accept(Visitor & visitor)
+{
+    VisitRegexStruct(pRoot, visitor);
+}
+
+RegexStructFactory::PostfixBuilder & RegexStructFactory::PostfixBuilder::Ascii(int ch)
+{
+    stack.Add(NewAsciiNode(ch));
+    return *this;
+}
+
+RegexStructFactory::PostfixBuilder & RegexStructFactory::PostfixBuilder::Concat()
+{
+    RegexStruct::Node * pNode1 = stack[stack.Count() - 2];
+    RegexStruct::Node * pNode2 = stack[stack.Count() - 1];
+    RegexStruct::Node * pNodeConcat = NewConcatNode(pNode1, pNode2);
+    stack.RemoveAt(stack.Count() - 2, 2);
+    stack.Add(pNodeConcat);
+    return *this;
+}
+
+RegexStructFactory::PostfixBuilder & RegexStructFactory::PostfixBuilder::Alter()
+{
+    RegexStruct::Node * pNode1 = stack[stack.Count() - 2];
+    RegexStruct::Node * pNode2 = stack[stack.Count() - 1];
+    RegexStruct::Node * pNodeAlter = NewAlterNode(pNode1, pNode2);
+    stack.RemoveAt(stack.Count() - 2, 2);
+    stack.Add(pNodeAlter);
+    return *this;
+}
+
+RegexStructFactory::PostfixBuilder & RegexStructFactory::PostfixBuilder::KleeneStar()
+{
+    RegexStruct::Node * pNode = stack[stack.Count() - 1];
+    RegexStruct::Node * pNodeKleeneStar = NewKleeneStarNode(pNode);
+    stack.RemoveAt(stack.Count() - 1, 1);
+    stack.Add(pNodeKleeneStar);
+    return *this;
+}
+
+RegexStruct RegexStructFactory::PostfixBuilder::Build()
+{
+    ASSERT(stack.Count() == 1);
+    return RegexStruct(stack[0]);
 }
 
 // Nfa structure
@@ -180,18 +259,18 @@ private:
 };
 NfaContext * NfaContext::pCurrentContext = nullptr;
 
-#define NFA_CONTEXT_ALLOC(argType) (argType *)NfaContext::Get().GetAllocator().Alloc(sizeof(argType))
+#define NFA_GC_NEW(argType) (argType *)NfaContext::Get().GetAllocator().Alloc(sizeof(argType))
 #define NFA_CONTEXT_FREE(argAddr) (NfaContext::Get().GetAllocator().Free(argAddr))
 
 // Nfa structure builder
 
-class NfaConverter : public re::Visitor
+class NfaConverter : public RegexStruct::Visitor
 {
 public:
-    static Nfa Convert(re::RegexTree & tree)
+    static Nfa Convert(RegexStruct & rs)
     {
         NfaConverter cvt;
-        tree.Accept(cvt);
+        rs.Accept(cvt);
         ASSERT(cvt.arrNfa.Count() == 1);
 
         // Add end-of-input node.
@@ -211,7 +290,7 @@ public:
     }
 
 protected:
-    virtual void Visit(re::ConcatOperator &) override
+    virtual void Visit(ConcatOperator &) override
     {
         Nfa inner1 = arrNfa[arrNfa.Count() - 2];
         Nfa inner2 = arrNfa[arrNfa.Count() - 1];
@@ -224,7 +303,7 @@ protected:
         arrNfa.RemoveAt(arrNfa.Count() - 2, 2);
         arrNfa.Add(nfa);
     }
-    virtual void Visit(re::AlterOperator &) override
+    virtual void Visit(AlterOperator &) override
     {
         NfaNode * in = NewNode();
         NfaNode * out = NewNode();
@@ -244,7 +323,7 @@ protected:
         arrNfa.RemoveAt(arrNfa.Count() - 2, 2);
         arrNfa.Add(nfa);
     }
-    virtual void Visit(re::KleeneStarOperator &) override
+    virtual void Visit(KleeneStarOperator &) override
     {
         NfaNode * in = NewNode();
         NfaNode * out = NewNode();
@@ -260,7 +339,7 @@ protected:
 
         arrNfa.Last() = { in, out };
     }
-    virtual void Visit(re::ASCIICharacter & ch) override
+    virtual void Visit(ASCIICharacter & ch) override
     {
         NfaNode * in = NewNode();
         NfaNode * out = NewNode();
@@ -274,7 +353,7 @@ protected:
     }
     NfaNode * NewNode()
     {
-        NfaNode * n = NFA_CONTEXT_ALLOC(NfaNode);
+        NfaNode * n = NFA_GC_NEW(NfaNode);
         n->ch1 = n->ch2 = CHAR_EPSILON;
         n->out1 = n->out2 = nullptr;
         return n;
@@ -283,8 +362,6 @@ protected:
 private:
     Array<Nfa> arrNfa;
 };
-
-// Nfa visitor
 
 struct NfaNodeSet
 {
@@ -311,25 +388,6 @@ struct NfaNodeSet
     }
     Set<NfaNode *> nodes;
 };
-
-} } namespace containers {
-
-template <>
-UINT HashKey(v2::re::NfaNodeSet ns)
-{
-    UINT64 h = 0;
-    v2::re::NfaNode * n;
-    for (auto pos = ns.nodes.GetStartPos();
-         ns.nodes.GetNextElem(pos, n);
-         )
-    {
-        UINT64 p = reinterpret_cast<UINT64>(n);
-        h ^= p ^ (p >> 16);
-    }
-    return static_cast<UINT>(h);
-}
-
-} namespace v2 { namespace re {
 
 NfaNodeSet Start(Nfa nfa)
 {
@@ -420,6 +478,24 @@ bool IsAccept(NfaNodeSet ns)
     return pNode->ch1 == CHAR_EOS && pNode->out1 != pNode;
 }
 
+} } namespace containers {
+// For Set<NfaNodeSet>, Map<NfaNodeSet, *>
+template <>
+UINT HashKey(v2::re::NfaNodeSet ns)
+{
+    UINT64 h = 0;
+    v2::re::NfaNode * n;
+    for (auto pos = ns.nodes.GetStartPos();
+         ns.nodes.GetNextElem(pos, n);
+         )
+    {
+        UINT64 p = reinterpret_cast<UINT64>(n);
+        h ^= p ^ (p >> 16);
+    }
+    return static_cast<UINT>(h);
+}
+} namespace v2 { namespace re {
+
 // Dfa structure
 
 struct DfaJumpTable
@@ -446,6 +522,37 @@ struct DfaJumpTable
         DfaJumpTable & table;
         int row;
     };
+
+    DfaJumpTable()
+        : nRow(0)
+        , nCol(0)
+        , pData(nullptr)
+    {
+    }
+    DfaJumpTable(int row, int col)
+        : nRow(row)
+        , nCol(col)
+        , pData(nullptr)
+    {
+        ASSERT(nRow > 0 && nCol > 0);
+        pData = new int[nRow * nCol];
+    }
+    ~DfaJumpTable()
+    {
+        if (pData)
+        {
+            delete[] pData;
+        }
+    }
+
+    void Swap(DfaJumpTable & other)
+    {
+        int iTmp, * pTmp;
+        iTmp = nRow; nRow = other.nRow; other.nRow = iTmp;
+        iTmp = nCol; nCol = other.nCol; other.nCol = iTmp;
+        pTmp = pData; pData = other.pData; other.pData = pTmp;
+    }
+
     const ConstRow operator[] (int row) const
     {
         ASSERT(0 <= row && row < nRow);
@@ -463,6 +570,32 @@ struct DfaJumpTable
 };
 struct DfaPropTable
 {
+    DfaPropTable()
+        : nRow(0)
+        , pData(nullptr)
+    {
+    }
+    DfaPropTable(int row)
+        : nRow(row)
+        , pData(nullptr)
+    {
+        ASSERT(nRow > 0);
+        pData = new bool[nRow];
+    }
+    ~DfaPropTable()
+    {
+        if (pData)
+            delete[] pData;
+    }
+
+    void Swap(DfaPropTable & other)
+    {
+        int iTmp;
+        bool * pTmp;
+        iTmp = nRow; nRow = other.nRow; other.nRow = iTmp;
+        pTmp = pData; pData = other.pData; other.pData = pTmp;
+    }
+
     const bool & operator[] (int state) const
     {
         ASSERT(0 <= state && state < nRow);
@@ -478,20 +611,30 @@ struct DfaPropTable
     bool * pData;
 };
 
-struct Dfa
+class Dfa
 {
-    static Dfa Create(int row, int col)
+public:
+    Dfa()
     {
-        Dfa dfa;
-        DfaJumpTable & jump = dfa.jumpTable;
-        DfaPropTable & prop = dfa.propTable;
+    }
+    Dfa(const Dfa &) = delete;
+    Dfa & operator = (const Dfa &) = delete;
+    Dfa(Dfa && other)
+    {
+        jumpTable.Swap(other.jumpTable);
+        propTable.Swap(other.propTable);
+    }
+    Dfa & operator = (Dfa && other)
+    {
+        this->~Dfa();
+        new (this) Dfa(static_cast<Dfa &&>(other));
+        return *this;
+    }
 
-        jump.nRow = prop.nRow = row;
-        jump.nCol = col;
-        jump.pData = new int[row * col];
-        prop.pData = new bool[row];
-
-        return dfa;
+    Dfa(int row, int col)
+        : jumpTable(row, col)
+        , propTable(row)
+    {
     }
 
     int Start() const
@@ -507,6 +650,16 @@ struct Dfa
         return propTable[state];
     }
 
+    DfaJumpTable & GetJumpTable()
+    {
+        return jumpTable;
+    }
+    DfaPropTable & GetPropTable()
+    {
+        return propTable;
+    }
+
+private:
     DfaJumpTable jumpTable;
     DfaPropTable propTable;
 };
@@ -548,10 +701,10 @@ Dfa DfaConverter::Convert(Nfa nfa)
     int row = maxDfaState + 1;
     int col = CHAR_COUNT;
 
-    Dfa dfa = Dfa::Create(row, col);
+    Dfa dfa(row, col);
 
-    DfaJumpTable & jumpTable = dfa.jumpTable;
-    DfaPropTable & propTable = dfa.propTable;
+    DfaJumpTable & jumpTable = dfa.GetJumpTable();
+    DfaPropTable & propTable = dfa.GetPropTable();
 
     propTable[0] = false;
     for (int ch = 0; ch != col; ++ch)
@@ -724,7 +877,10 @@ MatchResult DfaMatch(const Dfa & dfa,
         content.Add(input.Get());
         ++maxScanLen;
     }
-    content.ShrinkTo(maxAcptLen);
+    if (maxAcptLen >= 0)
+        content.ShrinkTo(maxAcptLen);
+    else
+        content.Clear();
 
     return MatchResult(content, maxScanLen, maxAcptLen);
 }
@@ -738,6 +894,11 @@ MatchResult::MatchResult(String content,
     , maxScanLen(maxScanLen)
     , maxAcceptLen(maxAcceptLen)
 {
+}
+
+bool MatchResult::IsValid() const
+{
+    return maxAcceptLen >= 0;
 }
 
 StringView MatchResult::Content() const
@@ -760,6 +921,19 @@ class Regex::Impl
 public:
     Dfa dfa;
 };
+
+Regex::Regex(RegexStruct rs)
+{
+    NfaContext nfaCtx;
+
+    Nfa nfa = NfaConverter::Convert(rs);
+    Dfa dfa = DfaConverter::Convert(nfa);
+
+    Regex::Impl * impl = new Regex::Impl();
+    impl->dfa = std::move(dfa);
+
+    pImpl.reset(impl);
+}
 
 class MatchResultIterator::Impl
 {
@@ -788,28 +962,22 @@ public:
     }
 };
 
-Regex Compile()
-{
-    CompositorContext reCtx;
-    NfaContext nfaCtx;
-
-    // ab
-    Compositor cp =
-        Concat(
-            KleeneStar(Ascii('a')),
-            Ascii('b'));
-    RegexTree re = cp.Get();
-
-    Nfa nfa = NfaConverter::Convert(re);
-    Dfa dfa = DfaConverter::Convert(nfa);
-
-    Regex::Impl * impl = new Regex::Impl();
-    impl->dfa = dfa;
-
-    Regex regex;
-    PImplAccessor::Get(regex).reset(impl);
-    return regex;
-}
+//Regex Compositor::GetCompiled()
+//{
+//    RegTree regexTree = Get();
+//
+//    NfaContext nfaCtx;
+//
+//    Nfa nfa = NfaConverter::Convert(regexTree);
+//    Dfa dfa = DfaConverter::Convert(nfa);
+//
+//    Regex::Impl * impl = new Regex::Impl();
+//    impl->dfa = std::move(dfa);
+//
+//    Regex regex;
+//    PImplAccessor::Get(regex).reset(impl);
+//    return regex;
+//}
 
 bool MatchResultIterator::More()
 {
@@ -819,6 +987,14 @@ bool MatchResultIterator::More()
 MatchResult MatchResultIterator::Next()
 {
     return DfaMatch(pImpl->dfa, pImpl->inputReader);
+}
+
+int MatchResultIterator::IgnoreCharacter()
+{
+    if (pImpl->inputReader.More())
+        return pImpl->inputReader.Get();
+    else
+        return CHAR_EOS;
 }
 
 MatchResultIterator IterateMatches(const Regex & regex,
@@ -842,20 +1018,20 @@ MatchResultIterator IterateMatches(const Regex & regex,
 #include "../UnitTest/UnitTest.h"
 #include "../Memory/MemoryTrace.h"
 
-using namespace v2;
+using namespace v2::re;
 
-class REToStringConverter : public re::Visitor
+class REToStringConverter : public RegexStruct::Visitor
 {
 public:
-    static String Convert(re::RegexTree & tree)
+    static String Convert(RegexStruct & rs)
     {
         REToStringConverter cvt;
-        tree.Accept(cvt);
+        rs.Accept(cvt);
         return cvt.arrStr[0];
     }
 
 protected:
-    virtual void Visit(re::ConcatOperator &) override
+    virtual void Visit(ConcatOperator &) override
     {
         ASSERT(arrStr.Count() >= 2);
         String s;
@@ -865,7 +1041,7 @@ protected:
         arrStr.RemoveAt(arrStr.Count() - 2, 2);
         arrStr.Add(s);
     }
-    virtual void Visit(re::AlterOperator &) override
+    virtual void Visit(AlterOperator &) override
     {
         ASSERT(arrStr.Count() >= 2);
         String s;
@@ -875,7 +1051,7 @@ protected:
         arrStr.RemoveAt(arrStr.Count() - 2, 2);
         arrStr.Add(s);
     }
-    virtual void Visit(re::KleeneStarOperator &) override
+    virtual void Visit(KleeneStarOperator &) override
     {
         ASSERT(arrStr.Count() >= 1);
         String s;
@@ -883,7 +1059,7 @@ protected:
         arrStr.RemoveAt(arrStr.Count() - 1, 1);
         arrStr.Add(s);
     }
-    virtual void Visit(re::ASCIICharacter & ch) override
+    virtual void Visit(ASCIICharacter & ch) override
     {
         arrStr.Add(String((char)ch.index, 1));
     }
@@ -892,88 +1068,100 @@ private:
     containers::Array<String> arrStr;
 };
 
-TEST(Regex_API_Build)
+TEST(Regex2_Builder)
 {
-    re::CompositorContext context;
-
     // abc*|d
-    re::Compositor cp =
-        re::Alter(
-            re::Concat(re::Concat(
-                re::Ascii('a'),
-                re::Ascii('b')),
-                re::KleeneStar(re::Ascii('c'))),
-            re::Ascii('d'));
-
-    re::RegexTree re = cp.Get();
+    RegexStruct rs =
+        RegexStructFactory::CreateBuilder()
+        .Ascii('a')
+        .Ascii('b')
+        .Concat()
+        .Ascii('c')
+        .KleeneStar()
+        .Concat()
+        .Ascii('d')
+        .Alter()
+        .Build();
 
     EXPECT_EQ(
-        REToStringConverter::Convert(re),
+        REToStringConverter::Convert(rs),
         String("(((ab)(c)*)|d)"));
 }
 
-TEST(Regex_API_Nfa)
+TEST(Regex2_Nfa)
 {
     // re::Start, re::Jump
 
-    re::CompositorContext reCtx;
-    re::NfaContext nfaCtx;
+    NfaContext nfaCtx;
 
-    re::Compositor cp = re::Concat(re::Ascii('a'), re::Ascii('b'));
-    re::RegexTree re = cp.Get();
-    re::Nfa nfa = re::NfaConverter::Convert(re);
+    RegexStruct rs =
+        RegexStructFactory::CreateBuilder()
+        .Ascii('a')
+        .Ascii('b')
+        .Concat()
+        .Build();
+    Nfa nfa = NfaConverter::Convert(rs);
 
-    re::NfaNode * a = nfa.in;
-    re::NfaNode * b = a->out1->out1;
-    re::NfaNode * end = b->out1->out1;
-    re::NfaNode * term = end->out1;
+    NfaNode * a = nfa.in;
+    NfaNode * b = a->out1->out1;
+    NfaNode * end = b->out1->out1;
+    NfaNode * term = end->out1;
 
     int input[] = { 'a', 'b', CHAR_EOS, CHAR_EOS };
-    re::NfaNode * expectNode[] = { a, b, end, term, };
-    re::NfaNodeSet ns = re::Start(nfa);
+    NfaNode * expectNode[] = { a, b, end, term, };
+    NfaNodeSet ns = Start(nfa);
     for (int i = 0, idx = 0; i < 10; ++i, idx += (idx < 3 ? 1 : 0))
     {
         EXPECT_EQ(ns.nodes.Count(), 1);
         EXPECT_EQ(ns.nodes.GetFirst(), expectNode[idx]);
-        ns = re::Jump(ns, input[idx]);
+        ns = Jump(ns, input[idx]);
     }
 }
 
-TEST(Regex_API_Run)
+TEST(Regex2_Dfa)
 {
-    re::CompositorContext reCtx;
-    re::NfaContext nfaCtx;
+    NfaContext nfaCtx;
 
     // ab
-    re::Compositor cp =
-        re::Concat(
-            re::Ascii('a'),
-            re::Ascii('b'));
-    re::RegexTree re = cp.Get();
+    RegexStruct rs =
+        RegexStructFactory::CreateBuilder()
+        .Ascii('a')
+        .Ascii('b')
+        .Concat()
+        .Build();
 
-    re::Nfa nfa = re::NfaConverter::Convert(re);
-    re::Dfa dfa = re::DfaConverter::Convert(nfa);
+    Nfa nfa = NfaConverter::Convert(rs);
+    Dfa dfa = DfaConverter::Convert(nfa);
 
-    re::InputReader ir("ab");
-    re::MatchResult mr = re::DfaMatch(dfa, ir);
-    EXPECT_EQ(mr.MaxScanLen(), 3);
+    InputReader ir("ab");
+    MatchResult mr = DfaMatch(dfa, ir);
+    EXPECT_EQ(mr.MaxScanLen(), 2);
     EXPECT_EQ(mr.MaxAcceptLen(), 2);
 }
 
-TEST(Regex_API_Usage)
+TEST(Regex2_API)
 {
     // Build Regex
-    re::Regex regex = re::Compile();
+    Regex regex = RegexStructFactory::CreateBuilder()
+        .Ascii('a').KleeneStar()
+        .Ascii('b')
+        .Concat()
+        .Build();
 
     // Match
-    re::MatchResultIterator mri = re::IterateMatches(regex, "abaabaaab");
+    MatchResultIterator mri = IterateMatches(regex, "abccaabffaaab");
     while (mri.More())
     {
-        re::MatchResult mr = mri.Next();
-        std::cout
-            << "scan: " << mr.MaxScanLen() << std::endl
-            << "acpt: " << mr.MaxAcceptLen() << std::endl
-            << "text: " << mr.Content() << std::endl;
+        MatchResult mr = mri.Next();
+        if (mr.IsValid())
+        {
+            std::cout << "match: " << mr.Content() << std::endl;
+        }
+        else
+        {
+            int ch = mri.IgnoreCharacter();
+            std::cout << "ignore: " << (char)(ch == CHAR_EOS ? '$' : ch) << std::endl;
+        }
     }
 }
 
