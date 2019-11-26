@@ -42,6 +42,7 @@
     <ClInclude Include="..\..\Source\Base\File.h" />
     <ClInclude Include="..\..\Source\Base\Integer.h" />
     <ClInclude Include="..\..\Source\Base\Legacy.h" />
+    <ClInclude Include="..\..\Source\Base\Linq.h" />
     <ClInclude Include="..\..\Source\Base\logging.h" />
     <ClInclude Include="..\..\Source\Base\String.h" />
     <ClInclude Include="..\..\Source\CodeGeneration\AstCompiler.h" />
@@ -65,6 +66,7 @@
     <ClInclude Include="..\..\Source\Preprocess\RegexMatcher.h" />
     <ClCompile Include="..\..\Source\Base\Containers.cpp" />
     <ClCompile Include="..\..\Source\Base\File.cpp" />
+    <ClCompile Include="..\..\Source\Base\Linq.cpp" />
     <ClCompile Include="..\..\Source\Memory\MemoryTrace.cpp" />
     <ClCompile Include="..\..\Source\Preprocess\Lexer.cpp" />
     <ClInclude Include="..\..\Source\Preprocess\Lexer.h" />

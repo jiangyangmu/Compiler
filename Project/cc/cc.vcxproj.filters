@@ -97,6 +97,9 @@
     <ClInclude Include="..\..\Source\Memory\MemoryTrace.h">
       <Filter>Debug</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\Source\Base\Linq.h">
+      <Filter>Base</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="..\..\Source\ir\CallingConvention.cpp">
@@ -171,6 +174,9 @@
     </ClCompile>
     <ClCompile Include="..\..\Source\Memory\MemoryTrace.cpp">
       <Filter>Debug</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\Source\Base\Linq.cpp">
+      <Filter>Base</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
