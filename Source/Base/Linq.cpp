@@ -54,6 +54,11 @@ std::ostream & operator<< (std::ostream & o, const std::map<K, V> & m)
     return o;
 }
 
+std::ostream & operator<< (std::ostream & o, const std::string & str)
+{
+    return o << str.c_str();
+}
+
 struct IdAndName {
     int id;
     std::string name;
@@ -120,8 +125,13 @@ TEST(LINQ_API)
                                      [](const IdAndName & name) { return name.id; },
                                      [](const IdAndMajor & major) { return major.id; });
     auto gjoi   = names | linq::group_join(majors,
-                                     [](const IdAndName & name) { return name.id; },
-                                     [](const IdAndMajor & major) { return major.id; });
+                                           [](const IdAndName & name) { return name.id; },
+                                           [](const IdAndMajor & major) { return major.id; });
+
+    auto gpb    = names | linq::group_by([](const IdAndName & name) { return name.name.back(); },
+                                         [](const IdAndName & name) { return name.name; });
+
+    auto con    = ints | linq::concat(ints);
 
     int max_int = ints | linq::max();
     int min_int = ints | linq::min();
@@ -159,6 +169,10 @@ TEST(LINQ_API)
 
         << "joi: " << joi << std::endl
         << "gjoi: " << gjoi << std::endl
+
+        << "gpb: " << gpb << std::endl
+
+        << "con: " << con << std::endl
 
         << "max: " << max_int << std::endl
         << "min: " << min_int << std::endl

@@ -313,12 +313,13 @@ take_while(TPred pred)
     return take_while_functor<TElement>(pred);
 }
 
+
 // ================================================
 // Join
 //
 //  linq::join(range, pred_x, pred_y)
+//  linq::group_join(range, pred_x, pred_y)
 //
-
 
 template <typename TRange, typename TElementX, typename TElementY, typename TKey>
 struct join_functor
@@ -368,6 +369,53 @@ group_join(TRange range,
     return group_join_functor<TRange, TElementX, TElementY, TKeyX>(range, pred_x, pred_y);
 }
 
+
+// ================================================
+// Grouping
+//
+//  linq::group_by(pred_key, pred_value)
+//
+
+template <typename TElement, typename TKey, typename TValue>
+struct group_by_functor
+{
+    group_by_functor(std::function<TKey(TElement)> pred_key,
+                     std::function<TValue(TElement)> pred_value)
+        : pred_key(pred_key)
+        , pred_value(pred_value) {}
+
+    std::function<TKey(TElement)> pred_key;
+    std::function<TValue(TElement)> pred_value;
+};
+template <typename TPredKey, typename TPredValue>
+auto
+group_by(TPredKey pred_key,
+         TPredValue pred_value)
+{
+    using TElement = function_traits<TPredKey>::argument<0>::type;
+    using TKey = function_traits<TPredKey>::return_type;
+    using TValue = function_traits<TPredValue>::return_type;
+    return group_by_functor<TElement, TKey, TValue>(pred_key, pred_value);
+}
+
+// ================================================
+// Concatenation
+//
+//  linq::concat(range)
+//
+
+template <typename TRange>
+struct concat_functor
+{
+    concat_functor(TRange range) : range(range) {}
+
+    TRange range;
+};
+template <typename TRange>
+auto concat(TRange range)
+{
+    return concat_functor<TRange>(range);
+};
 
 // ================================================
 // Aggregation
@@ -614,6 +662,34 @@ auto operator | (const TRangeX & source, linq::group_join_functor<TRangeY, TElem
             }
         }
     }
+    return result;
+}
+
+template <typename TRange, typename TElement = TRange::value_type, typename TKey, typename TValue>
+auto operator | (const TRange & source, linq::group_by_functor<TElement, TKey, TValue> gpb)
+{
+    std::map<
+        TKey,
+        std::vector<TValue>
+    > result;
+
+    for (const TElement & elem : source)
+    {
+        result[gpb.pred_key(elem)].emplace_back(gpb.pred_value(elem));
+    }
+
+    return result;
+}
+
+template <typename TRange, typename TElement = TRange::value_type>
+auto operator | (const TRange & source, linq::concat_functor<TRange> con)
+{
+    TRange result;
+
+    result.reserve(source.size() + con.range.size());
+    result.insert(result.end(), source.begin(), source.end());
+    result.insert(result.end(), con.range.begin(), con.range.end());
+
     return result;
 }
 
