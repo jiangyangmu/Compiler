@@ -14,7 +14,7 @@ Yet another project to learn compilation and programming techniques.
 
 # Build
 
-Open Visual Studio solution [Project/cc.sln](Project/cc.sln), build x64 Debug. This should generate `Build/cc.exe`.
+Open Visual Studio solution [Project/cc.sln](Project/cc.sln), build project `cc` with `Debug` configuration and `x64` platform. This should generate `Build/cc.exe`.
 
 # Usage
 
