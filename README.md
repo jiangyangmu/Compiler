@@ -12,7 +12,7 @@ Yet another project to learn compilation and programming techniques.
 * Expressions: invocation, type casting, boolean/integer/bit/float/pointer operations, condition, comma, scalar/struct assignment. [test code](Test/Program.c)
 * Recursive function. [test code](Test/fibonacci.c)
 
-# Buid
+# Build
 
 Open Visual Studio solution [Project/cc.sln](Project/cc.sln), build x64 Debug. This should generate `Build/cc.exe`.
 
@@ -92,4 +92,3 @@ Check this [page](https://docs.microsoft.com/en-us/cpp/build/how-to-enable-a-64-
 * `Build/` - cc.exe
 * `Source/` - compiler source code
 * `Test/` - testing C89 programs
-* `Tools/` - some unrelated scripts
