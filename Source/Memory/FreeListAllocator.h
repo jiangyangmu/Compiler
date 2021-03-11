@@ -11,27 +11,11 @@ size_t GetMaxAllocNumPerPage(size_t nBlkSize);
 class FreeListAllocator
 {
 public:
-    explicit FreeListAllocator(size_t nBlkSize)
-        : pflpFullList(nullptr), pflpHalfList(nullptr), pflpEmptyList(nullptr),
-          nBlkSize(nBlkSize)
-    {
-    }
+    explicit FreeListAllocator(size_t nBlkSize);
     FreeListAllocator(const FreeListAllocator & o) = delete;
-    FreeListAllocator(FreeListAllocator && o)
-        : pflpFullList(o.pflpFullList), pflpHalfList(o.pflpHalfList), pflpEmptyList(o.pflpEmptyList),
-          nBlkSize(o.nBlkSize)
-    {
-        o.pflpFullList = nullptr;
-        o.pflpHalfList = nullptr;
-        o.pflpEmptyList = nullptr;
-    }
+    FreeListAllocator(FreeListAllocator && o);
     FreeListAllocator & operator = (const FreeListAllocator &) = delete;
-    FreeListAllocator & operator = (FreeListAllocator && o)
-    {
-        this->~FreeListAllocator();
-        new (this) FreeListAllocator(std::move(o));
-        return *this;
-    }
+    FreeListAllocator & operator = (FreeListAllocator && o);
     ~FreeListAllocator();
 
     void * Alloc();

@@ -787,7 +787,8 @@ DfaMatchResult Match(Dfa & dfa, const char * begin, const char * end)
 Dfa * NewDfa()
 {
     static std::vector<std::unique_ptr<Dfa>> gDfaPool;
-    return gDfaPool.emplace_back(new Dfa).get();
+    gDfaPool.emplace_back(new Dfa);
+    return gDfaPool.back().get();
 }
 
 void SaveToFile(std::string fileName, const Dfa & dfa)
